@@ -36,7 +36,7 @@ jobs:
           path: dist/yascrcpy_x86_64
 
   build-linux-arm64:
-    runs-on: ubuntu-latest-arm64
+    runs-on: ubuntu-22.04-arm
     steps:
       - name: Echo test
         run: echo "Starting ARM64 build job..."
