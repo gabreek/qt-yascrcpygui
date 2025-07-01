@@ -3,4 +3,4 @@ psutil
 requests
 Pillow
 extract-icon
-pefilepyinstaller
+pefile
