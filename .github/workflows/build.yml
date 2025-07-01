@@ -38,6 +38,9 @@ jobs:
   build-linux-arm64:
     runs-on: ubuntu-latest-arm64
     steps:
+      - name: Echo test
+        run: echo "Starting ARM64 build job..."
+
       - name: Checkout code
         uses: actions/checkout@v4
 
