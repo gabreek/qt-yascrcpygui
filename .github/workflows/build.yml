@@ -24,7 +24,10 @@ jobs:
           pip install pyinstaller
 
       - name: Build for Linux x86_64
-        run: pyinstaller --name yascrcpy_x86_64 main.spec
+        run: pyinstaller main.spec
+
+      - name: Rename x86_64 executable
+        run: mv dist/yascrcpy dist/yascrcpy_x86_64
 
       - name: Upload x86_64 executable
         uses: actions/upload-artifact@v4
@@ -34,29 +37,63 @@ jobs:
 
   build-linux-arm64:
     runs-on: ubuntu-latest
+    container:
+      image: arm64v8/python:3.x-slim-bullseye # Use a versão do Python que você usa, ex: 3.10-slim-bullseye
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up QEMU for ARM64
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            build-essential \
+            libgl1-mesa-glx \
+            libxkbcommon-x11-0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-render-util0 \
+            libxcb-xinerama0 \
+            libxcb-xinput0 \
+            libxcb-xfixes0 \
+            libxcb-shape0 \
+            libxcb-randr0 \
+            libxcb-sync1 \
+            libxcb-util1 \
+            libxcb-cursor0 \
+            libxcb-xrm0 \
+            libxcb-composite0 \
+            libxcb-damage0 \
+            libxcb-dpms0 \
+            libxcb-dri2-0 \
+            libxcb-dri3-0 \
+            libxcb-glx0 \
+            libxcb-present0 \
+            libxcb-res0 \
+            libxcb-shm0 \
+            libxcb-xevie0 \
+            libxcb-xf86dri0 \
+            libxcb-xv0 \
+            libxcb-xvmc0 \
+            libxcb-record0 \
+            libxcb-screensaver0 \
+            libxcb-sync1 \
+            libxcb-xtest0 \
+            libxcb-xprint0 \
+            libxcb-xselinux0 \
+            # Adicione outras dependências de sistema que seu projeto PySide6 possa precisar
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x' # Use a mesma versão do Python
-          architecture: arm64 # Especifica a arquitetura para o setup do Python
-
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
       - name: Build for Linux ARM64
-        run: pyinstaller --name yascrcpy_arm64 main.spec
+        run: pyinstaller main.spec
+
+      - name: Rename ARM64 executable
+        run: mv dist/yascrcpy dist/yascrcpy_arm64
 
       - name: Upload ARM64 executable
         uses: actions/upload-artifact@v4
