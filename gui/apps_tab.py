@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
                                QStackedWidget, QMessageBox)
 from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtGui import QPixmap
+import sys
 
 from .base_grid_tab import BaseGridTab
 from .app_item_widget import AppItemWidget
@@ -22,7 +23,16 @@ class AppsTab(BaseGridTab):
         super().__init__(app_config, main_window)
 
         self.app_items = self.items # Alias for clarity
-        self.placeholder_icon = QPixmap("gui/placeholder.png")
+
+        # Determine the base path for resources
+        if getattr(sys, 'frozen', False):
+            # Running in a PyInstaller bundle
+            base_path = sys._MEIPASS
+        else:
+            # Running in a normal Python environment
+            base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+        self.placeholder_icon = QPixmap(os.path.join(base_path, "gui/placeholder.png"))
         self.icon_cache_dir = self.app_config.get_icon_cache_dir()
         self.thread_pool = QThreadPool.globalInstance()
 

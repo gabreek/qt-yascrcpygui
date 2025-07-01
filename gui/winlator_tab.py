@@ -9,6 +9,7 @@ from PIL import Image
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QScrollArea, QGridLayout, QLabel, QCheckBox, QProgressDialog, QStackedWidget, QMessageBox
 from PySide6.QtCore import Qt, QSize, QThread, QThreadPool
 from PySide6.QtGui import QPixmap, QIcon
+import sys
 
 from .winlator_item_widget import WinlatorItemWidget
 from utils import adb_handler, scrcpy_handler
@@ -29,7 +30,15 @@ class WinlatorTab(BaseGridTab):
         self.NUM_WORKERS = 4
         self.scrcpy_process = None # To store the Scrcpy Popen object
 
-        self.placeholder_icon = QPixmap("gui/winlator_placeholder.png")
+        # Determine the base path for resources
+        if getattr(sys, 'frozen', False):
+            # Running in a PyInstaller bundle
+            base_path = sys._MEIPASS
+        else:
+            # Running in a normal Python environment
+            base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+        self.placeholder_icon = QPixmap(os.path.join(base_path, "gui/winlator_placeholder.png"))
         if self.placeholder_icon.isNull():
             self.placeholder_icon = QPixmap(48, 48)
             self.placeholder_icon.fill(Qt.GlobalColor.darkGray)

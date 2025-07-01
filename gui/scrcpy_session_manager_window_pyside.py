@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, QObject, QEvent
 
 import os
 import shlex
+import sys
 from PIL import Image # Still need PIL for loading various image formats into QImage
 
 from utils import scrcpy_handler
@@ -41,14 +42,24 @@ class ScrcpySessionManagerWindow(QDialog):
         # Initial population
         self.populate_sessions()
 
-    def _load_icon(self, path):
+    def _load_icon(self, relative_path):
+        # Determine the base path for resources
+        if getattr(sys, 'frozen', False):
+            # Running in a PyInstaller bundle
+            base_path = sys._MEIPASS
+        else:
+            # Running in a normal Python environment
+            base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+        full_path = os.path.join(base_path, relative_path)
+
         try:
             # Use PIL to open and resize, then convert to QPixmap
-            img = Image.open(path).resize((32, 32), Image.LANCZOS)
+            img = Image.open(full_path).resize((32, 32), Image.LANCZOS)
             qimage = QImage(img.tobytes(), img.width, img.height, QImage.Format_RGBA8888)
             return QPixmap.fromImage(qimage)
         except Exception as e:
-            print(f"Error loading icon {path}: {e}")
+            print(f"Error loading icon {full_path}: {e}")
             # Create a blank pixmap if loading fails
             pixmap = QPixmap(32, 32)
             pixmap.fill(Qt.darkGray)
