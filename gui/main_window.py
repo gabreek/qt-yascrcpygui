@@ -2,7 +2,7 @@ import sys
 import os
 from PySide6.QtCore import Qt, QPoint, QTimer, QThread, Signal
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTabWidget
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QPalette
 
 from .scrcpy_tab import ScrcpyTab
 from .apps_tab import AppsTab
@@ -133,30 +133,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         self.resize(410, 650)
 
-        self.setStyleSheet("""
-            #main_widget {
-                background-color: #2e2e2e;
-                border: 1px solid #424242;
-                border-radius: 8px;
-            }
-            QTabWidget::pane {
-                border: 1px solid #424242;
-                border-top: none;
-            }
-            QTabBar::tab {
-                background: #424242;
-                color: white;
-                padding: 8px;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-            }
-            QTabBar::tab:selected {
-                background: #616161;
-            }
-            QTabBar::tab:!selected:hover {
-                background: #515151;
-            }
-        """)
+        self.update_theme()
 
         self.last_known_device_id = None
         self.device_check_timer = QTimer(self)
@@ -166,6 +143,86 @@ class MainWindow(QMainWindow):
 
         # Connect the new signal to the new slot
         self.device_status_updated.connect(self._handle_device_status_update)
+
+    def is_dark_theme(self):
+        """Verifica se o tema do sistema é escuro."""
+        return self.palette().color(QPalette.ColorRole.Window).value() < 128
+
+    def update_theme(self):
+        """Atualiza o tema da janela principal e da barra de título."""
+        # Unifica a lógica para usar a paleta do sistema para todos os temas
+        main_bg_color = self.palette().color(QPalette.ColorRole.Window).name()
+        border_color = self.palette().color(QPalette.ColorRole.Mid).name()
+        title_text_color = self.palette().color(QPalette.ColorRole.WindowText).name()
+        minimize_hover_color = self.palette().color(QPalette.ColorRole.AlternateBase).name()
+        minimize_pressed_color = self.palette().color(QPalette.ColorRole.Mid).name()
+        tab_bg_color = self.palette().color(QPalette.ColorRole.Base).name()
+        tab_text_color = self.palette().color(QPalette.ColorRole.ButtonText).name()
+        tab_selected_bg_color = self.palette().color(QPalette.ColorRole.Highlight).name()
+        tab_selected_text_color = self.palette().color(QPalette.ColorRole.HighlightedText).name()
+        tab_hover_bg_color = self.palette().color(QPalette.ColorRole.AlternateBase).name()
+
+        style = f"""
+            #main_widget {{
+                background-color: {main_bg_color};
+                border: 1px solid {border_color};
+                border-radius: 8px;
+            }}
+            QTabWidget::pane {{
+                border: 1px solid {border_color};
+                border-top: none;
+            }}
+            QTabBar::tab {{
+                background: {tab_bg_color};
+                color: {tab_text_color};
+                padding: 8px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }}
+            QTabBar::tab:selected {{
+                background: {tab_selected_bg_color};
+                color: {tab_selected_text_color};
+            }}
+            QTabBar::tab:!selected:hover {{
+                background: {tab_hover_bg_color};
+            }}
+        """
+        self.setStyleSheet(style)
+        
+        title_style = f"color: {title_text_color}; padding-left: 10px; font-weight: bold;"
+        self.title_bar.title_label.setStyleSheet(title_style)
+
+        close_button_style = f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {title_text_color};
+                border: none;
+                font-size: 16px;
+            }}
+            QPushButton:hover {{
+                background-color: #d32f2f;
+            }}
+            QPushButton:pressed {{
+                background-color: #b71c1c;
+            }}
+        """
+        self.title_bar.close_button.setStyleSheet(close_button_style)
+
+        minimize_button_style = f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {title_text_color};
+                border: none;
+                font-size: 16px;
+            }}
+            QPushButton:hover {{
+                background-color: {minimize_hover_color};
+            }}
+            QPushButton:pressed {{
+                background-color: {minimize_pressed_color};
+            }}
+        """
+        self.title_bar.minimize_button.setStyleSheet(minimize_button_style)
 
     def closeEvent(self, event):
         """Manipula o evento de fechamento da janela."""
@@ -205,5 +262,3 @@ class MainWindow(QMainWindow):
             self.scrcpy_tab.refresh_device_info()
             self.apps_tab.on_device_changed()
             self.winlator_tab.on_device_changed()
-
-

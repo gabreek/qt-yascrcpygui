@@ -47,7 +47,6 @@ class WinlatorTab(BaseGridTab):
         self.use_ludashi_check = QCheckBox("Use Ludashi pkg")
         self.use_ludashi_check.setChecked(self.app_config.get('use_ludashi_pkg'))
         self.use_ludashi_check.stateChanged.connect(lambda state: self.app_config.set('use_ludashi_pkg', bool(state)))
-        self.use_ludashi_check.setStyleSheet("color: white;")
         top_panel.addWidget(self.use_ludashi_check)
 
         self.refresh_button = QPushButton("Refresh Apps")
