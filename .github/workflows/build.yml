@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x' # Use a versão do Python que você usa no seu projeto, ex: '3.10' ou '3.11'
+          python-version: '3.12' # Use a versão do Python que você usa no seu projeto, ex: '3.10' ou '3.11'
 
       - name: Install dependencies
         run: |
@@ -38,7 +38,7 @@ jobs:
   build-linux-arm64:
     runs-on: ubuntu-latest
     container:
-      image: arm64v8/python:3.x-slim-bullseye # Use a versão do Python que você usa, ex: 3.10-slim-bullseye
+      image: arm64v8/python:3.12-slim-bullseye # Use a versão do Python que você usa, ex: 3.10-slim-bullseye
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
