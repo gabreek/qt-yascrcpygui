@@ -68,25 +68,6 @@ jobs:
             libxcb-util1 \
             libxcb-cursor0 \
             libxcb-xrm0 \
-            libxcb-composite0 \
-            libxcb-damage0 \
-            libxcb-dpms0 \
-            libxcb-dri2-0 \
-            libxcb-dri3-0 \
-            libxcb-glx0 \
-            libxcb-present0 \
-            libxcb-res0 \
-            libxcb-shm0 \
-            libxcb-xevie0 \
-            libxcb-xf86dri0 \
-            libxcb-xv0 \
-            libxcb-xvmc0 \
-            libxcb-record0 \
-            libxcb-screensaver0 \
-            libxcb-sync1 \
-            libxcb-xtest0 \
-            libxcb-xprint0 \
-            libxcb-xselinux0 \
             # Adicione outras dependências de sistema que seu projeto PySide6 possa precisar
 
       - name: Install Python dependencies
