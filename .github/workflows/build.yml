@@ -19,7 +19,28 @@ jobs:
         with:
           python-version: '3.12' # Use a versão do Python que você usa no seu projeto, ex: '3.10' ou '3.11'
 
-      - name: Install dependencies
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libgl1-mesa-glx \
+            libxkbcommon-x11-0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-render-util0 \
+            libxcb-xinerama0 \
+            libxcb-xinput0 \
+            libxcb-xfixes0 \
+            libxcb-shape0 \
+            libxcb-randr0 \
+            libxcb-sync1 \
+            libxcb-util1 \
+            libxcb-cursor0 \
+            libxcb-xrm0 \
+            # Adicione outras dependências de sistema que seu projeto PySide6 possa precisar
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -31,13 +52,8 @@ jobs:
       - name: List dist directory content (x86_64)
         run: ls -R dist/
 
-      - name: List yascrcpy directory content (x86_64)
-        run: ls -l dist/yascrcpy/
-
-      - name: Extract and Rename x86_64 executable
-        run: |
-          mv dist/yascrcpy/yascrcpy dist/yascrcpy_x86_64
-          rm -rf dist/yascrcpy
+      - name: Rename x86_64 executable
+        run: mv dist/yascrcpy dist/yascrcpy_x86_64
 
       - name: Upload x86_64 executable
         uses: actions/upload-artifact@v4
@@ -92,13 +108,8 @@ jobs:
       - name: List dist directory content (ARM64)
         run: ls -R dist/
 
-      - name: List yascrcpy directory content (ARM64)
-        run: ls -l dist/yascrcpy/
-
-      - name: Extract and Rename ARM64 executable
-        run: |
-          mv dist/yascrcpy/yascrcpy dist/yascrcpy_arm64
-          rm -rf dist/yascrcpy
+      - name: Rename ARM64 executable
+        run: mv dist/yascrcpy dist/yascrcpy_arm64
 
       - name: Upload ARM64 executable
         uses: actions/upload-artifact@v4
