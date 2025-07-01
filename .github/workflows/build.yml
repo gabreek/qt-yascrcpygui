@@ -1,0 +1,65 @@
+name: Build Executables with PyInstaller
+
+on:
+  push:
+    branches:
+      - master # ou a branch principal do seu projeto
+
+jobs:
+  build-linux-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x' # Use a versão do Python que você usa no seu projeto, ex: '3.10' ou '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build for Linux x86_64
+        run: pyinstaller --name yascrcpy_x86_64 main.spec
+
+      - name: Upload x86_64 executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-yaScrcpy-linux-x86_64
+          path: dist/yascrcpy_x86_64
+
+  build-linux-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x' # Use a mesma versão do Python
+          architecture: arm64 # Especifica a arquitetura para o setup do Python
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build for Linux ARM64
+        run: pyinstaller --name yascrcpy_arm64 main.spec
+
+      - name: Upload ARM64 executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-yaScrcpy-linux-arm64
+          path: dist/yascrcpy_arm64
