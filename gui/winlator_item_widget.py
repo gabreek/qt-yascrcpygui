@@ -21,20 +21,9 @@ class WinlatorItemWidget(BaseItemWidget):
         # O tamanho do widget e do ícone agora são definidos pelo BaseItemWidget (75x110 e 32x32)
         self.name_label.setStyleSheet("font-size: 8pt;") # Removido font-weight: bold;
 
-        # Adiciona botões específicos para WinlatorItemWidget ao action_layout do BaseItemWidget
-        self.settings_button = QPushButton("⚙️")
-        self.delete_button = QPushButton("🗑️")
-
-        for btn in [self.settings_button, self.delete_button]:
-            btn.setFixedSize(22, 22)
-
-        # Remove os stretchers adicionados pelo BaseItemWidget e adiciona os próprios
-        while self.action_layout.count() > 0:
-            item = self.action_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-            elif item.spacerItem():
-                self.action_layout.removeItem(item)
+        # Adiciona botões específicos usando o método centralizado da classe base
+        self.settings_button = self._create_action_button("⚙️")
+        self.delete_button = self._create_action_button("🗑️")
 
         self.action_layout.addStretch()
         self.action_layout.addWidget(self.settings_button)

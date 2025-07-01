@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 from utils.dependencies import check_dependencies
 from utils import adb_handler
 from app_config import AppConfig
-from gui.main_window import MainWindow 
+from gui.main_window import MainWindow
 
 
 
@@ -20,24 +20,20 @@ def main():
     if not check_dependencies():
         return
 
-    print("Before QApplication initialization")
     app = QApplication(sys.argv)
-    print("After QApplication initialization")
-    
-    app_config = AppConfig(None) 
+    print("QApplication initialization")
+
+    app_config = AppConfig(None)
     print("AppConfig initialized")
 
-    print("Before MainWindow initialization")
     main_window = MainWindow(app_config)
-    print("After MainWindow initialization")
-    
-    print("Before main_window.show()")
-    main_window.show()
-    print("After main_window.show()")
+    print("MainWindow initialization")
 
-    print("Before app.exec()")
+    main_window.show()
+    print("Main_window.show()")
+
+    print("app.exec()")
     sys.exit(app.exec())
-    print("After app.exec() (this should not print if app exits normally)")
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()

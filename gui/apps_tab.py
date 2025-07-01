@@ -150,7 +150,9 @@ class AppsTab(BaseGridTab):
                 self.load_icon(app_info['key'], app_info['name'])
                 col += 1
                 if col >= columns: col = 0; row += 1
-            if col != 0: row += 1
+            if col != 0:
+                # Apenas incrementa a linha se a seção não terminar perfeitamente
+                row += 1
 
         add_section("Pinned", pinned)
         add_section("All Apps", unpinned)

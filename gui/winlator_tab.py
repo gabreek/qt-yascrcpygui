@@ -40,7 +40,7 @@ class WinlatorTab(BaseGridTab):
 
         self.placeholder_icon = QPixmap(os.path.join(base_path, "gui/winlator_placeholder.png"))
         if self.placeholder_icon.isNull():
-            self.placeholder_icon = QPixmap(48, 48)
+            self.placeholder_icon = QPixmap(40, 40)
             self.placeholder_icon.fill(Qt.GlobalColor.darkGray)
 
         top_panel = QHBoxLayout()

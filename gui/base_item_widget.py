@@ -3,9 +3,9 @@
 
 import os
 import shutil
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout, QGraphicsOpacityEffect
 from PySide6.QtGui import QPixmap, QCursor, QDragEnterEvent, QDropEvent
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PIL import Image
 
 class BaseItemWidget(QWidget):
@@ -17,36 +17,83 @@ class BaseItemWidget(QWidget):
         super().__init__()
         self.item_info = item_info
         self.app_config = app_config
-        self.item_key = item_info['key'] # Pode ser pkg_name ou game_path
+        self.item_key = item_info['key']
         self.item_name = item_info['name']
-        self.item_type = item_type # "app" ou "winlator_game"
+        self.item_type = item_type
 
         self.setAcceptDrops(True)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
-        # Tamanho e layout base
-        self.setFixedSize(75, 110) # Tamanho padrão, subclasses podem ajustar
+        # Tamanho ajustado para garantir espaço para o nome e o overlay
+        self.setFixedSize(80, 110)
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(2, 4, 2, 4)
+        main_layout.setContentsMargins(2, 2, 2, 2)
         main_layout.setSpacing(4)
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # --- Área do Ícone com Overlay ---
+        icon_container = QWidget()
+        icon_container.setFixedHeight(52)
+        icon_layout = QGridLayout(icon_container)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
 
         self.icon_label = QLabel()
-        self.icon_label.setFixedSize(32, 32) # Tamanho padrão, subclasses podem ajustar
+        self.icon_label.setFixedSize(40, 40)
         self.icon_label.setScaledContents(True)
         self.icon_label.setPixmap(placeholder_icon)
-        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Container para os botões de ação (o overlay)
+        self.action_buttons_container = QWidget()
+        self.action_buttons_container.setFixedHeight(22)
+        self.action_layout = QHBoxLayout(self.action_buttons_container)
+        self.action_layout.setContentsMargins(0, 0, 0, 0)
+        self.action_layout.setSpacing(2)
+
+        # Configuração do efeito de opacidade e animação
+        self.opacity_effect = QGraphicsOpacityEffect(self.action_buttons_container)
+        self.action_buttons_container.setGraphicsEffect(self.opacity_effect)
+        self.opacity_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.opacity_animation.setDuration(150) # Duração de 150ms
+        self.opacity_animation.setEasingCurve(QEasingCurve.InOutQuad)
+        # Define os valores de início e fim uma vez
+        self.opacity_animation.setStartValue(0.0)
+        self.opacity_animation.setEndValue(1.0)
+        self.opacity_effect.setOpacity(0.0) # Começa invisível
+
+        # Adiciona o ícone e os botões, alinhando-os para criar o efeito de sobreposição
+        icon_layout.addWidget(self.icon_label, 0, 0, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter)
+        icon_layout.addWidget(self.action_buttons_container, 0, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        # --- Fim da Área do Ícone ---
 
         self.name_label = QLabel(self.item_name)
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.name_label.setStyleSheet("font-size: 8pt;") # Estilo padrão, subclasses podem ajustar
+        self.name_label.setStyleSheet("font-size: 8pt;")
         self.name_label.setWordWrap(True)
 
-        # Layout para botões de ação (subclasses adicionarão os botões específicos)
-        self.action_layout = QHBoxLayout()
+        main_layout.addWidget(icon_container, 0, Qt.AlignmentFlag.AlignHCenter)
+        main_layout.addWidget(self.name_label)
+        main_layout.addStretch()
 
-        main_layout.addWidget(self.icon_label, 0, Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(self.name_label, 1)
-        main_layout.addLayout(self.action_layout)
+    def _create_action_button(self, icon_text):
+        """Cria um botão de ação padronizado."""
+        button = QPushButton(icon_text)
+        button.setFixedSize(22, 22)
+        button.setStyleSheet("QPushButton { padding: 0; padding-top: 2px; }")
+        return button
+
+    def enterEvent(self, event):
+        """Inicia a animação de fade-in."""
+        self.opacity_animation.setDirection(QPropertyAnimation.Forward)
+        if self.opacity_animation.state() != QPropertyAnimation.Running:
+            self.opacity_animation.start()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """Inicia a animação de fade-out."""
+        self.opacity_animation.setDirection(QPropertyAnimation.Backward)
+        if self.opacity_animation.state() != QPropertyAnimation.Running:
+            self.opacity_animation.start()
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -67,13 +114,11 @@ class BaseItemWidget(QWidget):
         if event.mimeData().hasUrls():
             source_path = event.mimeData().urls()[0].toLocalFile()
             cache_dir = self.app_config.get_icon_cache_dir()
-            # Use o basename para evitar problemas com caminhos completos como item_key
             icon_filename = f"{os.path.basename(self.item_key)}.png"
             destination_path = os.path.join(cache_dir, icon_filename)
             try:
                 img = Image.open(source_path).resize(self.icon_label.size().toTuple(), Image.LANCZOS)
                 img.save(destination_path, 'PNG')
-                # Salva metadados para o tipo de item correto
                 if self.item_type == "app":
                     self.app_config.save_app_metadata(self.item_key, {'has_custom_icon': True, 'icon_fetch_failed': False})
                 elif self.item_type == "winlator_game":

@@ -12,7 +12,7 @@ class BaseGridTab(QWidget):
         self.items = {}
 
         self.main_layout = QVBoxLayout(self)
-        
+
         # Create and add top panel in subclasses
 
         self.stacked_widget = QStackedWidget()
@@ -26,6 +26,7 @@ class BaseGridTab(QWidget):
         self.scroll_area.setWidget(self.scroll_content)
         self.grid_layout = QGridLayout(self.scroll_content)
         self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self.grid_layout.setVerticalSpacing(2) # Espaçamento vertical entre os itens
         self.stacked_widget.addWidget(self.scroll_area)
 
         # Page 1: Info Label

@@ -17,19 +17,14 @@ class AppItemWidget(BaseItemWidget):
         super().__init__({'key': app_info['pkg_name'], 'name': app_info['app_name']}, app_config, placeholder_icon, item_type="app")
         self.pkg_name = self.item_key
 
-        # Adiciona botões específicos para AppItemWidget ao action_layout do BaseItemWidget
-        self.settings_button = QPushButton("⚙️")
-        self.delete_config_button = QPushButton("🗑️")
-        self.pin_button = QPushButton()
+        # Adiciona botões específicos usando o método centralizado da classe base
+        self.settings_button = self._create_action_button("⚙️")
+        self.delete_config_button = self._create_action_button("🗑️")
+        self.pin_button = self._create_action_button("☆") # O texto será atualizado
 
-        for btn in [self.settings_button, self.delete_config_button, self.pin_button]:
-            btn.setFixedSize(22, 22)
-
-        self.action_layout.addStretch()
         self.action_layout.addWidget(self.settings_button)
         self.action_layout.addWidget(self.delete_config_button)
         self.action_layout.addWidget(self.pin_button)
-        self.action_layout.addStretch()
 
         # Conexões
         self.settings_button.clicked.connect(lambda: self.settings_requested.emit(self.pkg_name))
