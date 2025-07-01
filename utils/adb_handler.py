@@ -1,0 +1,164 @@
+# FILE: utils/adb_handler.py
+# PURPOSE: Centraliza todos os comandos que interagem com o Android Debug Bridge (adb).
+
+import subprocess
+import shlex
+import re
+import os
+
+def _get_startupinfo():
+    """Returns a startupinfo object for subprocesses on Windows to suppress console window."""
+    if os.name == 'nt':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        return startupinfo
+    return None
+
+def _run_adb_command(command, device_id=None, print_command=False, ignore_errors=False):
+    """Helper para executar um comando adb, retornando a saída decodificada."""
+    base_cmd = ['adb']
+    if device_id:
+        base_cmd.extend(['-s', device_id])
+
+    full_cmd = base_cmd + command
+
+    if print_command:
+        print('Executing ADB Command:', shlex.join(full_cmd))
+
+    startupinfo = _get_startupinfo()
+
+    try:
+        result = subprocess.check_output(full_cmd, text=True, stderr=subprocess.PIPE, startupinfo=startupinfo)
+        return result.strip()
+    except FileNotFoundError:
+        if not ignore_errors:
+            print(f"Error: ADB command '{full_cmd[0]}' not found. Please ensure ADB is installed and in your system's PATH.")
+        return ""
+    except subprocess.CalledProcessError as e:
+        if not ignore_errors:
+            print(f"ADB command '{shlex.join(full_cmd)}' failed with exit code {e.returncode}: {e.stderr.strip()}")
+        return ""
+    except Exception as e:
+        if not ignore_errors:
+            print(f"An unexpected error occurred while running ADB command '{shlex.join(full_cmd)}': {e}")
+        return ""
+
+def get_device_info(device_id=None):
+    """Obtém o nome do modelo e o nível da bateria do dispositivo."""
+    if not device_id: return None
+    name = _run_adb_command(['shell', 'getprop', 'ro.product.vendor.marketname'], device_id)
+    if not name:
+        return None
+
+    battery_output = _run_adb_command(['shell', 'dumpsys', 'battery'], device_id, ignore_errors=True)
+    level_match = re.search(r'level: (\d+)', battery_output)
+    battery_level = level_match.group(1) if level_match else "?"
+
+    return {"commercial_name": name, "battery": battery_level}
+
+def list_winlator_shortcuts_with_names(device_id=None):
+    """Retorna uma lista de tuplas (nome, caminho) para os atalhos do Winlator."""
+    command = ['shell', 'find', '/storage/emulated/0/Download/Winlator/Frontend/', '-type', 'f', '-name', '*.desktop']
+    output = _run_adb_command(command, device_id)
+    shortcuts = output.splitlines() if output else []
+
+    games_with_names = []
+    for path in shortcuts:
+        if path:
+            basename = os.path.basename(path)
+            name = basename.rsplit('.desktop', 1)[0]
+            games_with_names.append((name, path))
+    return games_with_names
+
+def get_game_executable_info(shortcut_path, device_id=None):
+    """Lê o arquivo .desktop para encontrar o caminho do .exe no /sdcard."""
+    content = _run_adb_command(['shell', 'cat', shlex.quote(shortcut_path)], device_id)
+    if not content:
+        return None
+
+    game_dir_part = None
+    exe_name = None
+    exec_path = None
+
+    for line in content.splitlines():
+        line = line.strip()
+        if line.lower().startswith('path='):
+            match = re.search(r'dosdevices/d:([^"\\]+)', line, re.IGNORECASE)
+            if match:
+                game_dir_part = match.group(1).strip()
+        elif line.lower().startswith('startupwmclass='):
+            exe_name = line.split('=', 1)[1].strip()
+        elif line.lower().startswith('exec='):
+            # Capture anything inside wine "..."
+            match = re.search(r'wine\s+"([^"]+)"', line, re.IGNORECASE)
+            if match:
+                exec_path = match.group(1).strip()
+
+    # Prioritize Path and StartupWMClass
+    if game_dir_part and exe_name:
+        full_path_on_sdcard = f"/storage/emulated/0/Download{game_dir_part}/{exe_name}"
+        return full_path_on_sdcard.replace('\\', '/')
+    elif exec_path:
+        # Handle the /home/xuser/.wine/dosdevices/d: case
+        if exec_path.lower().startswith('/home/xuser/.wine/dosdevices/d:'):
+            full_path_on_sdcard = exec_path.replace('/home/xuser/.wine/dosdevices/d:', '/storage/emulated/0/Download')
+            return full_path_on_sdcard.replace('\\', '/')
+        # Handle other potential paths if necessary, or return as is if it's a direct path
+        # For now, assume it's a direct path if not the specific wine path
+        return exec_path.replace('\\', '/')
+
+    return None
+
+def pull_file(remote_path, local_path, device_id=None):
+    """Puxa (baixa) um arquivo do dispositivo para o computador local de forma síncrona."""
+    cmd = ['adb']
+    if device_id:
+        cmd.extend(['-s', device_id])
+    cmd.extend(['pull', remote_path, local_path])
+
+    try:
+        startupinfo = _get_startupinfo()
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', startupinfo=startupinfo)
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            print(f"Error pulling file '{remote_path}': {stderr.strip()}")
+            return False
+        return True
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        print(f"Failed to pull file: {e}")
+        return False
+
+def start_winlator_app(shortcut_path, display_id, package_name, device_id=None):
+    """Inicia um aplicativo Winlator em um display virtual específico."""
+    file_name = os.path.basename(shortcut_path)
+    full_path = f"/storage/emulated/0/Download/Winlator/Frontend/{file_name}"
+    quoted_path = shlex.quote(full_path)
+    activity_name = ".XServerDisplayActivity"
+    component = f"{package_name}/{activity_name}"
+    remote_command_str = (
+        f"am start --display {display_id} "
+        f"-n {component} "
+        f"--es shortcut_path {quoted_path} "
+        f"--activity-clear-task --activity-clear-top --activity-no-history"
+    )
+    command = ['shell', remote_command_str]
+    _run_adb_command(command, device_id, print_command=True)
+
+def get_connected_device_id():
+    """Retorna o ID do primeiro dispositivo ADB conectado que está online."""
+    try:
+        output = _run_adb_command(['devices'], ignore_errors=True)
+        lines = output.strip().split('\n')
+        if len(lines) > 1:
+            for line in lines[1:]:
+                parts = line.split('\t')
+                if len(parts) == 2:
+                    device_id = parts[0].strip()
+                    state = parts[1].strip()
+                    if device_id and state == 'device': # Only return 'device' state, ignore 'offline', 'unauthorized', etc.
+                        return device_id
+        return None
+    except Exception as e:
+        print(f"Error getting connected device ID: {e}")
+        return None
