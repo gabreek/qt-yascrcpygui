@@ -4,6 +4,7 @@
 #          Verifica as dependências, inicializa a configuração e a janela principal.
 
 import sys
+import multiprocessing
 from PySide6.QtWidgets import QApplication
 from utils.dependencies import check_dependencies
 from utils import adb_handler
@@ -39,4 +40,5 @@ def main():
     print("After app.exec() (this should not print if app exits normally)")
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

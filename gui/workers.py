@@ -8,7 +8,8 @@ import re
 import os
 import time
 import shlex
-import subprocess
+from utils.isolated_extractor import extract_icon_in_process
+from multiprocessing import Process, Queue
 from PIL import Image
 import sys
 
@@ -192,14 +193,22 @@ class IconExtractorWorker(QObject):
                     local_exe_path = os.path.join(self.temp_dir, f"{os.path.basename(remote_exe_path)}_{int(time.time()*1000)}")
                     adb_handler.pull_file(remote_exe_path, local_exe_path)
                     if os.path.exists(local_exe_path):
-                        extractor_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'utils', 'isolated_extractor.py')
-                        python_executable = os.path.join(os.path.dirname(sys.executable), 'python3')
-                        cmd = [python_executable, extractor_script_path, local_exe_path, save_path]
-                        process = subprocess.run(cmd, capture_output=True, text=True, check=False)
-                        if process.returncode == 0 and os.path.exists(save_path) and os.path.getsize(save_path) > 0:
-                            img = Image.open(save_path).resize((48, 48), Image.LANCZOS)
-                            pixmap = QPixmap.fromImage(img.toqimage())
-                            success = True
+                        result_queue = Queue()
+                        process = Process(target=extract_icon_in_process, args=(local_exe_path, save_path, result_queue))
+                        process.start()
+                        process.join() # Espera o processo terminar, sem timeout
+
+                        if not result_queue.empty():
+                            result_success, result_data = result_queue.get()
+                            if result_success:
+                                img = Image.open(save_path).resize((48, 48), Image.LANCZOS)
+                                pixmap = QPixmap.fromImage(img.toqimage())
+                                success = True
+                            else:
+                                print(f"Error in isolated process for {item_widget.item_name}: {result_data}")
+                        else:
+                             print(f"Error in IconExtractorWorker for {item_widget.item_name}: result_queue empty")
+
             except Exception as e:
                 print(f"Error in IconExtractorWorker for {item_widget.item_name}: {e}")
             finally:
