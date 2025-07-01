@@ -31,6 +31,9 @@ jobs:
       - name: List dist directory content (x86_64)
         run: ls -R dist/
 
+      - name: List yascrcpy directory content (x86_64)
+        run: ls -l dist/yascrcpy/
+
       - name: Extract and Rename x86_64 executable
         run: |
           mv dist/yascrcpy/yascrcpy dist/yascrcpy_x86_64
@@ -88,6 +91,9 @@ jobs:
 
       - name: List dist directory content (ARM64)
         run: ls -R dist/
+
+      - name: List yascrcpy directory content (ARM64)
+        run: ls -l dist/yascrcpy/
 
       - name: Extract and Rename ARM64 executable
         run: |
