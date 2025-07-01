@@ -1,9 +1,11 @@
-name: Build Executables with PyInstaller
+name: Build and Release Executables
 
 on:
   push:
     branches:
       - master # ou a branch principal do seu projeto
+  release:
+    types: [published] # Aciona o workflow quando um novo release é publicado
 
 jobs:
   build-linux-x86_64:
@@ -26,13 +28,15 @@ jobs:
       - name: Build for Linux x86_64
         run: pyinstaller main.spec
 
-      - name: Rename x86_64 executable
-        run: mv dist/yascrcpy dist/yascrcpy_x86_64
+      - name: Extract and Rename x86_64 executable
+        run: |
+          mv dist/yascrcpy/yascrcpy dist/yascrcpy_x86_64
+          rm -rf dist/yascrcpy
 
       - name: Upload x86_64 executable
         uses: actions/upload-artifact@v4
         with:
-          name: qt-yaScrcpy-linux-x86_64
+          name: yascrcpy_x86_64
           path: dist/yascrcpy_x86_64
 
   build-linux-arm64:
@@ -79,11 +83,43 @@ jobs:
       - name: Build for Linux ARM64
         run: pyinstaller main.spec
 
-      - name: Rename ARM64 executable
-        run: mv dist/yascrcpy dist/yascrcpy_arm64
+      - name: Extract and Rename ARM64 executable
+        run: |
+          mv dist/yascrcpy/yascrcpy dist/yascrcpy_arm64
+          rm -rf dist/yascrcpy
 
       - name: Upload ARM64 executable
         uses: actions/upload-artifact@v4
         with:
-          name: qt-yaScrcpy-linux-arm64
+          name: yascrcpy_arm64
           path: dist/yascrcpy_arm64
+
+  create-github-release:
+    runs-on: ubuntu-latest
+    needs: [build-linux-x86_64, build-linux-arm64]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    steps:
+      - name: Download x86_64 executable
+        uses: actions/download-artifact@v4
+        with:
+          name: yascrcpy_x86_64
+          path: .
+
+      - name: Download ARM64 executable
+        uses: actions/download-artifact@v4
+        with:
+          name: yascrcpy_arm64
+          path: .
+
+      - name: List downloaded files
+        run: ls -R
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            yascrcpy_x86_64
+            yascrcpy_arm64
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

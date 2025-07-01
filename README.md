@@ -1,4 +1,4 @@
-# qt-yaScrcpy
+# yaScrcpy GUI
 
 ## 🌟 Overview
 
@@ -23,6 +23,15 @@ A modern and robust GUI for `scrcpy` and Winlator, built with **PySide6 (Qt)**. 
 
 ---
 
+## 🚧 To-Do / Future Features
+
+-   [ ] Multiple windows audio management.
+-   [ ] Full support for ADB over WiFi.
+-   [ ] Multi-device management interface.
+-   [ ] ... any other ideas are welcome!
+
+---
+
 ## 🚀 Installation & Usage
 
 This application is designed for Linux systems (for now).
@@ -30,6 +39,18 @@ This application is designed for Linux systems (for now).
 ### Recommended: Download Pre-compiled Executables
 
 For the easiest way to get started, download the latest pre-compiled executable for your system's architecture from the [Releases page](https://github.com/gabreek/qt-yaScrcpy/releases).
+
+After downloading, make the executable file runnable:
+
+```bash
+chmod +x ./your_downloaded_executable_name
+```
+
+Then, you can run it directly:
+
+```bash
+./your_downloaded_executable_name
+```
 
 ### 1. System Dependencies
 
@@ -95,9 +116,4 @@ To access these builds:
 
 ---
 
-## 🚧 To-Do / Future Features
 
--   [ ] Multiple windows audio management.
--   [ ] Full support for ADB over WiFi.
--   [ ] Multi-device management interface.
--   [ ] ... any other ideas are welcome!
