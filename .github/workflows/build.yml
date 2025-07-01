@@ -36,16 +36,19 @@ jobs:
           path: dist/yascrcpy_x86_64
 
   build-linux-arm64:
-    runs-on: ubuntu-latest
-    container:
-      image: arm64v8/python:3.12-slim-bullseye # Use a versão do Python que você usa, ex: 3.10-slim-bullseye
+    runs-on: ubuntu-latest-arm64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' # Use a mesma versão do Python
+
       - name: Install build dependencies
         run: |
-          apt-get update && apt-get install -y --no-install-recommends \
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
             build-essential \
             libgl1-mesa-glx \
             libxkbcommon-x11-0 \
