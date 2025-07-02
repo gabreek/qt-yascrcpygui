@@ -38,7 +38,7 @@ This application is designed for Linux systems (for now).
 
 ### Recommended: Download Pre-compiled Executables
 
-For the easiest way to get started, download the latest pre-compiled executable for your system's architecture from the [Releases page](https://github.com/gabreek/qt-yaScrcpy/releases).
+For the easiest way to get started, download the latest pre-compiled executable for your system's architecture from the [Releases page](https://github.com/gabreek/qt-yascrcpygui/releases/latest).
 
 After downloading, make the executable file runnable:
 
@@ -104,13 +104,13 @@ A convenience script `run.sh` is provided to automatically activate the virtual 
 
 ---
 
-## 📦 Building Executables (For Developers)
+## 📦 Building Executables
 
 This project is automatically packaged into standalone executables using PyInstaller via GitHub Actions. Executables for `Linux x86_64` and `Linux ARM64` are built and made available as workflow artifacts on every push to the `master` branch.
 
 To access these builds:
 
-1.  Go to the [Actions tab](https://github.com/gabreek/qt-yaScrcpy/actions) of this repository.
+1.  Go to the [Actions tab](https://github.com/gabreek/qt-yascrcpygui/actions) of this repository.
 2.  Select the latest successful workflow run.
 3.  Download the desired executable artifact (e.g., `qt-yaScrcpy-linux-x86_64` or `qt-yaScrcpy-linux-arm64`).
 
