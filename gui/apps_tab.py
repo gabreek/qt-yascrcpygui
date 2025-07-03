@@ -50,6 +50,7 @@ class AppsTab(BaseGridTab):
         self.refresh_button.clicked.connect(self.refresh_apps_list)
         self.search_input.textChanged.connect(self.filter_apps)
 
+        
         self.on_device_changed()
 
     def on_device_changed(self):
@@ -132,6 +133,9 @@ class AppsTab(BaseGridTab):
         row = 0
         columns = 4
 
+        for i in range(columns):
+            self.grid_layout.setColumnStretch(i, 1)
+
         def add_section(title, app_list):
             nonlocal row
             if not app_list: return
@@ -150,8 +154,8 @@ class AppsTab(BaseGridTab):
                 self.load_icon(app_info['key'], app_info['name'])
                 col += 1
                 if col >= columns: col = 0; row += 1
-            if col != 0:
-                # Apenas incrementa a linha se a seção não terminar perfeitamente
+            # Ensure row advances to the next line if the last row was partially filled
+            if col != 0: 
                 row += 1
 
         add_section("Pinned", pinned)

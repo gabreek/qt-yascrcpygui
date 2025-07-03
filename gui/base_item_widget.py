@@ -25,16 +25,16 @@ class BaseItemWidget(QWidget):
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
         # Tamanho ajustado para garantir espaço para o nome e o overlay
-        self.setFixedSize(80, 110)
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(2, 2, 2, 2)
-        main_layout.setSpacing(4)
-        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.setFixedSize(80, 105)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(2, 2, 2, 2)
+        self.main_layout.setSpacing(4)
+        self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # --- Área do Ícone com Overlay ---
-        icon_container = QWidget()
-        icon_container.setFixedHeight(52)
-        icon_layout = QGridLayout(icon_container)
+        self.icon_container = QWidget()
+        self.icon_container.setFixedHeight(52)
+        icon_layout = QGridLayout(self.icon_container)
         icon_layout.setContentsMargins(0, 0, 0, 0)
 
         self.icon_label = QLabel()
@@ -70,9 +70,35 @@ class BaseItemWidget(QWidget):
         self.name_label.setStyleSheet("font-size: 8pt;")
         self.name_label.setWordWrap(True)
 
-        main_layout.addWidget(icon_container, 0, Qt.AlignmentFlag.AlignHCenter)
-        main_layout.addWidget(self.name_label)
-        main_layout.addStretch()
+        self.main_layout.addWidget(self.icon_container, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.main_layout.addWidget(self.name_label)
+        self.main_layout.addStretch()
+
+        self.adjust_font_size()
+
+    def adjust_font_size(self):
+        font_size = 8 # Start with 8pt
+        self.name_label.setStyleSheet(f"font-size: {font_size}pt;")
+
+        # Calculate available width for the text (widget width - margins)
+        available_width = self.width() - self.main_layout.contentsMargins().left() - self.main_layout.contentsMargins().right()
+
+        # Calculate maximum allowed height for the name_label
+        # Total widget height (100) - icon_container height (52) - main_layout spacing (4) - top/bottom margins (2+2) = 40
+        # This is an approximation, adjust if needed based on visual inspection
+        max_name_label_height = self.height() - self.icon_container.height() - self.main_layout.spacing() - self.main_layout.contentsMargins().top() - self.main_layout.contentsMargins().bottom()
+
+        while True:
+            metrics = self.name_label.fontMetrics()
+            # Calculate bounding rect with word wrap enabled
+            rect = metrics.boundingRect(0, 0, available_width, 0, Qt.TextWordWrap, self.item_name)
+            text_height = rect.height()
+
+            if text_height <= max_name_label_height or font_size <= 6: # Minimum font size
+                break
+
+            font_size -= 0.8 # Decrease by 0.5pt
+            self.name_label.setStyleSheet(f"font-size: {font_size}pt;")
 
     def _create_action_button(self, icon_text):
         """Cria um botão de ação padronizado."""
