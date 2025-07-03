@@ -186,62 +186,51 @@ def list_encoders(device_id=None):
     except (subprocess.SubprocessError, FileNotFoundError) as e:
         raise RuntimeError(f"Could not list encoders via scrcpy: {e}")
 
+# Global list to store active scrcpy session information
+_active_scrcpy_sessions_data = []
+
+def add_active_scrcpy_session(pid, app_name, command_args, icon_path, session_type):
+    """Adds a new active scrcpy session to the global list."""
+    session_info = {
+        'pid': pid,
+        'app_name': app_name,
+        'command_args': command_args,
+        'icon_path': icon_path,
+        'session_type': session_type
+    }
+    _active_scrcpy_sessions_data.append(session_info)
+
+def remove_active_scrcpy_session(pid):
+    """Removes an active scrcpy session from the global list by PID."""
+    global _active_scrcpy_sessions_data
+    _active_scrcpy_sessions_data = [s for s in _active_scrcpy_sessions_data if s['pid'] != pid]
+
 def get_active_scrcpy_sessions():
     """
-    Lists active scrcpy sessions by inspecting running processes.
-    Returns a list of dictionaries, each representing a session.
+    Lists active scrcpy sessions from the globally stored list.
+    Verifies if the processes are still running.
     """
     sessions = []
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'environ']):
+    pids_to_remove = []
+
+    for session_info in _active_scrcpy_sessions_data:
+        pid = session_info['pid']
         try:
-            if 'scrcpy' in proc.info['name'].lower() or \
-               (proc.info['cmdline'] and 'scrcpy' in proc.info['cmdline'][0].lower()):
-                
-                cmdline = proc.info['cmdline']
-                if not cmdline:
-                    continue
+            proc = psutil.Process(pid)
+            # Basic check to ensure it's still a scrcpy-like process
+            # This is a sanity check, as we assume it was a scrcpy process when added
+            if 'scrcpy' in proc.name().lower() or \
+               (proc.cmdline() and 'scrcpy-server' in ' '.join(proc.cmdline()).lower()):
+                sessions.append(session_info)
+            else:
+                pids_to_remove.append(pid) # Process changed its nature or was misidentified
+        except psutil.NoSuchProcess:
+            pids_to_remove.append(pid) # Process no longer exists
 
-                # Extract info from environment variables and command line
-                proc_env = proc.info.get('environ', {})
-                icon_path = proc_env.get('SCRCPY_ICON_PATH')
-                session_type = proc_env.get('SCRCPY_SESSION_TYPE', 'app')
-                
-                window_title = "Unknown"
-                app_name = "Scrcpy Session" # Default app name
+    # Clean up dead processes from the global list
+    for pid in pids_to_remove:
+        remove_active_scrcpy_session(pid)
 
-                # Parse command line arguments for title
-                for i, arg in enumerate(cmdline):
-                    if "--window-title" in arg:
-                        if "=" in arg:
-                            window_title = arg.split("=", 1)[1]
-                        elif i + 1 < len(cmdline):
-                            window_title = cmdline[i+1]
-                    elif "--start-app" in arg:
-                        if "=" in arg:
-                            app_name = arg.split("=", 1)[1]
-                        elif i + 1 < len(cmdline):
-                            app_name = cmdline[i+1]
-                    elif "--shortcut-path" in arg: # For Winlator games
-                        if "=" in arg:
-                            app_name = os.path.basename(arg.split("=", 1)[1])
-                        elif i + 1 < len(cmdline):
-                            app_name = os.path.basename(cmdline[i+1])
-                        session_type = "winlator"
-
-                # Fallback for app_name if window_title is more descriptive
-                if window_title and window_title != "Unknown" and window_title != "Android Device":
-                    app_name = window_title
-
-                sessions.append({
-                    'pid': proc.info['pid'],
-                    'app_name': app_name,
-                    'command_args': cmdline,
-                    'icon_path': icon_path,
-                    'session_type': session_type
-                })
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            # Process no longer exists, access denied, or zombie process
-            continue
     return sessions
 
 def kill_scrcpy_session(pid):
@@ -253,6 +242,7 @@ def kill_scrcpy_session(pid):
         process = psutil.Process(pid)
         process.terminate()  # or process.kill()
         process.wait(timeout=3) # Wait for process to terminate
+        remove_active_scrcpy_session(pid) # Remove from global list
         return True
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return False

@@ -4,6 +4,7 @@
 from PySide6.QtCore import QObject, Signal, QRunnable
 from PySide6.QtGui import QPixmap
 from utils import scrcpy_handler, icon_scraper, adb_handler
+from utils.scrcpy_handler import add_active_scrcpy_session, remove_active_scrcpy_session
 import re
 import os
 import time
@@ -88,6 +89,15 @@ class ScrcpyLaunchWorker(QObject):
                 config_values=self.config_values, window_title=self.window_title,
                 device_id=self.device_id, icon_path=self.icon_path, session_type=self.session_type,
                 capture_output=(self.session_type == 'winlator')
+            )
+
+            # Add the launched session to the global list
+            scrcpy_handler.add_active_scrcpy_session(
+                pid=process.pid,
+                app_name=self.window_title, # Use window_title as app_name for session manager
+                command_args=process.args, # Store the command arguments
+                icon_path=self.icon_path,
+                session_type=self.session_type
             )
 
             self.scrcpy_process_started.emit(process)
