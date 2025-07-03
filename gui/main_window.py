@@ -6,6 +6,7 @@ from PySide6.QtGui import QIcon, QPalette
 
 from .scrcpy_tab import ScrcpyTab
 from .apps_tab import AppsTab
+from .scrcpy_session_manager_window_pyside import ScrcpySessionManagerWindow
 from .winlator_tab import WinlatorTab
 from .workers import DeviceCheckWorker, DeviceConfigLoaderWorker
 
@@ -125,6 +126,17 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.winlator_tab, "Winlator")
         self.tabs.addTab(self.scrcpy_tab, "Config")
 
+        self.session_manager_button = QPushButton(">")
+        self.session_manager_button.setFixedSize(25, 25)
+        self.session_manager_button.clicked.connect(self.toggle_scrcpy_session_manager)
+
+        # Use a container widget to get more control over alignment
+        button_container = QWidget()
+        button_layout = QHBoxLayout(button_container)
+        button_layout.setContentsMargins(0, 2, 5, 0)
+        button_layout.addWidget(self.session_manager_button)
+        self.tabs.setCornerWidget(button_container)
+
         content_layout.addWidget(self.tabs)
 
         main_layout.addWidget(self.title_bar)
@@ -132,6 +144,10 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(main_widget)
         self.resize(410, 650)
+
+        self.scrcpy_session_manager_window = None
+        self.device_check_thread = None
+        self.config_loader_thread = None
 
         self.update_theme()
 
@@ -186,6 +202,18 @@ class MainWindow(QMainWindow):
             QTabBar::tab:!selected:hover {{
                 background: {tab_hover_bg_color};
             }}
+            QPushButton {{
+                background-color: {main_bg_color};
+                color: {title_text_color};
+                border: 1px solid {border_color};
+                border-radius: 4px;
+            }}
+            QPushButton:hover {{
+                background-color: {minimize_hover_color};
+            }}
+            QPushButton:pressed {{
+                background-color: {minimize_pressed_color};
+            }}
         """
         self.setStyleSheet(style)
         
@@ -226,13 +254,54 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Manipula o evento de fechamento da janela."""
+        print("Closing application...")
+        if self.scrcpy_session_manager_window:
+            self.scrcpy_session_manager_window.close()
+        
         self.device_check_timer.stop()
+        
+        # Explicitly quit and wait for threads
+        if self.device_check_thread: # Check if thread exists
+            try:
+                if self.device_check_thread.isRunning():
+                    self.device_check_thread.quit()
+                    self.device_check_thread.wait(3000) # Wait up to 3 seconds
+            except RuntimeError:
+                pass # Thread already deleted
+
+        if self.config_loader_thread: # Check if thread exists
+            try:
+                if self.config_loader_thread.isRunning():
+                    self.config_loader_thread.quit()
+                    self.config_loader_thread.wait(3000) # Wait up to 3 seconds
+            except RuntimeError:
+                pass # Thread already deleted
+
         self.scrcpy_tab.stop_all_workers()
+        
+        print("All threads and workers stopped. Accepting close event.")
         event.accept()
 
     def minimize(self):
         """Minimizes the main window."""
         self.showMinimized()
+
+    def toggle_scrcpy_session_manager(self):
+        if self.scrcpy_session_manager_window is None or not self.scrcpy_session_manager_window.isVisible():
+            parent_geometry = self.geometry()
+            self.scrcpy_session_manager_window = ScrcpySessionManagerWindow(
+                self.app_config,
+                self,
+                parent_geometry.x(),
+                parent_geometry.y(),
+                parent_geometry.width()
+            )
+            self.scrcpy_session_manager_window.show()
+            self.session_manager_button.setText("<")
+        else:
+            self.scrcpy_session_manager_window.close()
+            self.scrcpy_session_manager_window = None
+            self.session_manager_button.setText(">")
 
     def check_device_connection(self):
         """Inicia a verificação da conexão do dispositivo em um worker thread."""

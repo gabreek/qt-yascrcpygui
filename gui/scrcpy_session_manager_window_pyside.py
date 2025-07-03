@@ -1,38 +1,109 @@
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem,
-    QLabel, QMessageBox, QWidget, QTextEdit
+    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem,
+    QLabel, QMessageBox, QTextEdit
 )
-from PySide6.QtGui import QPixmap, QImage, QIcon
-from PySide6.QtCore import Qt, QTimer, Signal, QObject, QEvent
+from PySide6.QtGui import QPixmap, QImage, QIcon, QPalette
+from PySide6.QtCore import Qt, QTimer, Signal, QObject, QEvent, QPoint
 
 import os
 import shlex
 import sys
+import subprocess
 from PIL import Image # Still need PIL for loading various image formats into QImage
 
 from utils import scrcpy_handler
 
-class ScrcpySessionManagerWindow(QDialog):
+
+class CustomSessionTitleBar(QWidget):
+    """Barra de título customizada para a janela de sessões, sem botão de fechar."""
+    def __init__(self, parent, title_text="Active Scrcpy Sessions"):
+        super().__init__(parent)
+        self.parent = parent
+        self.setFixedHeight(35)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.title_label = QLabel(title_text, self)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_label.setStyleSheet("color: white; padding-left: 10px; font-weight: bold;")
+
+        layout.addWidget(self.title_label)
+        layout.addStretch()
+
+
+class ScrcpySessionManagerWindow(QWidget):
     # Signal to emit when the window is closed
     windowClosed = Signal()
 
-    def __init__(self, parent_widget, parent_x, parent_y, parent_width, close_callback=None):
-        super().__init__(parent_widget)
+    def __init__(self, app_config, parent_widget, parent_x, parent_y, parent_width, close_callback=None):
+        super().__init__()
+        self.app_config = app_config
+        self.session_data_map = {}
         self.parent_widget = parent_widget
         self.close_callback = close_callback
         self.setWindowTitle("Active Scrcpy Sessions")
         self.setMinimumSize(300, 400)
 
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint) # Keep window on top
+        # Set window flags for frameless window
+        self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground) # For rounded corners and shadows
 
-        self.default_icon_pixmap = self._load_icon("gui/placeholder.png")
-        self.winlator_icon_pixmap = self._load_icon("gui/winlator_placeholder.png")
+        self.container_widget = QWidget()
+        self.container_widget.setObjectName("container_widget")
 
-        self.session_data_map = {}
+        main_layout = QVBoxLayout(self.container_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0) # Remove margins for frameless window
+        main_layout.setSpacing(0)
 
-        self._setup_ui()
+        dialog_layout = QVBoxLayout(self)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        dialog_layout.addWidget(self.container_widget)
+
+        self.title_bar = CustomSessionTitleBar(self, title_text="Active Scrcpy Sessions")
+        main_layout.addWidget(self.title_bar)
+
+        # Content widget to hold the tree and buttons, with proper margins
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(10, 10, 10, 10)
+        content_layout.setSpacing(5)
+
+        # Treeview for sessions
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True) # Only show the tree column
+        self.tree.setColumnCount(1)
+        self.tree.setIndentation(0) # Remove indentation for cleaner look
+        self.tree.setStyleSheet("QTreeWidget::item { height: 32px; }") # Set row height
+        content_layout.addWidget(self.tree)
+
+        # Bottom command buttons
+        command_layout = QHBoxLayout()
+        self.terminate_button = QPushButton("Kill")
+        self.terminate_button.setEnabled(False)
+        self.terminate_button.setFixedSize(100, 30) # Fixed size for consistency
+
+        self.command_button = QPushButton("Check Command")
+        self.command_button.setEnabled(False)
+        self.command_button.setFixedSize(120, 30) # Fixed size for consistency
+
+        command_layout.addStretch() # Left stretch
+        command_layout.addWidget(self.terminate_button)
+        command_layout.addWidget(self.command_button)
+        command_layout.addStretch() # Right stretch
+
+        content_layout.addLayout(command_layout)
+
+        main_layout.addWidget(content_widget)
+
+        self._setup_ui() # This method is now redundant, but keeping for now
         self._connect_signals()
         self._position_window(parent_x, parent_y, parent_width)
+
+        # Load default icons before first population
+        self.default_icon_pixmap = self._load_icon("gui/placeholder.png")
+        self.winlator_icon_pixmap = self._load_icon("gui/winlator_placeholder.png")
 
         # Start auto-refresh timer
         self.refresh_timer = QTimer(self)
@@ -41,6 +112,63 @@ class ScrcpySessionManagerWindow(QDialog):
 
         # Initial population
         self.populate_sessions()
+
+        # Apply theme from parent
+        self.setPalette(self.parent_widget.palette())
+        self.update_theme()
+
+    def update_theme(self):
+        # Get colors from current palette
+        main_bg_color = self.palette().color(QPalette.ColorRole.Window).name()
+        border_color = self.palette().color(QPalette.ColorRole.Mid).name()
+        text_color = self.palette().color(QPalette.ColorRole.WindowText).name()
+        button_bg_color = self.palette().color(QPalette.ColorRole.Button).name()
+        button_text_color = self.palette().color(QPalette.ColorRole.ButtonText).name()
+        button_hover_color = self.palette().color(QPalette.ColorRole.AlternateBase).name()
+        button_pressed_color = self.palette().color(QPalette.ColorRole.Mid).name()
+        tree_bg_color = self.palette().color(QPalette.ColorRole.Base).name()
+        tree_item_selected_bg = self.palette().color(QPalette.ColorRole.Highlight).name()
+
+        style = f"""
+            #container_widget {{
+                background-color: {main_bg_color};
+                border: 1px solid {border_color};
+                border-radius: 8px;
+            }}
+            QDialog {{
+                background-color: transparent;
+            }}
+            QLabel {{
+                color: {text_color};
+            }}
+            QPushButton {{
+                background-color: {button_bg_color};
+                color: {button_text_color};
+                border: 1px solid {border_color};
+                border-radius: 5px;
+            }}
+            QPushButton:hover {{
+                background-color: {button_hover_color};
+            }}
+            QPushButton:pressed {{
+                background-color: {button_pressed_color};
+            }}
+            QTreeWidget {{
+                background-color: {tree_bg_color};
+                color: {text_color};
+                border: 1px solid {border_color};
+                border-radius: 5px;
+            }}
+            QTreeWidget::item:selected {{
+                background-color: {tree_item_selected_bg};
+            }}
+        """
+        self.setStyleSheet(style)
+
+        # Update title bar style
+        title_bar_style = f"color: {text_color}; padding-left: 10px; font-weight: bold;"
+        self.title_bar.title_label.setStyleSheet(title_bar_style)
+
 
     def _load_icon(self, relative_path):
         # Determine the base path for resources
@@ -59,43 +187,17 @@ class ScrcpySessionManagerWindow(QDialog):
             qimage = QImage(img.tobytes(), img.width, img.height, QImage.Format_RGBA8888)
             return QPixmap.fromImage(qimage)
         except Exception as e:
-            print(f"Error loading icon {full_path}: {e}")
-            # Create a blank pixmap if loading fails
-            pixmap = QPixmap(32, 32)
-            pixmap.fill(Qt.darkGray)
-            return pixmap
+            if not isinstance(e, FileNotFoundError):
+                print(f"Error loading icon {full_path}: {e}")
+            return None
 
     def _setup_ui(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(5)
-
-        # Treeview for sessions
-        self.tree = QTreeWidget()
-        self.tree.setHeaderHidden(True) # Only show the tree column
-        self.tree.setColumnCount(1)
-        self.tree.setIndentation(0) # Remove indentation for cleaner look
-        self.tree.setStyleSheet("QTreeWidget::item { height: 32px; }") # Set row height
-        main_layout.addWidget(self.tree)
-
-        # Bottom command buttons
-        command_layout = QHBoxLayout()
-        self.terminate_button = QPushButton("Terminate")
-        self.terminate_button.setEnabled(False)
-        self.terminate_button.setFixedSize(100, 30) # Fixed size for consistency
-
-        self.command_button = QPushButton("Command Used")
-        self.command_button.setEnabled(False)
-        self.command_button.setFixedSize(120, 30) # Fixed size for consistency
-
-        command_layout.addWidget(self.terminate_button)
-        command_layout.addWidget(self.command_button)
-        command_layout.addStretch() # Pushes buttons to the left
-
-        main_layout.addLayout(command_layout)
+        # This method is now mostly handled in __init__
+        pass
 
     def _connect_signals(self):
         self.tree.itemSelectionChanged.connect(self._on_tree_select)
+        self.tree.itemDoubleClicked.connect(self._focus_selected_session_window)
         self.terminate_button.clicked.connect(self._terminate_selected_session)
         self.command_button.clicked.connect(self._show_command_for_selected_session)
         self.parent_widget.installEventFilter(self) # Install event filter on parent for position tracking
@@ -121,6 +223,32 @@ class ScrcpySessionManagerWindow(QDialog):
             self.terminate_button.setEnabled(False)
             self.command_button.setEnabled(False)
 
+    def _focus_selected_session_window(self, item):
+        """Brings the selected scrcpy window to the foreground using wmctrl."""
+        pid = item.data(0, Qt.UserRole)
+        session_data = self.session_data_map.get(pid)
+        if not session_data:
+            return
+
+        window_title = session_data.get('app_name')
+        if not window_title:
+            return
+
+        try:
+            # Use wmctrl to activate the window by its title
+            cmd = ['wmctrl', '-a', window_title]
+            result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+            if result.returncode != 0:
+                # Check if wmctrl is installed
+                if "No command 'wmctrl' found" in result.stderr or "not found" in result.stderr:
+                    print("Error: 'wmctrl' is not installed. Please install it to use this feature (e.g., 'sudo apt-get install wmctrl').")
+                else:
+                    print(f"wmctrl error: Could not activate window '{window_title}'.\n{result.stderr}")
+        except FileNotFoundError:
+            print("Error: 'wmctrl' is not installed. Please install it to use this feature (e.g., 'sudo apt-get install wmctrl').")
+        except Exception as e:
+            print(f"An error occurred while trying to focus the window: {e}")
+
     def populate_sessions(self):
         current_selection_id = None
         if self.tree.selectedItems():
@@ -142,12 +270,9 @@ class ScrcpySessionManagerWindow(QDialog):
         reselect_item = None
         for session in sessions:
             icon_pixmap = None
-            if session['icon_path'] and os.path.exists(session['icon_path']):
-                try:
-                    icon_pixmap = self._load_icon(session['icon_path'])
-                except Exception as e:
-                    print(f"Error loading icon {session['icon_path']}: {e}")
-            
+            if session.get('icon_path'):
+                icon_pixmap = self._load_icon(session['icon_path'])
+
             if icon_pixmap is None:
                 if session.get('session_type') == 'winlator':
                     icon_pixmap = self.winlator_icon_pixmap

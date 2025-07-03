@@ -186,7 +186,87 @@ def list_encoders(device_id=None):
     except (subprocess.SubprocessError, FileNotFoundError) as e:
         raise RuntimeError(f"Could not list encoders via scrcpy: {e}")
 
+def get_active_scrcpy_sessions():
+    """
+    Lists active scrcpy sessions by inspecting running processes.
+    Returns a list of dictionaries, each representing a session.
+    """
+    sessions = []
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'environ']):
+        try:
+            if 'scrcpy' in proc.info['name'].lower() or \
+               (proc.info['cmdline'] and 'scrcpy' in proc.info['cmdline'][0].lower()):
+                
+                cmdline = proc.info['cmdline']
+                if not cmdline:
+                    continue
+
+                # Extract info from environment variables and command line
+                proc_env = proc.info.get('environ', {})
+                icon_path = proc_env.get('SCRCPY_ICON_PATH')
+                session_type = proc_env.get('SCRCPY_SESSION_TYPE', 'app')
+                
+                window_title = "Unknown"
+                app_name = "Scrcpy Session" # Default app name
+
+                # Parse command line arguments for title
+                for i, arg in enumerate(cmdline):
+                    if "--window-title" in arg:
+                        if "=" in arg:
+                            window_title = arg.split("=", 1)[1]
+                        elif i + 1 < len(cmdline):
+                            window_title = cmdline[i+1]
+                    elif "--start-app" in arg:
+                        if "=" in arg:
+                            app_name = arg.split("=", 1)[1]
+                        elif i + 1 < len(cmdline):
+                            app_name = cmdline[i+1]
+                    elif "--shortcut-path" in arg: # For Winlator games
+                        if "=" in arg:
+                            app_name = os.path.basename(arg.split("=", 1)[1])
+                        elif i + 1 < len(cmdline):
+                            app_name = os.path.basename(cmdline[i+1])
+                        session_type = "winlator"
+
+                # Fallback for app_name if window_title is more descriptive
+                if window_title and window_title != "Unknown" and window_title != "Android Device":
+                    app_name = window_title
+
+                sessions.append({
+                    'pid': proc.info['pid'],
+                    'app_name': app_name,
+                    'command_args': cmdline,
+                    'icon_path': icon_path,
+                    'session_type': session_type
+                })
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            # Process no longer exists, access denied, or zombie process
+            continue
+    return sessions
+
+def kill_scrcpy_session(pid):
+    """
+    Terminates a scrcpy process given its PID.
+    Returns True if successful, False otherwise.
+    """
+    try:
+        process = psutil.Process(pid)
+        process.terminate()  # or process.kill()
+        process.wait(timeout=3) # Wait for process to terminate
+        return True
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return False
+    except psutil.TimeoutExpired:
+        # If terminate didn't work, try kill
+        try:
+            process.kill()
+            process.wait(timeout=3)
+            return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False
+
 def list_displays(device_id=None):
+
     """Lista os displays disponíveis usando scrcpy."""
     cmd = ['scrcpy', '--list-displays']
     if device_id:
