@@ -392,5 +392,12 @@ class ScrcpyTab(QWidget):
         for name in self.workers:
             self._stop_worker(name)
 
+    def set_device_status_message(self, message):
+        if message:
+            self.device_info_label.setText(message)
+            self._set_all_widgets_enabled(False)
+        else:
+            self.refresh_device_info()
+
 
 

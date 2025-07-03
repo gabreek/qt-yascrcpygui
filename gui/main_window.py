@@ -7,7 +7,7 @@ from PySide6.QtGui import QIcon, QPalette
 from .scrcpy_tab import ScrcpyTab
 from .apps_tab import AppsTab
 from .winlator_tab import WinlatorTab
-from .workers import DeviceCheckWorker
+from .workers import DeviceCheckWorker, DeviceConfigLoaderWorker
 
 
 class CustomTitleBar(QWidget):
@@ -247,18 +247,45 @@ class MainWindow(QMainWindow):
         self.device_check_thread.start()
 
     def _on_device_check_result(self, current_device_id):
-        # This method is called from the worker thread. Emit a signal to the main thread.
         self.device_status_updated.emit(current_device_id)
 
-    def _handle_device_status_update(self, current_device_id):
-        # This slot is called from the main thread, safe to update UI and config.
-        if current_device_id != self.last_known_device_id:
-            print(f"MainWindow: Device ID changed from {self.last_known_device_id} to {current_device_id}. Refreshing...")
-            self.last_known_device_id = current_device_id
-            self.app_config.set('device_id', current_device_id if current_device_id else "no_device")
-            self.app_config.load_config_for_device(current_device_id if current_device_id else None)
-
-            # Notifica todas as abas sobre a mudança de dispositivo
+    def _update_all_tabs_status(self, message=None):
+        if message:
+            for i in range(self.tabs.count()):
+                tab = self.tabs.widget(i)
+                if hasattr(tab, 'set_device_status_message'):
+                    tab.set_device_status_message(message)
+        else:
             self.scrcpy_tab.refresh_device_info()
             self.apps_tab.on_device_changed()
             self.winlator_tab.on_device_changed()
+
+    def _handle_device_status_update(self, current_device_id):
+        if current_device_id != self.last_known_device_id:
+            print(f"MainWindow: Device ID changed from {self.last_known_device_id} to {current_device_id}.")
+            self.last_known_device_id = current_device_id
+            self.app_config.set('device_id', current_device_id if current_device_id else "no_device")
+
+            if current_device_id:
+                self._update_all_tabs_status("Please wait, loading...")
+                self.config_loader_worker = DeviceConfigLoaderWorker(current_device_id, self.app_config)
+                self.config_loader_thread = QThread()
+                self.config_loader_worker.moveToThread(self.config_loader_thread)
+                self.config_loader_worker.finished.connect(self.config_loader_thread.quit)
+                self.config_loader_worker.finished.connect(self.config_loader_worker.deleteLater)
+                self.config_loader_thread.finished.connect(self.config_loader_thread.deleteLater)
+                self.config_loader_worker.result.connect(self._on_device_config_loaded)
+                self.config_loader_worker.error.connect(self._on_device_load_error)
+                self.config_loader_thread.started.connect(self.config_loader_worker.run)
+                self.config_loader_thread.start()
+            else:
+                self.app_config.load_config_for_device(None)
+                self._update_all_tabs_status()
+
+    def _on_device_config_loaded(self, result_data):
+        print("MainWindow: Device config loaded successfully.")
+        self._update_all_tabs_status()
+
+    def _on_device_load_error(self, error_message):
+        print(f"MainWindow: Error loading device config: {error_message}")
+        self._update_all_tabs_status(f"Error: {error_message}")

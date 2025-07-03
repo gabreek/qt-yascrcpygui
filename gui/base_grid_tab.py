@@ -48,5 +48,11 @@ class BaseGridTab(QWidget):
     def show_grid(self):
         self.stacked_widget.setCurrentWidget(self.scroll_area)
 
+    def set_device_status_message(self, message):
+        if message:
+            self.show_message(message)
+        else:
+            self.show_grid()
+
     def on_device_changed(self):
         raise NotImplementedError("Subclasses must implement on_device_changed")

@@ -272,3 +272,28 @@ class DeviceCheckWorker(QObject):
             self.result.emit(None)
         finally:
             self.finished.emit()
+
+
+class DeviceConfigLoaderWorker(QObject):
+    finished = Signal()
+    error = Signal(str)
+    result = Signal(dict)
+
+    def __init__(self, device_id, app_config):
+        super().__init__()
+        self.device_id = device_id
+        self.app_config = app_config
+
+    def run(self):
+        try:
+            self.app_config.load_config_for_device(self.device_id)
+            device_info = adb_handler.get_device_info(self.device_id)
+            output = {
+                "device_id": self.device_id,
+                "device_info": device_info,
+            }
+            self.result.emit(output)
+        except Exception as e:
+            self.error.emit(str(e))
+        finally:
+            self.finished.emit()
