@@ -126,6 +126,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.winlator_tab, "Winlator")
         self.tabs.addTab(self.scrcpy_tab, "Config")
 
+        self.scrcpy_tab.config_updated_on_worker.connect(self._on_scrcpy_tab_config_ready)
+
         self.session_manager_button = QPushButton(">")
         self.session_manager_button.setFixedSize(25, 25)
         self.session_manager_button.clicked.connect(self.toggle_scrcpy_session_manager)
@@ -358,3 +360,6 @@ class MainWindow(QMainWindow):
     def _on_device_load_error(self, error_message):
         print(f"MainWindow: Error loading device config: {error_message}")
         self._update_all_tabs_status(f"Error: {error_message}")
+
+    def _on_scrcpy_tab_config_ready(self):
+        self.scrcpy_tab._update_all_widgets_from_config()

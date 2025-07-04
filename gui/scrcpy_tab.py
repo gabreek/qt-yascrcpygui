@@ -5,7 +5,7 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
                                QLineEdit, QCheckBox, QSlider, QGroupBox, QMessageBox,
                                QScrollArea, QSizePolicy, QPushButton, QGridLayout)
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt, QThread, QTimer
 
 from .workers import DeviceInfoWorker, EncoderListWorker
 
@@ -22,7 +22,11 @@ class NoScrollQSlider(QSlider):
 CODEC_AUTO = "Auto"
 DEVICE_NOT_FOUND = "no_device"
 
+from PySide6.QtCore import Qt, QThread, Signal
+
 class ScrcpyTab(QWidget):
+    config_updated_on_worker = Signal()
+
     def __init__(self, app_config):
         super().__init__()
         self.app_config = app_config
@@ -247,8 +251,7 @@ class ScrcpyTab(QWidget):
         else:
             self._load_encoders_from_cache()
 
-        # This call will now correctly update all widgets
-        self._update_all_widgets_from_config()
+        self.config_updated_on_worker.emit()
 
     def on_device_info_error(self, error_msg):
         self.device_info_label.setText(f"Device not connected or ADB error: {error_msg}")
