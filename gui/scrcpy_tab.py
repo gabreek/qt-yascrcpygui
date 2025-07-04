@@ -76,6 +76,27 @@ class ScrcpyTab(QWidget):
         self.scroll_layout.addWidget(group)
         return group, layout
 
+    def _add_combo_box_row(self, parent_layout, label_text, var_key, options):
+        row_layout = QHBoxLayout()
+        label = QLabel(label_text)
+        label.setMinimumWidth(100)
+        row_layout.addWidget(label)
+
+        editor = NoScrollQComboBox()
+        editor.addItems(options)
+        value = self.app_config.get(var_key, options[0])
+        if value in options:
+            editor.setCurrentText(str(value))
+        editor.currentTextChanged.connect(lambda text, vk=var_key: self.app_config.set(vk, text))
+
+        editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        editor.setMaximumWidth(300)
+        row_layout.addWidget(editor)
+        row_layout.setStretch(0, 0) # Label
+        row_layout.setStretch(1, 1) # Editor
+        parent_layout.addLayout(row_layout)
+        self.general_editors[var_key] = editor
+
     def _create_device_status_group(self):
         self.device_info_group, layout = self._create_group_box("Device Status")
         self.device_info_label = QLabel("Checking device status...")
@@ -129,9 +150,38 @@ class ScrcpyTab(QWidget):
         self.video_settings_group, layout = self._create_group_box("Video Settings")
         self.v_codec_combo = NoScrollQComboBox()
         self.v_codec_combo.currentTextChanged.connect(self._on_video_codec_changed)
-        layout.addWidget(self.v_codec_combo)
         self.v_encoder_combo = NoScrollQComboBox()
-        layout.addWidget(self.v_encoder_combo)
+        
+        # Video Codec
+        codec_layout = QHBoxLayout()
+        codec_label = QLabel("Codec")
+        codec_label.setMinimumWidth(100)
+        codec_layout.addWidget(codec_label)
+        self.v_codec_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.v_codec_combo.setMaximumWidth(300)
+        codec_layout.addWidget(self.v_codec_combo)
+        codec_layout.setStretch(0, 0)
+        codec_layout.setStretch(1, 1)
+        layout.addLayout(codec_layout)
+        
+        # Video Encoder
+        encoder_layout = QHBoxLayout()
+        encoder_label = QLabel("Encoder")
+        encoder_label.setMinimumWidth(100)
+        encoder_layout.addWidget(encoder_label)
+        self.v_encoder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.v_encoder_combo.setMaximumWidth(300)
+        encoder_layout.addWidget(self.v_encoder_combo)
+        encoder_layout.setStretch(0, 0)
+        encoder_layout.setStretch(1, 1)
+        layout.addLayout(encoder_layout)
+
+        # New video codec options
+        self._add_combo_box_row(layout, "Frame Drop", 'allow_frame_drop', ["Enabled", "Disabled"])
+        self._add_combo_box_row(layout, "Low Latency", 'low_latency', ["Enabled", "Disabled"])
+        self._add_combo_box_row(layout, "Priority", 'priority_mode', ["Realtime", "Normal"])
+        self._add_combo_box_row(layout, "Bitrate Mode", 'bitrate_mode', ["CBR", "VBR"])
+
         self._create_slider(layout, "Video Buffer", 'video_buffer', 0, 500, 1, "ms")
         self._create_slider_with_buttons(layout, "Video Bitrate", 'video_bitrate_slider', 10, 8000, 10, "K", [1000, 2000, 4000, 6000, 8000])
 
@@ -139,9 +189,32 @@ class ScrcpyTab(QWidget):
         self.audio_settings_group, layout = self._create_group_box("Audio Settings")
         self.a_codec_combo = NoScrollQComboBox()
         self.a_codec_combo.currentTextChanged.connect(self._on_audio_codec_changed)
-        layout.addWidget(self.a_codec_combo)
         self.a_encoder_combo = NoScrollQComboBox()
-        layout.addWidget(self.a_encoder_combo)
+        
+        # Audio Codec
+        codec_layout = QHBoxLayout()
+        codec_label = QLabel("Codec")
+        codec_label.setMinimumWidth(100)
+        codec_layout.addWidget(codec_label)
+        self.a_codec_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.a_codec_combo.setMaximumWidth(300)
+        codec_layout.addWidget(self.a_codec_combo)
+        codec_layout.setStretch(0, 0)
+        codec_layout.setStretch(1, 1)
+        layout.addLayout(codec_layout)
+
+        # Audio Encoder
+        encoder_layout = QHBoxLayout()
+        encoder_label = QLabel("Encoder")
+        encoder_label.setMinimumWidth(100)
+        encoder_layout.addWidget(encoder_label)
+        self.a_encoder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.a_encoder_combo.setMaximumWidth(300)
+        encoder_layout.addWidget(self.a_encoder_combo)
+        encoder_layout.setStretch(0, 0)
+        encoder_layout.setStretch(1, 1)
+        layout.addLayout(encoder_layout)
+
         self._create_slider(layout, "Audio Buffer", 'audio_buffer', 5, 500, 1, "ms")
 
     def _create_options_group(self):

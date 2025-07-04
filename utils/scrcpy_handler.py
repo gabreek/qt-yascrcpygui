@@ -33,6 +33,30 @@ def _build_command(config_values, window_title=None, device_id=None):
     if config_values.get('no_audio'): cmd.append('--no-audio')
     if config_values.get('no_video'): cmd.append('--no-video')
 
+    video_codec_options = []
+    if config_values.get('allow_frame_drop') == 'enabled':
+        video_codec_options.append('allow-frame-drop=1')
+    elif config_values.get('allow_frame_drop') == 'disabled':
+        video_codec_options.append('allow-frame-drop=0')
+
+    if config_values.get('low_latency') == 'enabled':
+        video_codec_options.append('low-latency:int=1')
+    elif config_values.get('low_latency') == 'disabled':
+        video_codec_options.append('low-latency:int=0')
+
+    if config_values.get('priority_mode') == 'realtime':
+        video_codec_options.append('priority:int=0')
+    elif config_values.get('priority_mode') == 'normal':
+        video_codec_options.append('priority:int=1')
+
+    if config_values.get('bitrate_mode').lower().strip() == 'cbr':
+        video_codec_options.append('bitrate-mode:int=2')
+    elif config_values.get('bitrate_mode').lower().strip() == 'vbr':
+        video_codec_options.append('bitrate-mode:int=1')
+
+    if video_codec_options:
+        cmd.append(f"--video-codec-options={','.join(video_codec_options)}")
+
     map_args = {
         'start_app': '--start-app',
         'mouse_mode': '--mouse',
