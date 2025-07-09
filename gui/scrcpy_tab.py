@@ -110,7 +110,6 @@ class ScrcpyTab(QWidget):
             ("Gamepad Mode", 'gamepad_mode', ["disabled","uhid","aoa"]),
             ("Keyboard Mode", 'keyboard_mode', ["disabled","sdk","uhid","aoa"]),
             ("Mouse Bind", 'mouse_bind', ["bhsn:++++","++++:bhsn"]),
-            ("Render Driver", 'render_driver', ["opengles2", "opengles", "opengl", "direct3d", "metal", "software"]),
             ("Max FPS", 'max_fps', ["20","25","30", "45", "60"]),
             ("Virtual Display", 'new_display', ["Disabled", "640x360/120", "854x480/120", "960x550/120", "1280x720/140", "1366x768/140", "1920x1080/140"]),
             ("Max Size", 'max_size', ["0", "640", "854", "960","1280","1366","1080"]),
@@ -124,15 +123,23 @@ class ScrcpyTab(QWidget):
             row_layout.addWidget(label)
 
             value = self.app_config.get(var_key, "")
-            if opts is None:
+            if opts is None: # This will be true for 'extraargs'
                 editor = QLineEdit(str(value))
                 editor.textChanged.connect(lambda text, vk=var_key: self.app_config.set(vk, text))
             else:
                 editor = NoScrollQComboBox()
                 editor.addItems(opts)
-                if value in opts:
-                    editor.setCurrentText(str(value))
+                
+                # Set specified comboboxes to be editable
+                if var_key in ['mouse_bind', 'max_fps', 'new_display', 'max_size']:
+                    editor.setEditable(True)
+
+                # Restore the saved or default value
+                saved_value = self.app_config.get(var_key, opts[0] if opts else "")
+                editor.setCurrentText(str(saved_value))
+
                 editor.currentTextChanged.connect(lambda text, vk=var_key: self.app_config.set(vk, text))
+                
                 if var_key == 'new_display':
                     editor.currentTextChanged.connect(self._update_resolution_state)
                 elif var_key == 'max_size':
@@ -177,6 +184,7 @@ class ScrcpyTab(QWidget):
         layout.addLayout(encoder_layout)
 
         # New video codec options
+        self._add_combo_box_row(layout, "Render Driver", 'render_driver', ["opengles2", "opengles", "opengl", "direct3d", "metal", "software"])
         self._add_combo_box_row(layout, "Frame Drop", 'allow_frame_drop', ["Enabled", "Disabled"])
         self._add_combo_box_row(layout, "Low Latency", 'low_latency', ["Enabled", "Disabled"])
         self._add_combo_box_row(layout, "Priority", 'priority_mode', ["Realtime", "Normal"])

@@ -7,6 +7,7 @@ import psutil
 import os
 import json
 import re
+import threading
 
 def _get_startupinfo():
     """Returns a startupinfo object for subprocesses on Windows to suppress console window."""
@@ -16,7 +17,27 @@ def _get_startupinfo():
         return startupinfo
     return None
 
-def _build_command(config_values, window_title=None, device_id=None):
+def _parse_extra_args(extra_args_str):
+    """Analisa a string de argumentos extras para separar comandos PRE, POST e argumentos do scrcpy."""
+    prepend_cmds = []
+    append_cmds = []
+    scrcpy_args = []
+
+    for command in extra_args_str.strip().split(';'):
+        command = command.strip()
+        if not command:
+            continue
+        if command.upper().startswith('PRE::'):
+            prepend_cmds.append(command[5:].strip())
+        elif command.upper().startswith('POST::'):
+            append_cmds.append(command[6:].strip())
+        else:
+            scrcpy_args.extend(shlex.split(command))
+
+    return {'prepend': prepend_cmds, 'append': append_cmds, 'scrcpy': scrcpy_args}
+
+
+def _build_command(config_values, extra_scrcpy_args=None, window_title=None, device_id=None):
     """Constrói a lista de argumentos para o comando scrcpy."""
     cmd = ['scrcpy']
     if device_id:
@@ -101,29 +122,64 @@ def _build_command(config_values, window_title=None, device_id=None):
         if max_size_val and max_size_val != '0':
             cmd.append(f"--max-size={max_size_val}")
 
-    extra = config_values.get('extraargs', '').strip()
-    if extra:
-        cmd.extend(shlex.split(extra))
+    if extra_scrcpy_args:
+        cmd.extend(extra_scrcpy_args)
 
     return cmd
 
+def _wait_for_scrcpy_and_post_cmds(scrcpy_process, post_cmds, startupinfo):
+    """Waits for the scrcpy process to finish and then runs POST commands."""
+    scrcpy_process.wait()
+
+    # Clean up the session from the active list once it has ended
+    remove_active_scrcpy_session(scrcpy_process.pid)
+
+    for post_cmd_str in post_cmds:
+        try:
+            print(f"Executing POST command: {post_cmd_str}")
+            post_cmd = shlex.split(post_cmd_str)
+            subprocess.run(post_cmd, check=True, startupinfo=startupinfo)
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            print(f"Error executing POST command '{post_cmd_str}': {e}")
+
 def launch_scrcpy(config_values, capture_output=False, window_title=None, device_id=None, icon_path=None, session_type='app'):
-    """Inicia o scrcpy com base na configuração fornecida."""
-    cmd = _build_command(config_values, window_title, device_id)
+    """Inicia o scrcpy com base na configuração fornecida, lidando com comandos PRE e POST."""
+    extra_args_str = config_values.get('extraargs', '')
+    parsed_args = _parse_extra_args(extra_args_str)
+
+    startupinfo = _get_startupinfo()
+
+    # Executar comandos PRE
+    for pre_cmd_str in parsed_args['prepend']:
+        try:
+            print(f"Executing PRE command: {pre_cmd_str}")
+            pre_cmd = shlex.split(pre_cmd_str)
+            subprocess.run(pre_cmd, check=True, startupinfo=startupinfo)
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            print(f"Error executing PRE command '{pre_cmd_str}': {e}")
+
+    # Construir e executar o comando scrcpy
+    cmd = _build_command(config_values, parsed_args['scrcpy'], window_title, device_id)
     print('Executing Scrcpy Command:', ' '.join(cmd))
 
     env = os.environ.copy()
     if icon_path and os.path.exists(icon_path):
         env['SCRCPY_ICON_PATH'] = icon_path
 
-    startupinfo = _get_startupinfo()
-
     if capture_output:
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, startupinfo=startupinfo, env=env)
+        scrcpy_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, startupinfo=startupinfo, env=env)
     else:
-        process = subprocess.Popen(cmd, startupinfo=startupinfo, env=env)
+        scrcpy_process = subprocess.Popen(cmd, startupinfo=startupinfo, env=env)
 
-    return process
+    # Wait for the process and run POST commands in a separate thread
+    wait_thread = threading.Thread(
+        target=_wait_for_scrcpy_and_post_cmds, 
+        args=(scrcpy_process, parsed_args['append'], startupinfo)
+    )
+    wait_thread.daemon = True # Allows main program to exit even if this thread is running
+    wait_thread.start()
+
+    return scrcpy_process
 
 def list_installed_apps(device_id=None):
     """Lista os apps, separando entre usuário e sistema, usando o comando scrcpy."""

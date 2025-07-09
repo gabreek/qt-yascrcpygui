@@ -19,6 +19,39 @@ A modern and robust GUI for `scrcpy` and Winlator, built with **PySide6 (Qt)**. 
     *   Supports custom game icons via drag-and-drop.
     *   Save specific `scrcpy` settings for each game, perfect for custom resolutions and performance tuning.
 *   **Advanced Scrcpy Configuration:** A dedicated tab to tweak all major `scrcpy` settings, including resolution, bitrate, codecs, and more. All settings are saved automatically.
+
+### Using `extraargs` for Advanced Scrcpy Commands
+
+The `extraargs` field in the Scrcpy configuration tab allows for highly customized `scrcpy` command execution, including the ability to run commands before (`PRE::`) and after (`POST::`) the `scrcpy` session.
+
+**Format:**
+
+You can combine multiple commands by separating them with a semicolon `;`.
+
+*   **`PRE::[command]`**: Executes `[command]` before `scrcpy` starts. Useful for setting up the environment or running prerequisite scripts.
+*   **`POST::[command]`**: Executes `[command]` after `scrcpy` exits. Useful for cleanup or post-processing tasks.
+*   **`[scrcpy_argument]`**: Any other arguments will be passed directly to `scrcpy`.
+
+**Examples:**
+
+*   **Run a command before `scrcpy`:**
+    ```
+    PRE::adb reverse tcp:8080 tcp:8080; --turn-screen-off
+    ```
+    This will execute `adb reverse tcp:8080 tcp:8080` before launching `scrcpy` with the `--turn-screen-off` argument.
+
+*   **Run a command after `scrcpy` exits:**
+    ```
+    --max-size 1024; POST::adb reverse --remove-all
+    ```
+    This will launch `scrcpy` with `--max-size 1024`, and once `scrcpy` closes, it will execute `adb reverse --remove-all`.
+
+*   **Combine PRE, POST, and scrcpy arguments:**
+    ```
+    PRE::echo "Starting scrcpy"; --record file.mp4; POST::echo "Scrcpy finished"
+    ```
+    This example demonstrates running a pre-command, recording the `scrcpy` session to `file.mp4`, and then running a post-command.
+
 *   **Custom Window Icons:** The `scrcpy` window will automatically use the game's or app's icon, providing a native look and feel.
 
 ---
