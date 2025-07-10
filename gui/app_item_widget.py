@@ -16,22 +16,22 @@ class AppItemWidget(BaseItemWidget):
         # app_info deve ter 'app_name' e 'pkg_name'
         super().__init__({'key': app_info['pkg_name'], 'name': app_info['app_name']}, app_config, placeholder_icon, item_type="app")
         self.pkg_name = self.item_key
+        is_launcher = app_info.get('is_launcher_shortcut', False)
 
         # Adiciona botões específicos usando o método centralizado da classe base
         self.settings_button = self._create_action_button("⚙️")
-        self.delete_config_button = self._create_action_button("🗑️")
-        self.pin_button = self._create_action_button("☆") # O texto será atualizado
-
         self.action_layout.addWidget(self.settings_button)
-        self.action_layout.addWidget(self.delete_config_button)
-        self.action_layout.addWidget(self.pin_button)
-
-        # Conexões
         self.settings_button.clicked.connect(lambda: self.settings_requested.emit(self.pkg_name))
-        self.pin_button.clicked.connect(self.toggle_pin)
+
+        self.delete_config_button = self._create_action_button("🗑️")
+        self.action_layout.addWidget(self.delete_config_button)
         self.delete_config_button.clicked.connect(lambda: self.delete_config_requested.emit(self.pkg_name))
 
-        self.update_pin_status()
+        if not is_launcher:
+            self.pin_button = self._create_action_button("☆") # O texto será atualizado
+            self.action_layout.addWidget(self.pin_button)
+            self.pin_button.clicked.connect(self.toggle_pin)
+            self.update_pin_status()
 
     def toggle_pin(self):
         metadata = self.app_config.get_app_metadata(self.pkg_name)
@@ -41,6 +41,7 @@ class AppItemWidget(BaseItemWidget):
         self.pin_toggled.emit()
 
     def update_pin_status(self):
-        metadata = self.app_config.get_app_metadata(self.pkg_name)
-        is_pinned = metadata.get('pinned', False)
-        self.pin_button.setText("⭐" if is_pinned else "☆")
+        if hasattr(self, 'pin_button'):
+            metadata = self.app_config.get_app_metadata(self.pkg_name)
+            is_pinned = metadata.get('pinned', False)
+            self.pin_button.setText("⭐" if is_pinned else "☆")

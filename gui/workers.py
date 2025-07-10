@@ -136,6 +136,9 @@ class DeviceInfoWorker(QObject):
     def run(self):
         try:
             info = adb_handler.get_device_info(self.device_id)
+            if info:
+                launcher = adb_handler.get_default_launcher(self.device_id)
+                info['default_launcher'] = launcher
             self.result.emit(info)
         except Exception as e:
             self.error.emit(str(e))

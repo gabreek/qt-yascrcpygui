@@ -6,7 +6,7 @@ import os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
                                QPushButton, QScrollArea, QGridLayout, QLabel,
                                QStackedWidget, QMessageBox)
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool, Signal
 from PySide6.QtGui import QPixmap
 import sys
 
@@ -19,6 +19,8 @@ from .dialogs import show_message_box
 
 # --- ABA DE APPS ---
 class AppsTab(BaseGridTab):
+    launch_requested = Signal(str, str)
+
     def __init__(self, app_config, main_window=None):
         super().__init__(app_config, main_window)
 
@@ -50,7 +52,7 @@ class AppsTab(BaseGridTab):
         self.refresh_button.clicked.connect(self.refresh_apps_list)
         self.search_input.textChanged.connect(self.filter_apps)
 
-        
+
         self.on_device_changed()
 
     def on_device_changed(self):
@@ -127,8 +129,29 @@ class AppsTab(BaseGridTab):
         self.refresh_button.setEnabled(True)
 
     def _populate_grid(self, apps):
+        # Create launcher shortcut if default_launcher is set
+        launcher_pkg = self.app_config.get('default_launcher')
+        launcher_app_info = None
+        if launcher_pkg:
+            launcher_icon_path = os.path.join(os.path.dirname(__file__), "launcher.png")
+            launcher_app_info = {
+                'key': launcher_pkg,
+                'pkg_name': launcher_pkg,
+                'name': 'Launcher',
+                'app_name': 'Launcher',
+                'is_launcher_shortcut': True,
+                'icon_path': launcher_icon_path
+            }
+
         pinned = sorted([a for a in apps if self.app_config.get_app_metadata(a['key']).get('pinned')], key=lambda x: x['name'].lower())
         unpinned = sorted([a for a in apps if not self.app_config.get_app_metadata(a['key']).get('pinned')], key=lambda x: x['name'].lower())
+
+        # Add launcher to the correct list
+        if launcher_app_info:
+            if pinned:
+                pinned.insert(0, launcher_app_info)
+            else:
+                unpinned.insert(0, launcher_app_info)
 
         row = 0
         columns = 4
@@ -144,18 +167,23 @@ class AppsTab(BaseGridTab):
             row += 1
             col = 0
             for app_info in app_list:
-                widget = AppItemWidget({'pkg_name': app_info['key'], 'app_name': app_info['name']}, self.app_config, self.placeholder_icon)
+                widget = AppItemWidget({'pkg_name': app_info['key'], 'app_name': app_info['name'], 'is_launcher_shortcut': app_info.get('is_launcher_shortcut', False)}, self.app_config, self.placeholder_icon)
                 widget.pin_toggled.connect(self.on_pin_toggled)
-                widget.launch_requested.connect(self.on_launch_requested)
+                widget.launch_requested.connect(self.launch_requested)
                 widget.delete_config_requested.connect(self.on_delete_config_requested)
                 widget.settings_requested.connect(self.on_settings_requested)
                 self.grid_layout.addWidget(widget, row, col)
                 self.app_items[app_info['key']] = widget
-                self.load_icon(app_info['key'], app_info['name'])
+
+                if app_info.get('is_launcher_shortcut'):
+                    widget.set_icon(QPixmap(app_info['icon_path']))
+                else:
+                    self.load_icon(app_info['key'], app_info['name'])
+
                 col += 1
                 if col >= columns: col = 0; row += 1
             # Ensure row advances to the next line if the last row was partially filled
-            if col != 0: 
+            if col != 0:
                 row += 1
 
         add_section("Pinned", pinned)
@@ -189,13 +217,48 @@ class AppsTab(BaseGridTab):
         if widget := self.app_items.get(pkg_name):
             app_name = widget.item_name
 
-        current_config = self.app_config.get_all_values().copy()
-        keys_to_exclude = {'device_id', 'theme', 'use_ludashi_pkg', 'device_commercial_name', 'show_system_apps'}
-        app_specific_config = {k: v for k, v in current_config.items() if k not in keys_to_exclude}
+        is_launcher = (pkg_name == self.app_config.get('default_launcher'))
+        global_config = self.app_config.get_all_values()
+        global_is_virtual = global_config.get('new_display') and global_config.get('new_display') != 'Disabled'
+
+        # --- Special check for saving Launcher settings ---
+        if is_launcher and global_is_virtual:
+            reply = show_message_box(
+                self,
+                'Virtual Display Incompatibility',
+                "Saving a specific configuration for the Launcher while a global virtual display is active is not recommended.\n\n"
+                "Would you like to save a specific configuration for the Launcher with 'Max Size' set to 0 (native resolution) instead?",
+                icon=QMessageBox.Warning,
+                buttons=QMessageBox.Yes | QMessageBox.No,
+                default_button=QMessageBox.Yes
+            )
+
+            if reply == QMessageBox.Yes:
+                # User wants to save a launcher-compatible config
+                config_to_save = global_config.copy()
+                config_to_save['new_display'] = 'Disabled'
+                config_to_save['max_size'] = '0'
+            else:
+                # User declined, inform them how to change global settings
+                show_message_box(
+                    self,
+                    'Action Cancelled',
+                    "No specific configuration was saved for the Launcher.\n\n"
+                    "To use the Launcher without a virtual display, please go to the 'Scrcpy' tab, "
+                    "set 'Virtual Display' to 'Disabled', and select a desired 'Max Size'.",
+                    icon=QMessageBox.Information
+                )
+                return # Stop further execution
+        else:
+            # Standard save operation for any other app, or for the launcher when global settings are compatible
+            config_to_save = global_config.copy()
+
+        # Exclude keys that should not be part of a specific config
+        keys_to_exclude = {'device_id', 'theme', 'use_ludashi_pkg', 'device_commercial_name', 'show_system_apps', 'default_launcher'}
+        app_specific_config = {k: v for k, v in config_to_save.items() if k not in keys_to_exclude}
 
         self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)
-
-        show_message_box(self, "Success", f"Configurações globais salvas para <b>{app_name}</b>.", icon=QMessageBox.Information)
+        show_message_box(self, "Success", f"Current settings have been saved as a specific configuration for <b>{app_name}</b>.", icon=QMessageBox.Information)
 
     def filter_apps(self):
         search_text = self.search_input.text().lower()
@@ -222,16 +285,44 @@ class AppsTab(BaseGridTab):
         print(f"Icon error for {pkg_name}: {error_msg}")
         self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True})
 
-    def on_launch_requested(self, pkg_name, app_name):
+    def execute_launch(self, package_name, app_name):
         config_to_use = self.app_config.get_all_values().copy()
-        app_metadata = self.app_config.get_app_metadata(pkg_name)
-        if 'config' in app_metadata and app_metadata['config']:
-            config_to_use.update(app_metadata['config'])
-        config_to_use['start_app'] = pkg_name
+        app_metadata = self.app_config.get_app_metadata(package_name)
+
+        is_launcher = (package_name == self.app_config.get('default_launcher'))
+        has_specific_config = 'config' in app_metadata and app_metadata['config']
+
+        if is_launcher:
+            if has_specific_config:
+                # Launcher has a specific config, so use it.
+                config_to_use.update(app_metadata['config'])
+            else:
+                # No specific config for launcher. Check if global setting is a virtual display.
+                if config_to_use.get('new_display') and config_to_use.get('new_display') != 'Disabled':
+                    # If so, override it to use max_size = 0 instead.
+                    config_to_use['new_display'] = 'Disabled'
+                    config_to_use['max_size'] = '0'
+
+            # Always signal to scrcpy_handler to send a HOME keyevent for the launcher.
+            config_to_use['start_app'] = 'launcher_shortcut'
+        else:
+            # It's a regular app, just load its specific config if it exists.
+            if has_specific_config:
+                config_to_use.update(app_metadata['config'])
+            config_to_use['start_app'] = package_name
+
         window_title = app_name
         device_id = self.app_config.get('device_id')
-        icon_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
-        if not os.path.exists(icon_path): icon_path = None
+
+        # Handle icon path
+        if is_launcher:
+            icon_path = os.path.join(os.path.dirname(__file__), "launcher.png")
+        else:
+            icon_path = os.path.join(self.icon_cache_dir, f"{package_name}.png")
+
+        if not os.path.exists(icon_path):
+            icon_path = None
+
         launch_worker = ScrcpyLaunchWorker(config_to_use, window_title, device_id, icon_path, 'app')
         launch_worker.error.connect(lambda msg: show_message_box(self, "Scrcpy Error", msg, icon=QMessageBox.Critical))
         self.thread_pool.start(launch_worker.run)

@@ -1,7 +1,8 @@
 import sys
 import os
 from PySide6.QtCore import Qt, QPoint, QTimer, QThread, Signal
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTabWidget
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                               QPushButton, QLabel, QTabWidget, QMessageBox, QInputDialog, QLineEdit)
 from PySide6.QtGui import QIcon, QPalette
 
 from .scrcpy_tab import ScrcpyTab
@@ -9,6 +10,8 @@ from .apps_tab import AppsTab
 from .scrcpy_session_manager_window_pyside import ScrcpySessionManagerWindow
 from .winlator_tab import WinlatorTab
 from .workers import DeviceCheckWorker, DeviceConfigLoaderWorker
+from .dialogs import show_message_box
+from utils import adb_handler
 
 
 class CustomTitleBar(QWidget):
@@ -120,11 +123,20 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget()
         self.scrcpy_tab = ScrcpyTab(self.app_config)
-        self.apps_tab = AppsTab(self.app_config)
+        self.apps_tab = AppsTab(self.app_config, self)
         self.winlator_tab = WinlatorTab(self.app_config)
         self.tabs.addTab(self.apps_tab, "Apps")
         self.tabs.addTab(self.winlator_tab, "Winlator")
         self.tabs.addTab(self.scrcpy_tab, "Config")
+
+        # --- NEW: Centralized Launch Handling ---
+        self.apps_tab.launch_requested.connect(
+            lambda pkg, name: self._handle_launch_request(pkg, name, 'app')
+        )
+        self.winlator_tab.launch_requested.connect(
+            lambda key, name: self._handle_launch_request(key, name, 'winlator')
+        )
+        # --- END NEW ---
 
         self.scrcpy_tab.config_updated_on_worker.connect(self._on_scrcpy_tab_config_ready)
 
@@ -161,6 +173,37 @@ class MainWindow(QMainWindow):
 
         # Connect the new signal to the new slot
         self.device_status_updated.connect(self._handle_device_status_update)
+
+    def _handle_launch_request(self, item_key, item_name, launch_type):
+        """
+        Central handler for all scrcpy launch requests.
+        Orchestrates the optional unlock workflow before launching.
+        """
+        device_id = self.app_config.get('device_id')
+        if not device_id or device_id == "no_device":
+            show_message_box(self, "Device Error", "No device connected.", icon=QMessageBox.Critical)
+            return
+
+        if self.app_config.get('try_unlock'):
+            lock_state = adb_handler.get_device_lock_state(device_id)
+            
+            if lock_state in ['LOCKED_SCREEN_ON', 'LOCKED_SCREEN_OFF']:
+                pin, ok = QInputDialog.getText(self, "Device Locked", "Enter PIN to unlock:", QLineEdit.Password)
+                if ok and pin:
+                    adb_handler.unlock_device(device_id, pin)
+                elif ok and not pin:
+                    # User pressed OK without entering a PIN
+                    show_message_box(self, "Unlock Skipped", "No PIN entered. Attempting to launch on locked device.", icon=QMessageBox.Warning)
+                else:
+                    # User pressed Cancel
+                    show_message_box(self, "Launch Cancelled", "Unlock process was cancelled by the user.", icon=QMessageBox.Information)
+                    return # Stop the launch process
+
+        # Proceed with the original launch logic from the specific tab
+        if launch_type == 'app':
+            self.apps_tab.execute_launch(item_key, item_name)
+        elif launch_type == 'winlator':
+            self.winlator_tab.execute_launch(item_key, item_name)
 
     def is_dark_theme(self):
         """Verifica se o tema do sistema é escuro."""

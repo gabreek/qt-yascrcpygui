@@ -129,7 +129,7 @@ class ScrcpyTab(QWidget):
             else:
                 editor = NoScrollQComboBox()
                 editor.addItems(opts)
-                
+
                 # Set specified comboboxes to be editable
                 if var_key in ['mouse_bind', 'max_fps', 'new_display', 'max_size']:
                     editor.setEditable(True)
@@ -139,7 +139,7 @@ class ScrcpyTab(QWidget):
                 editor.setCurrentText(str(saved_value))
 
                 editor.currentTextChanged.connect(lambda text, vk=var_key: self.app_config.set(vk, text))
-                
+
                 if var_key == 'new_display':
                     editor.currentTextChanged.connect(self._update_resolution_state)
                 elif var_key == 'max_size':
@@ -158,7 +158,7 @@ class ScrcpyTab(QWidget):
         self.v_codec_combo = NoScrollQComboBox()
         self.v_codec_combo.currentTextChanged.connect(self._on_video_codec_changed)
         self.v_encoder_combo = NoScrollQComboBox()
-        
+
         # Video Codec
         codec_layout = QHBoxLayout()
         codec_label = QLabel("Codec")
@@ -170,7 +170,7 @@ class ScrcpyTab(QWidget):
         codec_layout.setStretch(0, 0)
         codec_layout.setStretch(1, 1)
         layout.addLayout(codec_layout)
-        
+
         # Video Encoder
         encoder_layout = QHBoxLayout()
         encoder_label = QLabel("Encoder")
@@ -198,7 +198,7 @@ class ScrcpyTab(QWidget):
         self.a_codec_combo = NoScrollQComboBox()
         self.a_codec_combo.currentTextChanged.connect(self._on_audio_codec_changed)
         self.a_encoder_combo = NoScrollQComboBox()
-        
+
         # Audio Codec
         codec_layout = QHBoxLayout()
         codec_label = QLabel("Codec")
@@ -227,17 +227,28 @@ class ScrcpyTab(QWidget):
 
     def _create_options_group(self):
         self.options_group, layout = self._create_group_box("Options", QGridLayout)
-        checkboxes = [
+
+        # Standard config checkboxes
+        config_checkboxes = [
             ("Fullscreen", 'fullscreen'), ("Turn screen off", 'turn_screen_off'),
             ("Stay Awake", 'stay_awake'), ("Disable mipmaps", 'mipmaps'),
             ("No Audio", 'no_audio'), ("No Video", 'no_video'),
         ]
-        for i, (text, var_key) in enumerate(checkboxes):
+        for i, (text, var_key) in enumerate(config_checkboxes):
             checkbox = QCheckBox(text)
             checkbox.setChecked(self.app_config.get(var_key, False))
             checkbox.stateChanged.connect(lambda state, vk=var_key: self.app_config.set(vk, bool(state)))
             layout.addWidget(checkbox, i // 2, i % 2)
             self.option_checkboxes[var_key] = checkbox
+
+        # Action-based checkbox (now saved in global config)
+        self.unlock_device_checkbox = QCheckBox("Unlock device")
+        self.unlock_device_checkbox.setChecked(self.app_config.get('try_unlock', False))
+        self.unlock_device_checkbox.stateChanged.connect(
+            lambda state: self.app_config.set('try_unlock', bool(state))
+        )
+        layout.addWidget(self.unlock_device_checkbox, len(config_checkboxes) // 2, len(config_checkboxes) % 2)
+
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 1)
 
@@ -314,7 +325,12 @@ class ScrcpyTab(QWidget):
             return
 
         self._set_all_widgets_enabled(True)
-        self.device_info_label.setText("Fetching device info...")
+
+        commercial_name = self.app_config.get('device_commercial_name', 'Unknown Device')
+        if commercial_name != 'Unknown Device':
+             self.device_info_label.setText(f"Connected to {commercial_name} (Battery: ?%)")
+        else:
+            self.device_info_label.setText("Fetching device info...")
 
         self._stop_worker("device_info")
         worker = DeviceInfoWorker(device_id)
@@ -325,6 +341,12 @@ class ScrcpyTab(QWidget):
     def on_device_info_ready(self, info, force_encoder_fetch):
         self.last_device_info = info
         commercial_name = info.get("commercial_name", "Unknown Device")
+        self.app_config.set('device_commercial_name', commercial_name)
+
+        default_launcher = info.get('default_launcher')
+        if default_launcher:
+            self.app_config.set('default_launcher', default_launcher)
+
         self.device_info_label.setText(f"Connected to {commercial_name} (Battery: {info.get('battery', '?')}%)")
 
         if force_encoder_fetch or not self.app_config.has_encoder_cache():

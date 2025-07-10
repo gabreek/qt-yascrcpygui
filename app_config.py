@@ -12,6 +12,7 @@ class AppConfig:
         'device_commercial_name': 'Unknown Device',
         'start_app': '',
         'start_app_name': 'None',
+        'default_launcher': None,
         'mouse_mode': 'sdk',
         'gamepad_mode': 'disabled',
         'keyboard_mode': 'sdk',
@@ -40,8 +41,9 @@ class AppConfig:
         'video_bitrate_slider': 3000,
         'audio_buffer': 5,
         'video_buffer': 0,
+        'try_unlock': False,
     }
-    GLOBAL_KEYS = {'theme', 'use_ludashi_pkg'}
+    GLOBAL_KEYS = {'theme', 'use_ludashi_pkg', 'try_unlock'}
 
     """
     Gerencia todas as configurações do aplicativo, incluindo caminhos de arquivos,

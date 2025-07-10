@@ -7,7 +7,7 @@ import queue
 from PIL import Image
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QScrollArea, QGridLayout, QLabel, QCheckBox, QProgressDialog, QStackedWidget, QMessageBox
-from PySide6.QtCore import Qt, QSize, QThread, QThreadPool
+from PySide6.QtCore import Qt, QSize, QThread, QThreadPool, Signal
 from PySide6.QtGui import QPixmap, QIcon
 import sys
 
@@ -18,6 +18,8 @@ from .dialogs import show_message_box
 from .base_grid_tab import BaseGridTab
 
 class WinlatorTab(BaseGridTab):
+    launch_requested = Signal(str, str)
+
     def __init__(self, app_config):
         super().__init__(app_config)
         self.all_games = []
@@ -159,7 +161,7 @@ class WinlatorTab(BaseGridTab):
         row, col = 0, 0
         for game_info in self.all_games:
             item = WinlatorItemWidget(game_info, self.app_config, self.placeholder_icon) # Use WinlatorItemWidget
-            item.launch_requested.connect(self.execute_winlator_flow)
+            item.launch_requested.connect(self.launch_requested)
             item.config_saved.connect(self.update_winlator_display) # Refresh display after save
             item.config_deleted.connect(self.update_winlator_display) # Refresh display after delete
             item.icon_dropped.connect(self._on_icon_dropped)
@@ -258,7 +260,7 @@ class WinlatorTab(BaseGridTab):
         show_message_box(self, "Finished", "Icons extraction finished!")
         self.populate_games_grid() # Refresh grid after extraction
 
-    def execute_winlator_flow(self, shortcut_path, game_name):
+    def execute_launch(self, shortcut_path, game_name):
         game_specific_config = self.app_config.get_all_values().copy()
         game_data = self.app_config.get_winlator_game_config(shortcut_path)
         if game_data:

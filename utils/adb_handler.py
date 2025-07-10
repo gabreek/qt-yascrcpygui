@@ -32,7 +32,7 @@ def _run_adb_command(command, device_id=None, print_command=False, ignore_errors
         return result.strip()
     except FileNotFoundError:
         if not ignore_errors:
-            print(f"Error: ADB command '{full_cmd[0]}' not found. Please ensure ADB is installed and in your system's PATH.")
+            print(f"Error: ADB command '{full_cmd[0]}' not found. Please ensure ADB is in your system's PATH.")
         return ""
     except subprocess.CalledProcessError as e:
         if not ignore_errors:
@@ -162,3 +162,75 @@ def get_connected_device_id():
     except Exception as e:
         print(f"Error getting connected device ID: {e}")
         return None
+
+def get_default_launcher(device_id=None):
+    """Obtém o pacote do launcher padrão do Android."""
+    command = [
+        'shell',
+        'cmd', 'package', 'resolve-activity', '--brief',
+        '-a', 'android.intent.action.MAIN',
+        '-c', 'android.intent.category.HOME'
+    ]
+    output = _run_adb_command(command, device_id, ignore_errors=True)
+    if not output:
+        return None
+    
+    # A saída pode ter várias linhas, a que nos interessa contém o '/'
+    for line in output.splitlines():
+        if '/' in line:
+            # A linha é algo como: "com.mi.android.globallauncher/.MiuiHomeActivity"
+            # Nós só queremos a primeira parte.
+            return line.split('/')[0].strip()
+            
+    return None # Retorna None se nenhuma linha com o nome do componente for encontrada
+
+def get_device_lock_state(device_id=None):
+    """
+    Determines the lock state of the device.
+    Returns: 'LOCKED_SCREEN_OFF', 'LOCKED_SCREEN_ON', or 'UNLOCKED'.
+    """
+    # Check if the screen is interactive
+    interactive_output = _run_adb_command(['shell', 'dumpsys', 'input_method'], device_id, ignore_errors=True)
+    is_interactive = 'mInteractive=true' in interactive_output
+
+    if not is_interactive:
+        return 'LOCKED_SCREEN_OFF'
+
+    # If interactive, check the current focused window
+    focused_window_output = _run_adb_command(['shell', 'dumpsys', 'window'], device_id, ignore_errors=True)
+    if 'mCurrentFocus' in focused_window_output:
+        focused_line = [line for line in focused_window_output.splitlines() if 'mCurrentFocus' in line]
+        if focused_line and ('Keyguard' in focused_line[0] or 'NotificationShade' in focused_line[0]):
+            return 'LOCKED_SCREEN_ON'
+            
+    return 'UNLOCKED'
+
+def unlock_device(device_id, pin):
+    """
+    Attempts to unlock the device by sending power, swipe, and PIN commands.
+    """
+    lock_state = get_device_lock_state(device_id)
+
+    if lock_state == 'UNLOCKED':
+        print("Device is already unlocked.")
+        return
+
+    if lock_state == 'LOCKED_SCREEN_OFF':
+        # Send POWER keyevent to wake up the screen
+        _run_adb_command(['shell', 'input', 'keyevent', '26'], device_id)
+        # Add a small delay to allow the screen to turn on
+        import time
+        time.sleep(0.5)
+
+    # Swipe up to dismiss the lock screen
+    _run_adb_command(['shell', 'input', 'swipe', '500', '1500', '500', '500'], device_id)
+    import time
+    time.sleep(0.5)
+
+    # Input the PIN
+    _run_adb_command(['shell', 'input', 'text', shlex.quote(pin)], device_id)
+    import time
+    time.sleep(0.5)
+
+    # Press Enter to confirm the PIN
+    _run_adb_command(['shell', 'input', 'keyevent', '66'], device_id)

@@ -79,7 +79,6 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
         cmd.append(f"--video-codec-options={','.join(video_codec_options)}")
 
     map_args = {
-        'start_app': '--start-app',
         'mouse_mode': '--mouse',
         'gamepad_mode': '--gamepad',
         'keyboard_mode': '--keyboard',
@@ -95,6 +94,11 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
         if val and str(val) not in ('Auto', 'None', '0', 'disabled', ''):
             suffix = 'K' if key == 'video_bitrate_slider' else ''
             cmd.append(f"{arg_name}={val}{suffix}")
+
+    # Handle start_app separately to avoid adding it to map_args
+    start_app_val = config_values.get('start_app')
+    if start_app_val and start_app_val not in ('launcher_shortcut', 'None'):
+        cmd.append(f"--start-app={start_app_val}")
 
     if config_values.get('video_codec') != 'Auto':
         codec_val = config_values.get('video_codec')
@@ -118,8 +122,8 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
     if new_display_val and new_display_val != 'Disabled':
         cmd.append(f"--new-display={new_display_val}")
     else:
-        max_size_val = config_values.get('max_size')
-        if max_size_val and max_size_val != '0':
+        max_size_val = str(config_values.get('max_size', '0'))
+        if max_size_val != '0':
             cmd.append(f"--max-size={max_size_val}")
 
     if extra_scrcpy_args:
@@ -142,12 +146,29 @@ def _wait_for_scrcpy_and_post_cmds(scrcpy_process, post_cmds, startupinfo):
         except (subprocess.SubprocessError, FileNotFoundError) as e:
             print(f"Error executing POST command '{post_cmd_str}': {e}")
 
+def _run_adb_home_command(device_id, startupinfo):
+    """Sends a 'HOME' key event via ADB."""
+    try:
+        home_cmd = ['adb']
+        if device_id:
+            home_cmd.extend(['-s', device_id])
+        home_cmd.extend(['shell', 'input', 'keyevent', 'KEYCODE_HOME'])
+        print(f"Executing ADB Command: {shlex.join(home_cmd)}")
+        subprocess.run(home_cmd, check=True, startupinfo=startupinfo)
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        print(f"Error sending HOME keyevent: {e}")
+
 def launch_scrcpy(config_values, capture_output=False, window_title=None, device_id=None, icon_path=None, session_type='app'):
     """Inicia o scrcpy com base na configuração fornecida, lidando com comandos PRE e POST."""
     extra_args_str = config_values.get('extraargs', '')
     parsed_args = _parse_extra_args(extra_args_str)
 
     startupinfo = _get_startupinfo()
+
+    # Special handling for launcher shortcut
+    if config_values.get('start_app') == 'launcher_shortcut':
+        # Run this in a separate thread to not block scrcpy launch
+        threading.Thread(target=_run_adb_home_command, args=(device_id, startupinfo)).start()
 
     # Executar comandos PRE
     for pre_cmd_str in parsed_args['prepend']:
