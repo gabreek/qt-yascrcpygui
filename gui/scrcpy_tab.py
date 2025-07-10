@@ -341,7 +341,11 @@ class ScrcpyTab(QWidget):
     def on_device_info_ready(self, info, force_encoder_fetch):
         self.last_device_info = info
         commercial_name = info.get("commercial_name", "Unknown Device")
-        self.app_config.set('device_commercial_name', commercial_name)
+        # Only set device_commercial_name if it's currently 'Unknown Device'
+        # This ensures it's set once and then remains unchanged.
+        if self.app_config.values.get('device_commercial_name') == 'Unknown Device':
+            self.app_config.values['device_commercial_name'] = commercial_name
+            self.app_config.save_config()
 
         default_launcher = info.get('default_launcher')
         if default_launcher:

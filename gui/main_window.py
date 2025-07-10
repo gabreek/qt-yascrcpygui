@@ -378,7 +378,7 @@ class MainWindow(QMainWindow):
         if current_device_id != self.last_known_device_id:
             print(f"MainWindow: Device ID changed from {self.last_known_device_id} to {current_device_id}.")
             self.last_known_device_id = current_device_id
-            self.app_config.set('device_id', current_device_id if current_device_id else "no_device")
+            # The device_id is now handled by load_config_for_device in AppConfig
 
             if current_device_id:
                 self._update_all_tabs_status("Please wait, loading...")

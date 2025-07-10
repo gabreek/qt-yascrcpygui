@@ -80,6 +80,11 @@ class AppConfig:
 
     def set(self, key, value):
         """Define o valor de uma configuração e salva as alterações, se um arquivo de configuração estiver ativo."""
+        # Prevent device_id and device_commercial_name from being set via this generic method
+        if key in ['device_id', 'device_commercial_name']:
+            print(f"Warning: Attempted to set immutable config key: {key}. This action is not allowed.")
+            return
+
         if key in self.values:
             if self.values[key] != value:
                 self.values[key] = value
@@ -236,6 +241,12 @@ class AppConfig:
             else:
                 self.values[key] = general_config.get(key, default_value)
         
-        self.values['device_id'] = device_id
+        # Ensure device_id and device_commercial_name are set only once
+        if self.values.get('device_id') is None or self.values.get('device_id') == 'no_device':
+            self.values['device_id'] = device_id
+        
+        if self.values.get('device_commercial_name') == 'Unknown Device':
+            # This will be updated by DeviceInfoWorker later if a real name is found
+            self.values['device_commercial_name'] = general_config.get('device_commercial_name', 'Unknown Device')
 
         return True
