@@ -52,7 +52,7 @@ build_from_source() {
     pip install pyinstaller || error "Failed to install PyInstaller."
 
     status "Building application with PyInstaller..."
-    pyinstaller --onefile --windowed --add-data "gui:gui" --clean main.py -n "${APP_NAME}" || error "Failed to build the project."
+    pyinstaller main.spec || error "Failed to build the project."
 
     deactivate
 }

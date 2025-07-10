@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('gui/placeholder.png', 'gui'), ('gui/winlator_placeholder.png', 'gui'), ('gui/icon.png', 'gui')],
+    datas=[('gui/placeholder.png', 'gui'), ('gui/winlator_placeholder.png', 'gui'), ('gui/icon.png', 'gui'), ('gui/launcher.png', 'gui')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
