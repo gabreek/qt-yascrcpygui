@@ -1,0 +1,42 @@
+Yet another Scrcpy GUI with an winlator frontend
+
+To run type 
+🌟 Overview
+A modern and robust GUI for scrcpy and Winlator, built with PySide6 (Qt). This application provides a user-friendly interface to manage and launch scrcpy instances with custom settings for both standard Android apps and Winlator games, offering a more native and polished user experience.
+
+✨ Features
+- Qt-Powered Interface: Rebuilt with PySide6 for a more native, performant, and visually appealing cross-platform user interface.
+- Tabbed Interface: Separate, organized tabs for Android Apps, Winlator Games, and Scrcpy configuration.
+
+** Android App Launcher:
+Automatically lists all installed applications on your device.
+- Scrapes app icons from the Google Play Store.
+- Supports custom icons via drag-and-drop.
+- Save specific scrcpy settings for each app.
+
+**Winlator Game Launcher:
+- Automatically discovers game shortcuts (.desktop files) from your Winlator installation. (You need export shortcut to frontend in winlator app)
+- Automatic Icon Extraction: Fetches and caches game icons directly from the game's .exe file.
+- Supports custom game icons via drag-and-drop.
+- Save specific scrcpy settings for each game, perfect for custom resolutions and performance tuning.
+- Advanced Scrcpy Configuration: A dedicated tab to tweak all major scrcpy settings, including resolution, bitrate, codecs, and more. All settings are saved automatically.
+- Custom Window Icons: The scrcpy window will automatically use the game's or app's icon, providing a native look and feel.
+
+**Using extraargs for Advanced Scrcpy Commands
+
+- The extraargs field in the Scrcpy configuration tab allows for highly customized scrcpy command execution, including the ability to run commands before (PRE::) and after (POST::) the scrcpy session.
+
+Format:
+
+- You can combine multiple commands by separating them with a semicolon ;.
+
+- PRE::[command]: Executes [command] before scrcpy starts. Useful for setting up the environment or running prerequisite scripts.
+- POST::[command]: Executes [command] after scrcpy exits. Useful for cleanup or post-processing tasks.
+- [scrcpy_argument]: Any other arguments will be passed directly to scrcpy.
+
+Example:
+- Combine PRE, POST, and scrcpy arguments:
+
+PRE::echo "Starting scrcpy"; --record file.mp4; POST::echo "Scrcpy finished"
+
+- This example demonstrates running a pre-command, recording the scrcpy session to file.mp4, and then running a post-command.

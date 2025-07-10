@@ -1,0 +1,99 @@
+#!/bin/bash
+
+# Exit immediately if a command exits with a non-zero status.
+set -euo pipefail
+
+# --- Configuration ---
+readonly APP_NAME="yascrcpy"
+readonly REPO_URL="https://github.com/gabreek/qt-yascrcpygui.git"
+readonly REPO_DIR_NAME="qt-yascrcpygui"
+readonly BIN_PATH="/usr/local/bin/${APP_NAME}"
+readonly ICON_PATH="/usr/share/pixmaps/${APP_NAME}.png"
+readonly DESKTOP_FILE="/usr/share/applications/${APP_NAME}.desktop"
+
+# --- Helper Functions (from Pi-Apps) ---
+# error() { ... }
+# status() { ... }
+# git_clone() { ... }
+# install_packages() { ... }
+
+# --- Main Functions ---
+
+# Ensures temporary directories are cleaned up on script exit
+cleanup() {
+    if [ -n "${TEMP_DIR:-}" ] && [ -d "${TEMP_DIR}" ]; then
+        status "Cleaning up temporary files..."
+        rm -rf "${TEMP_DIR}"
+    fi
+}
+
+# Checks for the scrcpy dependency and installs other needed packages
+check_dependencies() {
+    status "Checking for dependencies..."
+    if ! command -v scrcpy &> /dev/null; then
+        error "Dependency 'scrcpy' is not installed. Please install it via Pi-Apps first."
+    fi
+    install_packages python3-pip git python3-venv
+}
+
+# Clones the repo, creates a venv, and builds the binary with PyInstaller
+build_from_source() {
+    status "Cloning repository from ${REPO_URL}..."
+    cd "${TEMP_DIR}"
+    git_clone "${REPO_URL}" || error "Failed to clone repository."
+    cd "${REPO_DIR_NAME}" || error "Failed to enter repository directory."
+
+    status "Creating Python virtual environment..."
+    python3 -m venv venv || error "Failed to create venv."
+    source venv/bin/activate || error "Failed to activate venv."
+
+    status "Installing Python requirements..."
+    pip install -r requirements.txt || error "Failed to install Python dependencies."
+    pip install pyinstaller || error "Failed to install PyInstaller."
+
+    status "Building application with PyInstaller..."
+    pyinstaller --onefile --windowed --clean main.py -n "${APP_NAME}" || error "Failed to build the project."
+
+    deactivate
+}
+
+# Installs the built binary, icon, and desktop shortcut
+install_files() {
+    status "Installing application binary..."
+    sudo cp "${TEMP_DIR}/${REPO_DIR_NAME}/dist/${APP_NAME}" "${BIN_PATH}" || error "Failed to install binary."
+
+    status "Installing application icon..."
+    sudo cp "${TEMP_DIR}/${REPO_DIR_NAME}/gui/icon.png" "${ICON_PATH}" || error "Failed to install icon."
+
+    status "Creating application shortcut..."
+    sudo tee "${DESKTOP_FILE}" >/dev/null <<EOF
+[Desktop Entry]
+Version=1.0
+Name=yascrcpy
+Comment=A Qt-based GUI for scrcpy
+Exec=${APP_NAME}
+Icon=${ICON_PATH}
+Terminal=false
+Type=Application
+Categories=Utility;System;
+EOF
+}
+
+# --- Main Execution ---
+main() {
+    # Register the cleanup function to be called on script exit
+    trap cleanup EXIT
+
+    # Create a temporary directory for all operations
+    TEMP_DIR=$(mktemp -d)
+
+    check_dependencies
+    build_from_source
+    install_files
+
+    status "Installation of ${APP_NAME} completed successfully!"
+    echo "You can run the app from the terminal ('${APP_NAME}') or find it in your application menu."
+}
+
+# Run the main function
+main "$@"
