@@ -1,99 +1,57 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -euo pipefail
+# Stop on first error
+set -e
 
-# --- Configuration ---
-readonly APP_NAME="yascrcpy"
-readonly REPO_URL="https://github.com/gabreek/qt-yascrcpygui.git"
-readonly REPO_DIR_NAME="qt-yascrcpygui"
-readonly BIN_PATH="/usr/local/bin/${APP_NAME}"
-readonly ICON_PATH="/usr/share/pixmaps/${APP_NAME}.png"
-readonly DESKTOP_FILE="/usr/share/applications/${APP_NAME}.desktop"
+# 1. Install dependencies from Pi-Apps and APT
+# This is the line you added, now correctly placed at the beginning.
+# It will ask Pi-Apps to install Scrcpy if it's not already installed.
+"${DIRECTORY}/manage" install-if-not-installed Scrcpy || exit 1
 
-# --- Helper Functions (from Pi-Apps) ---
-# error() { ... }
-# status() { ... }
-# git_clone() { ... }
-# install_packages() { ... }
+# Install other necessary system packages
+sudo apt-get install -y python3-pip git python3-venv
 
-# --- Main Functions ---
+# 2. Clone the repository and build the app
+APP_NAME="yascrcpy"
+TEMP_DIR=$(mktemp -d)
 
-# Ensures temporary directories are cleaned up on script exit
-cleanup() {
-    if [ -n "${TEMP_DIR:-}" ] && [ -d "${TEMP_DIR}" ]; then
-        status "Cleaning up temporary files..."
-        rm -rf "${TEMP_DIR}"
-    fi
-}
+# Clone the source code
+git clone --depth 1 "https://github.com/gabreek/qt-yascrcpygui.git" "${TEMP_DIR}"
 
-# Checks for the scrcpy dependency and installs other needed packages
-check_dependencies() {
-    status "Checking for dependencies..."
-    if ! command -v scrcpy &> /dev/null; then
-        error "Dependency 'scrcpy' is not installed. Please install it via Pi-Apps first."
-    fi
-    install_packages python3-pip git python3-venv
-}
+# Change into the temp directory
+cd "${TEMP_DIR}"
 
-# Clones the repo, creates a venv, and builds the binary with PyInstaller
-build_from_source() {
-    status "Cloning repository from ${REPO_URL}..."
-    cd "${TEMP_DIR}"
-    git_clone "${REPO_URL}" || error "Failed to clone repository."
-    cd "${REPO_DIR_NAME}" || error "Failed to enter repository directory."
+# Create a virtual environment and install Python packages
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install pyinstaller
 
-    status "Creating Python virtual environment..."
-    python3 -m venv venv || error "Failed to create venv."
-    source venv/bin/activate || error "Failed to activate venv."
+# Build the executable
+pyinstaller main.spec
+deactivate
 
-    status "Installing Python requirements..."
-    pip install -r requirements.txt || error "Failed to install Python dependencies."
-    pip install pyinstaller || error "Failed to install PyInstaller."
+# 3. Install the application files
+# Copy the built program to a system-wide location
+sudo cp "dist/${APP_NAME}" "/usr/local/bin/${APP_NAME}"
 
-    status "Building application with PyInstaller..."
-    pyinstaller main.spec || error "Failed to build the project."
+# Copy the icon
+sudo cp "gui/icon.png" "/usr/share/pixmaps/${APP_NAME}.png"
 
-    deactivate
-}
-
-# Installs the built binary, icon, and desktop shortcut
-install_files() {
-    status "Installing application binary..."
-    sudo cp "${TEMP_DIR}/${REPO_DIR_NAME}/dist/${APP_NAME}" "${BIN_PATH}" || error "Failed to install binary."
-
-    status "Installing application icon..."
-    sudo cp "${TEMP_DIR}/${REPO_DIR_NAME}/gui/icon.png" "${ICON_PATH}" || error "Failed to install icon."
-
-    status "Creating application shortcut..."
-    sudo tee "${DESKTOP_FILE}" >/dev/null <<EOF
+# Create the Start Menu shortcut
+sudo tee "/usr/share/applications/${APP_NAME}.desktop" >/dev/null <<EOF
 [Desktop Entry]
 Version=1.0
-Name=yascrcpy
-Comment=A Qt-based GUI for scrcpy
+Name=yaScrcpy GUI
+Comment=A Qt-based GUI for scrcpy and Winlator
 Exec=${APP_NAME}
-Icon=${ICON_PATH}
+Icon=/usr/share/pixmaps/${APP_NAME}.png
 Terminal=false
 Type=Application
 Categories=Utility;System;
 EOF
-}
 
-# --- Main Execution ---
-main() {
-    # Register the cleanup function to be called on script exit
-    trap cleanup EXIT
+# 4. Clean up temporary files
+rm -rf "${TEMP_DIR}"
 
-    # Create a temporary directory for all operations
-    TEMP_DIR=$(mktemp -d)
-
-    check_dependencies
-    build_from_source
-    install_files
-
-    status "Installation of ${APP_NAME} completed successfully!"
-    echo "You can run the app from the terminal ('${APP_NAME}') or find it in your application menu."
-}
-
-# Run the main function
-main "$@"
+echo "Installation complete! Find 'yaScrcpy GUI' in your Start Menu."

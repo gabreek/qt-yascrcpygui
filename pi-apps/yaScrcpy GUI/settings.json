@@ -1,6 +1,0 @@
-{
-  "name": "yaScrcpy GUI",
-  "description": "A simple graphical interface for scrcpy, allowing you to mirror your Android device with ease.",
-  "category": "Tools",
-  "version": "0.14-alpha"
-}
