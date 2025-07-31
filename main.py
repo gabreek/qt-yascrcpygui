@@ -8,10 +8,9 @@ import multiprocessing
 from PySide6.QtWidgets import QApplication
 from utils.dependencies import check_dependencies
 from utils import adb_handler
+from utils import adb_handler
 from app_config import AppConfig
 from gui.main_window import MainWindow
-
-
 
 def main():
     """

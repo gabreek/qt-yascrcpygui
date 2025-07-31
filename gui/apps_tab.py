@@ -6,7 +6,7 @@ import os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
                                QPushButton, QScrollArea, QGridLayout, QLabel,
                                QStackedWidget, QMessageBox)
-from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 import sys
 
@@ -36,7 +36,6 @@ class AppsTab(BaseGridTab):
 
         self.placeholder_icon = QPixmap(os.path.join(base_path, "gui/placeholder.png"))
         self.icon_cache_dir = self.app_config.get_icon_cache_dir()
-        self.thread_pool = QThreadPool.globalInstance()
 
         top_panel = QHBoxLayout()
         self.search_input = QLineEdit()
@@ -82,9 +81,10 @@ class AppsTab(BaseGridTab):
         worker.signals.result.connect(self._on_app_list_loaded)
         worker.signals.error.connect(self._on_app_list_error)
         if self.main_window and hasattr(self.main_window, 'resume_device_check'):
-            worker.finished.connect(self.main_window.resume_device_check)
+            worker.signals.finished.connect(self.main_window.resume_device_check)
 
-        self.thread_pool.start(worker)
+        if self.main_window:
+            self.main_window.start_worker(worker)
 
     def load_apps_from_cache_and_update_display(self):
         cached_data = self.app_config.get_app_list_cache()
@@ -276,7 +276,8 @@ class AppsTab(BaseGridTab):
         worker = IconWorker(pkg_name, app_name, self.icon_cache_dir, self.app_config)
         worker.signals.finished.connect(self._on_icon_loaded)
         worker.signals.error.connect(self._on_icon_error)
-        self.thread_pool.start(worker)
+        if self.main_window:
+            self.main_window.start_worker(worker)
 
     def _on_icon_loaded(self, pkg_name, pixmap):
         if widget := self.app_items.get(pkg_name): widget.set_icon(pixmap)
@@ -324,5 +325,6 @@ class AppsTab(BaseGridTab):
             icon_path = None
 
         launch_worker = ScrcpyLaunchWorker(config_to_use, window_title, device_id, icon_path, 'app')
-        launch_worker.error.connect(lambda msg: show_message_box(self, "Scrcpy Error", msg, icon=QMessageBox.Critical))
-        self.thread_pool.start(launch_worker.run)
+        launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Scrcpy Error", msg, icon=QMessageBox.Critical))
+        if self.main_window:
+            self.main_window.start_worker(launch_worker)

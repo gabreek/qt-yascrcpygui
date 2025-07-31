@@ -1,6 +1,6 @@
 import sys
 import os
-from PySide6.QtCore import Qt, QPoint, QTimer, QThread, Signal
+from PySide6.QtCore import Qt, QPoint, QTimer, QThreadPool, Signal
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                                QPushButton, QLabel, QTabWidget, QMessageBox, QInputDialog, QLineEdit)
 from PySide6.QtGui import QIcon, QPalette
@@ -102,7 +102,8 @@ class MainWindow(QMainWindow):
     def __init__(self, app_config):
         super().__init__()
         self.app_config = app_config
-        #self.restart_app_callback = restart_app_callback
+        self.thread_pool = QThreadPool.globalInstance()
+        self.active_workers = []
 
         self.setWindowTitle("yaScrcpy")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "icon.png")))
@@ -124,7 +125,7 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.scrcpy_tab = ScrcpyTab(self.app_config)
         self.apps_tab = AppsTab(self.app_config, self)
-        self.winlator_tab = WinlatorTab(self.app_config)
+        self.winlator_tab = WinlatorTab(self.app_config, self)
         self.tabs.addTab(self.apps_tab, "Apps")
         self.tabs.addTab(self.winlator_tab, "Winlator")
         self.tabs.addTab(self.scrcpy_tab, "Config")
@@ -160,8 +161,6 @@ class MainWindow(QMainWindow):
         self.resize(410, 650)
 
         self.scrcpy_session_manager_window = None
-        self.device_check_thread = None
-        self.config_loader_thread = None
 
         self.update_theme()
 
@@ -302,28 +301,12 @@ class MainWindow(QMainWindow):
         print("Closing application...")
         if self.scrcpy_session_manager_window:
             self.scrcpy_session_manager_window.close()
-        
+
         self.device_check_timer.stop()
-        
-        # Explicitly quit and wait for threads
-        if self.device_check_thread: # Check if thread exists
-            try:
-                if self.device_check_thread.isRunning():
-                    self.device_check_thread.quit()
-                    self.device_check_thread.wait(3000) # Wait up to 3 seconds
-            except RuntimeError:
-                pass # Thread already deleted
-
-        if self.config_loader_thread: # Check if thread exists
-            try:
-                if self.config_loader_thread.isRunning():
-                    self.config_loader_thread.quit()
-                    self.config_loader_thread.wait(3000) # Wait up to 3 seconds
-            except RuntimeError:
-                pass # Thread already deleted
-
+        self.thread_pool.clear()
+        self.thread_pool.waitForDone()
         self.scrcpy_tab.stop_all_workers()
-        
+
         print("All threads and workers stopped. Accepting close event.")
         event.accept()
 
@@ -348,17 +331,22 @@ class MainWindow(QMainWindow):
             self.scrcpy_session_manager_window = None
             self.session_manager_button.setText(">")
 
+    def start_worker(self, worker):
+        self.active_workers.append(worker)
+        worker.signals.finished.connect(lambda: self._on_worker_finished(worker))
+        self.thread_pool.start(worker)
+
+    def _on_worker_finished(self, worker):
+        if worker in self.active_workers:
+            self.active_workers.remove(worker)
+
     def check_device_connection(self):
         """Inicia a verificação da conexão do dispositivo em um worker thread."""
-        self.device_check_worker = DeviceCheckWorker()
-        self.device_check_thread = QThread()
-        self.device_check_worker.moveToThread(self.device_check_thread)
-        self.device_check_worker.finished.connect(self.device_check_thread.quit)
-        self.device_check_worker.finished.connect(self.device_check_worker.deleteLater)
-        self.device_check_thread.finished.connect(self.device_check_thread.deleteLater)
-        self.device_check_worker.result.connect(self._on_device_check_result)
-        self.device_check_thread.started.connect(self.device_check_worker.run)
-        self.device_check_thread.start()
+        worker = DeviceCheckWorker()
+        worker.signals.result.connect(self._on_device_check_result)
+        worker.signals.finished.connect(lambda: self._on_worker_finished(worker))
+        self.active_workers.append(worker)
+        self.thread_pool.start(worker)
 
     def _on_device_check_result(self, current_device_id):
         self.device_status_updated.emit(current_device_id)
@@ -378,20 +366,15 @@ class MainWindow(QMainWindow):
         if current_device_id != self.last_known_device_id:
             print(f"MainWindow: Device ID changed from {self.last_known_device_id} to {current_device_id}.")
             self.last_known_device_id = current_device_id
-            # The device_id is now handled by load_config_for_device in AppConfig
 
             if current_device_id:
                 self._update_all_tabs_status("Please wait, loading...")
-                self.config_loader_worker = DeviceConfigLoaderWorker(current_device_id, self.app_config)
-                self.config_loader_thread = QThread()
-                self.config_loader_worker.moveToThread(self.config_loader_thread)
-                self.config_loader_worker.finished.connect(self.config_loader_thread.quit)
-                self.config_loader_worker.finished.connect(self.config_loader_worker.deleteLater)
-                self.config_loader_thread.finished.connect(self.config_loader_thread.deleteLater)
-                self.config_loader_worker.result.connect(self._on_device_config_loaded)
-                self.config_loader_worker.error.connect(self._on_device_load_error)
-                self.config_loader_thread.started.connect(self.config_loader_worker.run)
-                self.config_loader_thread.start()
+                config_loader_worker = DeviceConfigLoaderWorker(current_device_id, self.app_config)
+                config_loader_worker.signals.result.connect(self._on_device_config_loaded)
+                config_loader_worker.signals.error.connect(self._on_device_load_error)
+                config_loader_worker.signals.finished.connect(lambda: self._on_worker_finished(config_loader_worker))
+                self.active_workers.append(config_loader_worker)
+                self.thread_pool.start(config_loader_worker)
             else:
                 self.app_config.load_config_for_device(None)
                 self._update_all_tabs_status()

@@ -7,7 +7,7 @@ import queue
 from PIL import Image
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QScrollArea, QGridLayout, QLabel, QCheckBox, QProgressDialog, QStackedWidget, QMessageBox
-from PySide6.QtCore import Qt, QSize, QThread, QThreadPool, Signal
+from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtGui import QPixmap, QIcon
 import sys
 
@@ -20,8 +20,8 @@ from .base_grid_tab import BaseGridTab
 class WinlatorTab(BaseGridTab):
     launch_requested = Signal(str, str)
 
-    def __init__(self, app_config):
-        super().__init__(app_config)
+    def __init__(self, app_config, main_window=None):
+        super().__init__(app_config, main_window)
         self.all_games = []
         self.game_items = {}
         self.temp_dir = tempfile.gettempdir()
@@ -29,7 +29,7 @@ class WinlatorTab(BaseGridTab):
         self.icon_extractor_workers = []
         self.total_tasks = 0
         self.completed_tasks_count = 0
-        self.NUM_WORKERS = 4
+        self.NUM_WORKERS = 2
         self.scrcpy_process = None # To store the Scrcpy Popen object
 
         # Determine the base path for resources
@@ -62,19 +62,6 @@ class WinlatorTab(BaseGridTab):
 
         self.refresh_button.clicked.connect(self.refresh_games_list)
         self.fetch_icons_button.clicked.connect(lambda: self.prompt_for_icon_update())
-
-        # Start icon extractor workers
-        for _ in range(self.NUM_WORKERS):
-            worker = IconExtractorWorker(self.extraction_queue, self.app_config, self.temp_dir, self.placeholder_icon)
-            thread = QThread()
-            worker.moveToThread(thread)
-            thread.started.connect(worker.run)
-            worker.finished.connect(thread.quit)
-            worker.finished.connect(worker.deleteLater)
-            thread.finished.connect(thread.deleteLater)
-            worker.icon_extracted.connect(self._on_icon_extracted)
-            thread.start()
-            self.icon_extractor_workers.append((thread, worker))
 
         self.on_device_changed()
 
@@ -115,14 +102,12 @@ class WinlatorTab(BaseGridTab):
         self.info_label.setText("Searching for games...")
         self.info_label.setVisible(True)
 
-        self.game_list_thread = QThread()
-        self.game_list_worker = GameListWorker() # Assuming GameListWorker is defined elsewhere or will be defined
-        self.game_list_worker.moveToThread(self.game_list_thread)
-        self.game_list_worker.finished.connect(self._on_game_list_loaded)
-        self.game_list_worker.error.connect(self._on_game_list_error)
-        self.game_list_thread.started.connect(self.game_list_worker.run)
-        self.game_list_thread.finished.connect(self.game_list_thread.deleteLater)
-        self.game_list_thread.start()
+        self.game_list_worker = GameListWorker()
+        self.game_list_worker.signals.result.connect(self._on_game_list_loaded)
+        self.game_list_worker.signals.error.connect(self._on_game_list_error)
+        self.game_list_worker.signals.finished.connect(self._on_game_list_worker_finished)
+        if self.main_window:
+            self.main_window.start_worker(self.game_list_worker)
 
     def _on_game_list_loaded(self, games_with_names):
         self.all_games = sorted([{'name': name, 'path': path} for name, path in games_with_names], key=lambda x: x['name'].lower())
@@ -135,17 +120,16 @@ class WinlatorTab(BaseGridTab):
             self.stacked_widget.setCurrentWidget(self.scroll_area)
 
         self.refresh_button.setEnabled(True)
-        if hasattr(self, 'game_list_thread') and self.game_list_thread:
-            self.game_list_thread.quit()
-            self.game_list_thread.wait()
 
     def _on_game_list_error(self, error_msg):
         self.info_label.setText(f"Error: {error_msg}")
         self.stacked_widget.setCurrentWidget(self.info_label)
         self.refresh_button.setEnabled(True)
-        if hasattr(self, 'game_list_thread') and self.game_list_thread:
-            self.game_list_thread.quit()
-            self.game_list_thread.wait()
+
+    def _on_game_list_worker_finished(self):
+        # This slot is called when the GameListWorker finishes, regardless of success or error.
+        # It's responsible for cleanup like re-enabling the refresh button.
+        self.refresh_button.setEnabled(True)
 
     def populate_games_grid(self):
         self._clear_grid()
@@ -219,27 +203,37 @@ class WinlatorTab(BaseGridTab):
             self.start_icon_extraction_flow(missing_icons)
 
     def start_icon_extraction_flow(self, tasks):
-        self.total_tasks = len(tasks) # Armazena como atributo da instância
-        self.completed_tasks_count = 0 # Resetar o contador de tarefas concluídas
-        self.progress_dialog = QProgressDialog("Processing...", "Cancel", 0, self.total_tasks, self)
-        self.progress_dialog.setWindowTitle("Processing...")
+        self.total_tasks = len(tasks)
+        self.completed_tasks_count = 0
+        self.progress_dialog = QProgressDialog("Starting...", "Cancel", 0, self.total_tasks, self)
+        self.progress_dialog.setWindowTitle("Extracting Icons")
         self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self.progress_dialog.setAutoClose(False) # Keep open until explicitly closed
+        self.progress_dialog.setAutoClose(False)
         self.progress_dialog.setMinimumDuration(0)
         self.progress_dialog.setValue(0)
         self.progress_dialog.show()
 
+        # Create and start workers dynamically
+        self.icon_extractor_workers = []
+        for _ in range(self.NUM_WORKERS):
+            worker = IconExtractorWorker(self.extraction_queue, self.app_config, self.temp_dir, self.placeholder_icon)
+            worker.signals.icon_extracted.connect(self._on_icon_extracted)
+            self.icon_extractor_workers.append(worker)
+            if self.main_window:
+                self.main_window.start_worker(worker)
+
         for task in tasks:
             self.extraction_queue.put(task)
 
-        # Add sentinels to stop workers after all tasks are processed
-        for _ in range(self.NUM_WORKERS):
+        # Add sentinels to stop workers
+        for _ in range(len(self.icon_extractor_workers)):
             self.extraction_queue.put(None)
 
         # Start a worker to wait for the queue to be empty
         self.queue_join_worker = QueueJoinWorker(self.extraction_queue)
         self.queue_join_worker.signals.finished.connect(self._on_all_icons_extracted)
-        QThreadPool.globalInstance().start(self.queue_join_worker)
+        if self.main_window:
+            self.main_window.start_worker(self.queue_join_worker)
 
     def _on_icon_extracted(self, path, success, pixmap=None):
         # This slot is connected to the icon_extracted signal from IconExtractorWorker
@@ -258,6 +252,7 @@ class WinlatorTab(BaseGridTab):
         # This slot is called when queue.join() completes
         self.progress_dialog.close()
         show_message_box(self, "Finished", "Icons extraction finished!")
+        self.icon_extractor_workers.clear() # Clean up worker instances
         self.populate_games_grid() # Refresh grid after extraction
 
     def execute_launch(self, shortcut_path, game_name):
@@ -281,8 +276,6 @@ class WinlatorTab(BaseGridTab):
         game_specific_config['shortcut_path'] = shortcut_path
         game_specific_config['package_name'] = package_name
 
-        # Use QThread for scrcpy launch to keep UI responsive
-        self.scrcpy_launch_thread = QThread()
         self.scrcpy_launch_worker = ScrcpyLaunchWorker(
             config_values=game_specific_config, # Now includes shortcut_path and package_name
             window_title=game_name,
@@ -290,16 +283,12 @@ class WinlatorTab(BaseGridTab):
             icon_path=icon_path,
             session_type='winlator'
         )
-        self.scrcpy_launch_worker.moveToThread(self.scrcpy_launch_thread)
-        self.scrcpy_launch_worker.finished.connect(self.scrcpy_launch_thread.quit)
-        self.scrcpy_launch_worker.finished.connect(self.scrcpy_launch_worker.deleteLater)
-        self.scrcpy_launch_thread.finished.connect(self.scrcpy_launch_thread.deleteLater)
-        self.scrcpy_launch_worker.error.connect(self._on_scrcpy_launch_error)
-        self.scrcpy_launch_worker.scrcpy_process_started.connect(self._on_scrcpy_process_started)
+        self.scrcpy_launch_worker.signals.error.connect(self._on_scrcpy_launch_error)
+        self.scrcpy_launch_worker.signals.scrcpy_process_started.connect(self._on_scrcpy_process_started)
         # Connect display_id_found to a new slot that handles Winlator launch
-        self.scrcpy_launch_worker.display_id_found.connect(self._on_display_id_found)
-        self.scrcpy_launch_thread.started.connect(self.scrcpy_launch_worker.run)
-        self.scrcpy_launch_thread.start()
+        self.scrcpy_launch_worker.signals.display_id_found.connect(self._on_display_id_found)
+        if self.main_window:
+            self.main_window.start_worker(self.scrcpy_launch_worker)
 
     def _on_scrcpy_launch_error(self, error_msg):
         show_message_box(self, "Scrcpy Error", f"Failed to start scrcpy for game: {error_msg}", icon=QMessageBox.Critical)
@@ -308,26 +297,19 @@ class WinlatorTab(BaseGridTab):
         self.scrcpy_process = process
 
     def _on_display_id_found(self, display_id, shortcut_path, package_name):
-        print(f"DEBUG: _on_display_id_found received display_id: {display_id}")
         if not display_id:
             show_message_box(self, "Error", "Virtual display not found.", icon=QMessageBox.Critical)
             return
 
-        # Launch Winlator app in a new thread
-        self.winlator_launch_thread = QThread()
         self.winlator_launch_worker = WinlatorLaunchWorker(
             shortcut_path=shortcut_path,
             display_id=display_id,
             package_name=package_name,
             device_id=adb_handler.get_connected_device_id()
         )
-        self.winlator_launch_worker.moveToThread(self.winlator_launch_thread)
-        self.winlator_launch_worker.finished.connect(self.winlator_launch_thread.quit)
-        self.winlator_launch_worker.finished.connect(self.winlator_launch_worker.deleteLater)
-        self.winlator_launch_thread.finished.connect(self.winlator_launch_thread.deleteLater)
-        self.winlator_launch_worker.error.connect(lambda msg: show_message_box(self, "Winlator Launch Error", msg, icon=QMessageBox.Critical))
-        self.winlator_launch_thread.started.connect(self.winlator_launch_worker.run)
-        self.winlator_launch_thread.start()
+        self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Winlator Launch Error", msg, icon=QMessageBox.Critical))
+        if self.main_window:
+            self.main_window.start_worker(self.winlator_launch_worker)
 
 
 

@@ -19,9 +19,10 @@ class BaseRunnableWorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
 
-class BaseRunnableWorker(QRunnable):
+class BaseRunnableWorker(QObject, QRunnable):
     def __init__(self):
-        super().__init__()
+        QObject.__init__(self, parent=None)
+        QRunnable.__init__(self)
         self.signals = BaseRunnableWorkerSignals()
 
     def run(self):
@@ -33,7 +34,7 @@ class AppListWorkerSignals(QObject):
     error = Signal(str)
     result = Signal(tuple)
 
-class AppListWorker(QRunnable):
+class AppListWorker(BaseRunnableWorker):
     def __init__(self, device_id):
         super().__init__()
         self.device_id = device_id
@@ -52,7 +53,7 @@ class IconWorkerSignals(QObject):
     finished = Signal(str, QPixmap)
     error = Signal(str, str)
 
-class IconWorker(QRunnable):
+class IconWorker(BaseRunnableWorker):
     def __init__(self, pkg_name, app_name, cache_dir, app_config):
         super().__init__()
         self.pkg_name = pkg_name
@@ -69,19 +70,23 @@ class IconWorker(QRunnable):
         except Exception as e:
             self.signals.error.emit(self.pkg_name, str(e))
 
-class ScrcpyLaunchWorker(QObject):
+class ScrcpyLaunchWorkerSignals(QObject):
     scrcpy_process_started = Signal(object)
     finished = Signal()
     error = Signal(str)
     display_id_found = Signal(str, str, str)
 
+class ScrcpyLaunchWorker(BaseRunnableWorker):
     def __init__(self, config_values, window_title, device_id, icon_path, session_type):
-        super().__init__()
+        super().__init__() # Call BaseRunnableWorker's init
+        self.signals = ScrcpyLaunchWorkerSignals() # Then set up specific signals
         self.config_values = config_values
         self.window_title = window_title
         self.device_id = device_id
         self.icon_path = icon_path
         self.session_type = session_type
+
+
 
     def run(self):
         try:
@@ -100,10 +105,10 @@ class ScrcpyLaunchWorker(QObject):
                 session_type=self.session_type
             )
 
-            self.scrcpy_process_started.emit(process)
+            self.signals.scrcpy_process_started.emit(process)
 
             if self.session_type == 'winlator':
-                display_id = None
+                self.display_id = None
                 for line in process.stdout:
                     print(line, end='')
                     match = re.search(r'\[server\] INFO: New display: .*\(id=(\d+)\)', line)
@@ -113,25 +118,25 @@ class ScrcpyLaunchWorker(QObject):
                         break
 
                 if display_id:
-                    self.display_id_found.emit(display_id, self.config_values.get('shortcut_path'), self.config_values.get('package_name'))
+                    self.signals.display_id_found.emit(display_id, self.config_values.get('shortcut_path'), self.config_values.get('package_name'))
                 else:
                     process.terminate()
                     raise RuntimeError("Could not find display ID in Scrcpy output.")
 
         except Exception as e:
-            self.error.emit(f"Failed to launch Scrcpy: {e}")
+            self.signals.error.emit(f"Failed to launch Scrcpy: {e}")
         finally:
-            self.finished.emit()
+            self.signals.finished.emit()
 
 # --- Scrcpy Tab Workers ---
-class DeviceInfoWorker(QObject):
-    finished = Signal()
-    error = Signal(str)
+class DeviceInfoWorkerSignals(BaseRunnableWorkerSignals):
     result = Signal(dict)
 
+class DeviceInfoWorker(BaseRunnableWorker):
     def __init__(self, device_id):
         super().__init__()
         self.device_id = device_id
+        self.signals = DeviceInfoWorkerSignals()
 
     def run(self):
         try:
@@ -139,50 +144,58 @@ class DeviceInfoWorker(QObject):
             if info:
                 launcher = adb_handler.get_default_launcher(self.device_id)
                 info['default_launcher'] = launcher
-            self.result.emit(info)
+                self.signals.result.emit(info)
         except Exception as e:
-            self.error.emit(str(e))
+            self.signals.error.emit(str(e))
         finally:
-            self.finished.emit()
+            self.signals.finished.emit()
 
-class EncoderListWorker(QObject):
-    finished = Signal()
-    error = Signal(str)
+
+class EncoderListWorkerSignals(BaseRunnableWorkerSignals):
     result = Signal(object)
 
+class EncoderListWorker(BaseRunnableWorker):
     def __init__(self):
         super().__init__()
+        self.signals = EncoderListWorkerSignals()
 
     def run(self):
         try:
             video_encoders, audio_encoders = scrcpy_handler.list_encoders()
-            self.result.emit((video_encoders, audio_encoders))
+            self.signals.result.emit((video_encoders, audio_encoders))
         except Exception as e:
-            self.error.emit(str(e))
+            self.signals.error.emit(str(e))
         finally:
-            self.finished.emit()
+            self.signals.finished.emit()
 
 # --- Winlator Tab Workers ---
-class GameListWorker(QObject):
-    finished = Signal(object)
+class GameListWorkerSignals(QObject):
+    finished = Signal()
     error = Signal(str)
+    result = Signal(object)
 
+class GameListWorker(BaseRunnableWorker):
     def __init__(self):
         super().__init__()
+        self.signals = GameListWorkerSignals()
 
     def run(self):
         try:
             games = adb_handler.list_winlator_shortcuts_with_names()
-            self.finished.emit(games)
+            self.signals.result.emit(games)
         except Exception as e:
-            self.error.emit(str(e))
+            self.signals.error.emit(str(e))
+        finally:
+            self.signals.finished.emit()
 
-class IconExtractorWorker(QObject):
+class IconExtractorWorkerSignals(QObject):
     icon_extracted = Signal(str, bool, QPixmap)
     finished = Signal()
 
+class IconExtractorWorker(BaseRunnableWorker):
     def __init__(self, extraction_queue, app_config, temp_dir, placeholder_icon):
         super().__init__()
+        self.signals = IconExtractorWorkerSignals()
         self.extraction_queue = extraction_queue
         self.app_config = app_config
         self.temp_dir = temp_dir
@@ -228,28 +241,27 @@ class IconExtractorWorker(QObject):
                 if local_exe_path and os.path.exists(local_exe_path):
                     os.remove(local_exe_path)
                 self.app_config.save_app_metadata(path, {'exe_icon_fetch_failed': not success})
-                self.icon_extracted.emit(path, success, pixmap if pixmap else self.placeholder_icon)
+                self.signals.icon_extracted.emit(path, success, pixmap if pixmap else self.placeholder_icon)
                 self.extraction_queue.task_done()
-        self.finished.emit()
+        self.signals.finished.emit()
 
-class QueueJoinWorker(QRunnable):
-    finished = Signal()
-
+class QueueJoinWorker(BaseRunnableWorker):
     def __init__(self, queue_instance):
         super().__init__()
         self.queue_instance = queue_instance
-        self.signals = BaseRunnableWorkerSignals()
 
     def run(self):
         self.queue_instance.join()
         self.signals.finished.emit()
 
-class WinlatorLaunchWorker(QObject):
+class WinlatorLaunchWorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
 
+class WinlatorLaunchWorker(BaseRunnableWorker):
     def __init__(self, shortcut_path, display_id, package_name, device_id):
-        super().__init__()
+        super().__init__() # Call BaseRunnableWorker's init
+        self.signals = WinlatorLaunchWorkerSignals() # Then set up specific signals
         self.shortcut_path = shortcut_path
         self.display_id = display_id
         self.package_name = package_name
@@ -264,38 +276,43 @@ class WinlatorLaunchWorker(QObject):
                 device_id=self.device_id
             )
         except Exception as e:
-            self.error.emit(f"Failed to launch Winlator app: {e}")
+            self.signals.error.emit(f"Failed to launch Winlator app: {e}")
         finally:
-            self.finished.emit()
+            self.signals.finished.emit()
 
 # --- Main Window Workers ---
-class DeviceCheckWorker(QObject):
+class DeviceCheckWorkerSignals(QObject):
     finished = Signal()
     result = Signal(str)
 
+class DeviceCheckWorker(QRunnable):
     def __init__(self):
         super().__init__()
+        self.signals = DeviceCheckWorkerSignals()
 
     def run(self):
         try:
             device_id = adb_handler.get_connected_device_id()
-            self.result.emit(device_id)
+            self.signals.result.emit(device_id)
         except Exception as e:
             print(f"Error checking device connection: {e}")
-            self.result.emit(None)
+            self.signals.result.emit(None)
         finally:
-            self.finished.emit()
+            self.signals.finished.emit()
 
 
-class DeviceConfigLoaderWorker(QObject):
+class DeviceConfigLoaderWorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
     result = Signal(dict)
 
+
+class DeviceConfigLoaderWorker(QRunnable):
     def __init__(self, device_id, app_config):
         super().__init__()
         self.device_id = device_id
         self.app_config = app_config
+        self.signals = DeviceConfigLoaderWorkerSignals()
 
     def run(self):
         try:
@@ -305,8 +322,8 @@ class DeviceConfigLoaderWorker(QObject):
                 "device_id": self.device_id,
                 "device_info": device_info,
             }
-            self.result.emit(output)
+            self.signals.result.emit(output)
         except Exception as e:
-            self.error.emit(str(e))
+            self.signals.error.emit(str(e))
         finally:
-            self.finished.emit()
+            self.signals.finished.emit()

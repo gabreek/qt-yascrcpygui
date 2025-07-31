@@ -5,7 +5,7 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
                                QLineEdit, QCheckBox, QSlider, QGroupBox, QMessageBox,
                                QScrollArea, QSizePolicy, QPushButton, QGridLayout)
-from PySide6.QtCore import Qt, QThread, QTimer
+from PySide6.QtCore import Qt, QThreadPool, Signal
 
 from .workers import DeviceInfoWorker, EncoderListWorker
 
@@ -38,10 +38,8 @@ class ScrcpyTab(QWidget):
         self.option_checkboxes = {}
         self.sliders = {}
 
-        self.workers = {
-            "device_info": {"worker": None, "thread": None},
-            "encoder_list": {"worker": None, "thread": None},
-        }
+        self.thread_pool = QThreadPool.globalInstance()
+        self.active_workers = []
 
         self._setup_ui()
 
@@ -332,11 +330,10 @@ class ScrcpyTab(QWidget):
         else:
             self.device_info_label.setText("Fetching device info...")
 
-        self._stop_worker("device_info")
         worker = DeviceInfoWorker(device_id)
-        worker.result.connect(lambda info: self.on_device_info_ready(info, force_encoder_fetch))
-        worker.error.connect(self.on_device_info_error)
-        self._start_worker("device_info", worker, worker.run)
+        worker.signals.result.connect(lambda info: self.on_device_info_ready(info, force_encoder_fetch))
+        worker.signals.error.connect(self.on_device_info_error)
+        self._start_worker(worker)
 
     def on_device_info_ready(self, info, force_encoder_fetch):
         self.last_device_info = info
@@ -367,11 +364,10 @@ class ScrcpyTab(QWidget):
     def _fetch_and_update_encoders(self):
         if self.app_config.get('device_id') == DEVICE_NOT_FOUND: return
         self.device_info_label.setText("Fetching encoders...")
-        self._stop_worker("encoder_list")
         worker = EncoderListWorker()
-        worker.result.connect(self._on_encoders_ready)
-        worker.error.connect(lambda err: QMessageBox.critical(self, "Error", f"Could not fetch encoders: {err}"))
-        self._start_worker("encoder_list", worker, worker.run)
+        worker.signals.result.connect(self._on_encoders_ready)
+        worker.signals.error.connect(lambda err: QMessageBox.critical(self, "Error", f"Could not fetch encoders: {err}"))
+        self._start_worker(worker)
 
     def _on_encoders_ready(self, result):
         self.video_encoders, self.audio_encoders = result
@@ -478,29 +474,17 @@ class ScrcpyTab(QWidget):
             if group:
                 group.setEnabled(enabled)
 
-    def _start_worker(self, name, worker_instance, start_method):
-        thread = QThread()
-        worker_instance.moveToThread(thread)
-        worker_instance.finished.connect(thread.quit)
-        # FIX: Removed deleteLater connections to prevent RuntimeError on close.
-        # The application's main shutdown process will handle object cleanup.
-        thread.started.connect(start_method)
-        thread.start()
-        self.workers[name] = {"worker": worker_instance, "thread": thread}
+    def _start_worker(self, worker):
+        self.active_workers.append(worker)
+        worker.signals.finished.connect(lambda: self._on_worker_finished(worker))
+        self.thread_pool.start(worker)
 
-    def _stop_worker(self, name):
-        worker_info = self.workers.get(name)
-        if worker_info and worker_info["thread"] and worker_info["thread"].isRunning():
-            thread = worker_info["thread"]
-            thread.quit()
-            if not thread.wait(500):
-                thread.terminate()
-                thread.wait(500)
-        self.workers[name] = {"worker": None, "thread": None}
+    def _on_worker_finished(self, worker):
+        if worker in self.active_workers:
+            self.active_workers.remove(worker)
 
     def stop_all_workers(self):
-        for name in self.workers:
-            self._stop_worker(name)
+        pass
 
     def set_device_status_message(self, message):
         if message:

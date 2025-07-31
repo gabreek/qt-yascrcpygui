@@ -18,23 +18,32 @@ def _get_startupinfo():
     return None
 
 def _parse_extra_args(extra_args_str):
-    """Analisa a string de argumentos extras para separar comandos PRE, POST e argumentos do scrcpy."""
+    """Analisa a string de argumentos extras para separar comandos PRE, POST, variáveis de ambiente e argumentos do scrcpy."""
     prepend_cmds = []
     append_cmds = []
     scrcpy_args = []
+    env_vars = {}
 
     for command in extra_args_str.strip().split(';'):
         command = command.strip()
         if not command:
             continue
         if command.upper().startswith('PRE::'):
-            prepend_cmds.append(command[5:].strip())
+            cmd_content = command[5:].strip()
+            # Check for environment variable export
+            env_match = re.match(r'^export\s+([a-zA-Z_][a-zA-Z0-9_]*)=(.*)$', cmd_content)
+            if env_match:
+                var_name = env_match.group(1)
+                var_value = env_match.group(2)
+                env_vars[var_name] = var_value
+            else:
+                prepend_cmds.append(cmd_content)
         elif command.upper().startswith('POST::'):
             append_cmds.append(command[6:].strip())
         else:
             scrcpy_args.extend(shlex.split(command))
 
-    return {'prepend': prepend_cmds, 'append': append_cmds, 'scrcpy': scrcpy_args}
+    return {'prepend': prepend_cmds, 'append': append_cmds, 'scrcpy': scrcpy_args, 'env_vars': env_vars}
 
 
 def _build_command(config_values, extra_scrcpy_args=None, window_title=None, device_id=None):
@@ -186,6 +195,10 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
     env = os.environ.copy()
     if icon_path and os.path.exists(icon_path):
         env['SCRCPY_ICON_PATH'] = icon_path
+
+    # Apply environment variables from extraargs
+    for var_name, var_value in parsed_args['env_vars'].items():
+        env[var_name] = var_value
 
     if capture_output:
         scrcpy_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, startupinfo=startupinfo, env=env)
