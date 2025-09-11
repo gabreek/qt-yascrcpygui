@@ -26,10 +26,10 @@ class AppConfig:
         'video_encoder': 'Auto',
         'audio_codec': 'Auto',
         'audio_encoder': 'Auto',
-        'allow_frame_drop': 'enabled',
-        'low_latency': 'enabled',
-        'priority_mode': 'realtime',
-        'bitrate_mode': 'cbr',
+        'allow_frame_drop': 'Enabled',
+        'low_latency': 'Enabled',
+        'priority_mode': 'Realtime',
+        'bitrate_mode': 'VBR',
         'extraargs': '',
         'stay_awake': False,
         'mipmaps': False,
@@ -43,16 +43,15 @@ class AppConfig:
         'video_buffer': 0,
         'try_unlock': False,
     }
-    GLOBAL_KEYS = {'theme', 'use_ludashi_pkg', 'try_unlock'}
+    GLOBAL_KEYS = {'theme', 'use_ludashi_pkg'}
+    PROFILE_TYPES = {'app': 'app_metadata', 'winlator': 'winlator_game_configs'}
 
-    """
-    Gerencia todas as configurações do aplicativo, incluindo caminhos de arquivos,
-    metadados de apps e o estado da interface.
-    """
+
     def __init__(self, device_id):
         self.config_data = {}
-        self.values = self._DEFAULT_VALUES.copy() # Initialize with default values
-        self.CONFIG_FILE = None # Initialize CONFIG_FILE to None
+        self.values = self._DEFAULT_VALUES.copy()
+        self.CONFIG_FILE = None
+        self.active_profile = 'global'
 
         if platform.system() == "Windows":
             self.CONFIG_DIR = os.path.join(os.getenv('APPDATA'), 'ScrcpyLauncher')
@@ -66,38 +65,43 @@ class AppConfig:
         self.GLOBAL_CONFIG_FILE = os.path.join(self.CONFIG_DIR, 'global_config.json')
         self.global_config_data = self._load_json(self.GLOBAL_CONFIG_FILE)
 
-        # Apply global settings from loaded global_config_data
         for key in self.GLOBAL_KEYS:
             if key in self.global_config_data:
                 self.values[key] = self.global_config_data[key]
 
     def get(self, key, default=None):
-        """
-        FIX: Retorna o valor da configuração para uma dada chave, com um padrão opcional.
-        Agora a função se comporta como um dicionário .get(), tornando-a mais flexível.
-        """
         return self.values.get(key, default)
 
     def set(self, key, value):
-        """Define o valor de uma configuração e salva as alterações, se um arquivo de configuração estiver ativo."""
-        # Prevent device_id and device_commercial_name from being set via this generic method
         if key in ['device_id', 'device_commercial_name']:
-            print(f"Warning: Attempted to set immutable config key: {key}. This action is not allowed.")
+            print(f"Warning: Attempted to set immutable config key: {key}.")
             return
 
-        if key in self.values:
-            if self.values[key] != value:
-                self.values[key] = value
-                self.save_config()
-        else:
-            print(f"Warning: Attempted to set unknown config key: {key}")
+        if self.values.get(key) != value:
+            self.values[key] = value
+            self.save_config()
 
     def get_all_values(self):
-        """Retorna um dicionário com os valores atuais de todas as configurações."""
         return self.values
 
+    def get_global_values_no_profile(self):
+        """
+        Returns a dictionary of the global configuration values, ignoring any active profile.
+        It combines defaults, global app settings, and global device settings.
+        """
+        # Start with the default values
+        values = self._DEFAULT_VALUES.copy()
+
+        # Load global settings from the global config file
+        values.update(self.global_config_data)
+
+        # Load device-specific general settings if a device is connected
+        if self.CONFIG_FILE:
+            values.update(self.config_data.get('general_config', {}))
+
+        return values
+
     def _load_json(self, file_path):
-        """Carrega um arquivo JSON genérico."""
         if os.path.exists(file_path):
             try:
                 with open(file_path, "r", encoding='utf-8') as f:
@@ -107,7 +111,6 @@ class AppConfig:
         return {}
 
     def _save_json(self, data, file_path):
-        """Salva dados em um arquivo JSON genérico, verificando se o caminho é válido.""" 
         if file_path is None:
             print("Warning: Attempted to save to a None file_path.")
             return
@@ -116,23 +119,90 @@ class AppConfig:
                 json.dump(data, f, indent=4)
         except IOError as e:
             print(f"Error saving config to {file_path}: {e}")
-        except Exception as e:
-            print(f"An unexpected error occurred while saving config to {file_path}: {e}")
 
     def save_config(self):
-        """
-        Salva o estado atual das variáveis, separando as configurações
-        globais das configurações por dispositivo em seus respectivos arquivos.
-        """
+        if self.CONFIG_FILE is None:
+            # Save global settings even if no device is connected
+            global_settings = {key: self.values[key] for key in self.GLOBAL_KEYS if key in self.values}
+            self._save_json(global_settings, self.GLOBAL_CONFIG_FILE)
+            return
+
+        # Separate global from device-specific settings
         all_values = self.get_all_values()
         global_settings = {key: all_values[key] for key in self.GLOBAL_KEYS if key in all_values}
-        device_settings = {key: val for key, val in all_values.items() if key not in self.GLOBAL_KEYS}
-        self.global_config_data = global_settings
-        self._save_json(self.global_config_data, self.GLOBAL_CONFIG_FILE)
-        
-        if self.CONFIG_FILE is not None:
+        device_settings = {k: v for k, v in all_values.items() if k not in self.GLOBAL_KEYS}
+
+        # Save global settings
+        self._save_json(global_settings, self.GLOBAL_CONFIG_FILE)
+
+        # Save device-specific settings to the correct profile
+        if self.active_profile == 'global':
             self.config_data['general_config'] = device_settings
-            self._save_json(self.config_data, self.CONFIG_FILE)
+        elif self.active_profile in self.get_app_config_keys(include_name=False):
+            self.save_app_scrcpy_config(self.active_profile, device_settings)
+        elif self.active_profile in self.get_winlator_config_keys(include_name=False):
+            self.save_winlator_game_config(self.active_profile, device_settings)
+
+        self._save_json(self.config_data, self.CONFIG_FILE)
+
+
+    def get_app_config_keys(self, include_name=True):
+        if not self.config_data: return []
+        keys = []
+        app_metadata = self.config_data.get('app_metadata', {})
+        for pkg_name, data in app_metadata.items():
+            if 'config' in data:
+                if include_name:
+                    # Try to get a friendly name
+                    app_list = self.get_app_list_cache().get('user_apps', [])
+                    name = next((app['name'] for app in app_list if app['key'] == pkg_name), pkg_name)
+                    keys.append((pkg_name, name))
+                else:
+                    keys.append(pkg_name)
+        return sorted(keys, key=lambda x: x[1].lower() if include_name else x.lower())
+
+    def get_winlator_config_keys(self, include_name=True):
+        if not self.config_data: return []
+        keys = []
+        winlator_configs = self.config_data.get('winlator_game_configs', {})
+        for path, config in winlator_configs.items():
+            if config: # Ensure there's actually a config
+                if include_name:
+                    name = os.path.splitext(os.path.basename(path))[0]
+                    keys.append((path, name))
+                else:
+                    keys.append(path)
+        return sorted(keys, key=lambda x: x[1].lower() if include_name else x.lower())
+
+
+    def load_profile(self, profile_key):
+        # Start with the base global config
+        base_config = self.config_data.get('general_config', {}).copy()
+
+        # Determine profile type and load specific config
+        if profile_key == 'global':
+            pass # Base config is enough
+        elif profile_key in self.get_app_config_keys(include_name=False):
+            specific_config = self.get_app_metadata(profile_key).get('config', {})
+            base_config.update(specific_config)
+        elif profile_key in self.get_winlator_config_keys(include_name=False):
+            specific_config = self.get_winlator_game_config(profile_key)
+            base_config.update(specific_config)
+        else:
+            print(f"Warning: Profile key '{profile_key}' not found. Loading global config.")
+            profile_key = 'global'
+
+        # Set the loaded values, preserving global keys
+        default_values = self._DEFAULT_VALUES.copy()
+        for key, default_value in default_values.items():
+            if key in self.GLOBAL_KEYS:
+                self.values[key] = self.global_config_data.get(key, default_value)
+            else:
+                self.values[key] = base_config.get(key, default_value)
+
+        self.active_profile = profile_key
+        print(f"Loaded profile: {self.active_profile}")
+
 
     def _ensure_metadata_structure(self, key):
         if 'app_metadata' not in self.config_data:
@@ -141,17 +211,13 @@ class AppConfig:
             self.config_data['app_metadata'][key] = {}
 
     def get_app_metadata(self, key):
-        """Retorna os metadados para uma chave específica (pkg_name, path, etc.)."""
         return self.config_data.get('app_metadata', {}).get(key, {})
 
     def save_app_metadata(self, key, data):
-        """Salva ou atualiza os metadados para uma chave específica."""
         self._ensure_metadata_structure(key)
         self.config_data['app_metadata'][key].update(data)
         self._save_json(self.config_data, self.CONFIG_FILE)
 
-    # ... O resto do arquivo app_config.py permanece o mesmo ...
-    # Cole o conteúdo inteiro para garantir.
     def save_app_scrcpy_config(self, pkg_name, config_data):
         self._ensure_metadata_structure(pkg_name)
         self.config_data['app_metadata'][pkg_name]['config'] = config_data
@@ -160,6 +226,10 @@ class AppConfig:
     def delete_app_scrcpy_config(self, pkg_name):
         if 'app_metadata' in self.config_data and pkg_name in self.config_data['app_metadata'] and 'config' in self.config_data['app_metadata'][pkg_name]:
             del self.config_data['app_metadata'][pkg_name]['config']
+            if not self.config_data['app_metadata'][pkg_name]: # cleanup if empty
+                 del self.config_data['app_metadata'][pkg_name]
+            if self.active_profile == pkg_name:
+                self.load_profile('global')
             self._save_json(self.config_data, self.CONFIG_FILE)
             return True
         return False
@@ -175,11 +245,7 @@ class AppConfig:
         return self.config_data.get('winlator_game_configs', {}).get(game_path, {})
 
     def save_winlator_game_config(self, game_path, config):
-        # MODIFICAÇÃO: Remove 'use_ludashi_pkg' antes de salvar a configuração do jogo
-        config_to_save = config.copy() # Cria uma cópia para não modificar o original
-        if 'use_ludashi_pkg' in config_to_save:
-            del config_to_save['use_ludashi_pkg']
-
+        config_to_save = {k: v for k, v in config.items() if k not in self.GLOBAL_KEYS}
         if 'winlator_game_configs' not in self.config_data:
             self.config_data['winlator_game_configs'] = {}
         self.config_data['winlator_game_configs'][game_path] = config_to_save
@@ -188,6 +254,8 @@ class AppConfig:
     def delete_winlator_game_config(self, game_path):
         if 'winlator_game_configs' in self.config_data and game_path in self.config_data['winlator_game_configs']:
             del self.config_data['winlator_game_configs'][game_path]
+            if self.active_profile == game_path:
+                self.load_profile('global')
             self._save_json(self.config_data, self.CONFIG_FILE)
             return True
         return False
@@ -199,27 +267,23 @@ class AppConfig:
         return self.config_data.get('encoder_cache', {})
 
     def save_encoder_cache(self, video_encoders, audio_encoders):
-        self.config_data['encoder_cache'] = {
-            'video': video_encoders,
-            'audio': audio_encoders
-        }
+        self.config_data['encoder_cache'] = {'video': video_encoders, 'audio': audio_encoders}
         self._save_json(self.config_data, self.CONFIG_FILE)
 
     def has_encoder_cache(self):
-        if self.CONFIG_FILE is None:
-            return False
-        cache = self.get_encoder_cache()
-        return bool(cache.get('video') or cache.get('audio'))
+        if self.CONFIG_FILE is None: return False
+        return bool(self.get_encoder_cache().get('video') or self.get_encoder_cache().get('audio'))
 
     def load_config_for_device(self, device_id):
+        self.active_profile = 'global' # Reset on device change
         if device_id is None or device_id == "no_device":
             self.CONFIG_FILE = None
             self.config_data = {}
-            default_values = AppConfig._DEFAULT_VALUES.copy()
-            self.values = {k: v for k, v in default_values.items()}
-            # Garante que as chaves globais sejam carregadas do global_config_data
+            default_values = self._DEFAULT_VALUES.copy()
+            # Load global keys from file, fall back to defaults
             for key in self.GLOBAL_KEYS:
-                self.values[key] = self.global_config_data.get(key, default_values.get(key))
+                default_values[key] = self.global_config_data.get(key, default_values.get(key))
+            self.values = default_values
             self.values['device_id'] = None
             return False
 
@@ -231,22 +295,12 @@ class AppConfig:
         self.config_data.setdefault('winlator_game_configs', {})
         self.config_data.setdefault('encoder_cache', {})
 
-        general_config = self.config_data['general_config']
-        default_values = AppConfig._DEFAULT_VALUES.copy()
+        # Load the global profile for the device by default
+        self.load_profile('global')
 
-        for key, default_value in default_values.items():
-            if key in self.GLOBAL_KEYS:
-                # Chaves globais são carregadas do global_config_data, não do config do dispositivo
-                self.values[key] = self.global_config_data.get(key, default_value)
-            else:
-                self.values[key] = general_config.get(key, default_value)
-        
-        # Ensure device_id and device_commercial_name are set only once
-        if self.values.get('device_id') is None or self.values.get('device_id') == 'no_device':
-            self.values['device_id'] = device_id
-        
+        # Ensure device_id and commercial_name are correctly set/maintained
+        self.values['device_id'] = device_id
         if self.values.get('device_commercial_name') == 'Unknown Device':
-            # This will be updated by DeviceInfoWorker later if a real name is found
-            self.values['device_commercial_name'] = general_config.get('device_commercial_name', 'Unknown Device')
+            self.values['device_commercial_name'] = self.config_data['general_config'].get('device_commercial_name', 'Unknown Device')
 
         return True

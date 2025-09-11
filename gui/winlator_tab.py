@@ -19,6 +19,8 @@ from .base_grid_tab import BaseGridTab
 
 class WinlatorTab(BaseGridTab):
     launch_requested = Signal(str, str)
+    config_changed = Signal(str)
+    config_deleted = Signal(str)
 
     def __init__(self, app_config, main_window=None):
         super().__init__(app_config, main_window)
@@ -131,6 +133,14 @@ class WinlatorTab(BaseGridTab):
         # It's responsible for cleanup like re-enabling the refresh button.
         self.refresh_button.setEnabled(True)
 
+    def _on_game_config_changed(self, game_path):
+        self.config_changed.emit(game_path)
+        self.update_winlator_display()
+
+    def _on_game_config_deleted(self, game_path):
+        self.config_deleted.emit(game_path)
+        self.update_winlator_display()
+
     def populate_games_grid(self):
         self._clear_grid()
 
@@ -146,8 +156,8 @@ class WinlatorTab(BaseGridTab):
         for game_info in self.all_games:
             item = WinlatorItemWidget(game_info, self.app_config, self.placeholder_icon) # Use WinlatorItemWidget
             item.launch_requested.connect(self.launch_requested)
-            item.config_saved.connect(self.update_winlator_display) # Refresh display after save
-            item.config_deleted.connect(self.update_winlator_display) # Refresh display after delete
+            item.config_saved.connect(self._on_game_config_changed) # Refresh display after save
+            item.config_deleted.connect(self._on_game_config_deleted) # Refresh display after delete
             item.icon_dropped.connect(self._on_icon_dropped)
 
             self.grid_layout.addWidget(item, row, col)
@@ -256,7 +266,7 @@ class WinlatorTab(BaseGridTab):
         self.populate_games_grid() # Refresh grid after extraction
 
     def execute_launch(self, shortcut_path, game_name):
-        game_specific_config = self.app_config.get_all_values().copy()
+        game_specific_config = self.app_config.get_global_values_no_profile().copy()
         game_data = self.app_config.get_winlator_game_config(shortcut_path)
         if game_data:
             game_specific_config.update(game_data)
@@ -265,7 +275,7 @@ class WinlatorTab(BaseGridTab):
         game_specific_config['start_app'] = '' # Ensure it's empty for initial scrcpy launch
 
         use_ludashi = self.app_config.get('use_ludashi_pkg')
-        package_name = "com.ludashi.benchmark" if use_ludashi else "com.winlator"
+        package_name = "com.ludashi.benchmark" if use_ludashi else "com.winlator.cmod"
 
         icon_key = os.path.basename(shortcut_path)
         icon_path = os.path.join(self.app_config.get_icon_cache_dir(), f"{icon_key}.png")

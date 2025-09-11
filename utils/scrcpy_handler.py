@@ -80,9 +80,9 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
         video_codec_options.append('priority:int=1')
 
     if config_values.get('bitrate_mode').lower().strip() == 'cbr':
-        video_codec_options.append('bitrate-mode:int=2')
-    elif config_values.get('bitrate_mode').lower().strip() == 'vbr':
         video_codec_options.append('bitrate-mode:int=1')
+    elif config_values.get('bitrate_mode').lower().strip() == 'vbr':
+        video_codec_options.append('bitrate-mode:int=2')
 
     if video_codec_options:
         cmd.append(f"--video-codec-options={','.join(video_codec_options)}")
@@ -207,7 +207,7 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
 
     # Wait for the process and run POST commands in a separate thread
     wait_thread = threading.Thread(
-        target=_wait_for_scrcpy_and_post_cmds, 
+        target=_wait_for_scrcpy_and_post_cmds,
         args=(scrcpy_process, parsed_args['append'], startupinfo)
     )
     wait_thread.daemon = True # Allows main program to exit even if this thread is running

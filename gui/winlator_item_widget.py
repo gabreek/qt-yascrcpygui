@@ -1,5 +1,5 @@
 # FILE: gui/winlator_item_widget.py
-# PURPOSE: Define o widget para um único item de jogo Winlator na grade, herdando de BaseItemWidget.
+# PURPOSE: Defines the widget for a single Winlator game item in the grid, inheriting from BaseItemWidget.
 
 import os
 from PySide6.QtWidgets import QPushButton, QMessageBox
@@ -7,21 +7,21 @@ from PySide6.QtCore import Qt, Signal
 from .base_item_widget import BaseItemWidget
 
 class WinlatorItemWidget(BaseItemWidget):
-    # Sinais específicos para WinlatorItemWidget
-    config_saved = Signal() # Sinal para notificar a aba que uma config foi salva
-    config_deleted = Signal() # Sinal para notificar a aba que uma config foi deletada
+    # Specific signals for WinlatorItemWidget
+    config_saved = Signal(str) # Signal to notify the tab that a config was saved
+    config_deleted = Signal(str) # Signal to notify the tab that a config was deleted
 
     def __init__(self, game_info, app_config, placeholder_icon):
-        # game_info deve ter 'name' e 'path'
+        # game_info must have 'name' and 'path'
         super().__init__({'key': game_info['path'], 'name': game_info['name']}, app_config, placeholder_icon, item_type="winlator_game")
         self.game_path = self.item_key
         self.game_name = self.item_name
 
-        # Ajustes de estilo para Winlator (removendo sobrescrições de tamanho e negrito)
-        # O tamanho do widget e do ícone agora são definidos pelo BaseItemWidget (75x110 e 32x32)
-        self.name_label.setStyleSheet("font-size: 8pt;") # Removido font-weight: bold;
+        # Style adjustments for Winlator (removing size and bold overrides)
+        # The widget and icon size are now defined by BaseItemWidget (75x110 and 32x32)
+        self.name_label.setStyleSheet("font-size: 8pt;") # Removed font-weight: bold;
 
-        # Adiciona botões específicos usando o método centralizado da classe base
+        # Adds specific buttons using the base class's centralized method
         self.settings_button = self._create_action_button("⚙️")
         self.delete_button = self._create_action_button("🗑️")
 
@@ -30,23 +30,23 @@ class WinlatorItemWidget(BaseItemWidget):
         self.action_layout.addWidget(self.delete_button)
         self.action_layout.addStretch()
 
-        # Conexões
+        # Connections
         self.settings_button.clicked.connect(self.save_game_config)
         self.delete_button.clicked.connect(self.delete_game_config)
 
     def save_game_config(self):
-        current_scrcpy_config = self.app_config.get_all_values().copy()
+        current_scrcpy_config = self.app_config.get_global_values_no_profile().copy()
         self.app_config.save_winlator_game_config(self.game_path, current_scrcpy_config)
-        QMessageBox.information(self, "Configuração Salva", f"Configuração salva para {self.game_name}.")
-        self.config_saved.emit()
+        QMessageBox.information(self, "Configuration Saved", f"Configuration saved for {self.game_name}.")
+        self.config_saved.emit(self.game_path)
 
     def delete_game_config(self):
-        reply = QMessageBox.question(self, "Confirmar Exclusão",
-                                     f"Tem certeza que deseja excluir a configuração salva para {self.game_name}?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
+        reply = QMessageBox.question(self, "Confirm Deletion",
+                                     f"Are you sure you want to delete the saved configuration for {self.game_name}?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
             if self.app_config.delete_winlator_game_config(self.game_path):
-                QMessageBox.information(self, "Configuração Excluída", f"Configuração para {self.game_name} foi excluída.")
-                self.config_deleted.emit()
+                QMessageBox.information(self, "Configuration Deleted", f"Configuration for {self.game_name} has been deleted.")
+                self.config_deleted.emit(self.game_path)
             else:
-                QMessageBox.warning(self, "Nenhuma Configuração", f"Nenhuma configuração específica foi encontrada para {self.game_name} para excluir.")
+                QMessageBox.warning(self, "No Configuration Found", f"No specific configuration was found for {self.game_name} to delete.")

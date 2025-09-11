@@ -20,6 +20,8 @@ from .dialogs import show_message_box
 # --- ABA DE APPS ---
 class AppsTab(BaseGridTab):
     launch_requested = Signal(str, str)
+    config_changed = Signal(str)
+    config_deleted = Signal(str)
 
     def __init__(self, app_config, main_window=None):
         super().__init__(app_config, main_window)
@@ -209,6 +211,7 @@ class AppsTab(BaseGridTab):
         if reply == QMessageBox.Yes:
             if self.app_config.delete_app_scrcpy_config(pkg_name):
                 show_message_box(self, "Success", f"Specific configuration for {app_name} has been deleted.", icon=QMessageBox.Information)
+                self.config_deleted.emit(pkg_name)
             else:
                 show_message_box(self, "Not Found", f"No specific configuration was found for {app_name}.", icon=QMessageBox.Warning)
 
@@ -218,7 +221,7 @@ class AppsTab(BaseGridTab):
             app_name = widget.item_name
 
         is_launcher = (pkg_name == self.app_config.get('default_launcher'))
-        global_config = self.app_config.get_all_values()
+        global_config = self.app_config.get_global_values_no_profile()
         global_is_virtual = global_config.get('new_display') and global_config.get('new_display') != 'Disabled'
 
         # --- Special check for saving Launcher settings ---
@@ -259,6 +262,7 @@ class AppsTab(BaseGridTab):
 
         self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)
         show_message_box(self, "Success", f"Current settings have been saved as a specific configuration for <b>{app_name}</b>.", icon=QMessageBox.Information)
+        self.config_changed.emit(pkg_name)
 
     def filter_apps(self):
         search_text = self.search_input.text().lower()
@@ -287,7 +291,7 @@ class AppsTab(BaseGridTab):
         self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True})
 
     def execute_launch(self, package_name, app_name):
-        config_to_use = self.app_config.get_all_values().copy()
+        config_to_use = self.app_config.get_global_values_no_profile().copy()
         app_metadata = self.app_config.get_app_metadata(package_name)
 
         is_launcher = (package_name == self.app_config.get('default_launcher'))

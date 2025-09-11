@@ -139,6 +139,12 @@ class MainWindow(QMainWindow):
         )
         # --- END NEW ---
 
+        # --- Profile Change Signal Connections ---
+        self.apps_tab.config_changed.connect(self.scrcpy_tab.update_profile_dropdown)
+        self.apps_tab.config_deleted.connect(self.scrcpy_tab.update_profile_dropdown)
+        self.winlator_tab.config_changed.connect(self.scrcpy_tab.update_profile_dropdown)
+        self.winlator_tab.config_deleted.connect(self.scrcpy_tab.update_profile_dropdown)
+
         self.scrcpy_tab.config_updated_on_worker.connect(self._on_scrcpy_tab_config_ready)
 
         self.session_manager_button = QPushButton(">")
