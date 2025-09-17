@@ -58,17 +58,39 @@ def get_device_info(device_id=None):
 
 def list_winlator_shortcuts_with_names(device_id=None):
     """Retorna uma lista de tuplas (nome, caminho) para os atalhos do Winlator."""
-    command = ['shell', 'find', '/storage/emulated/0/Download/Winlator/Frontend/', '-type', 'f', '-name', '*.desktop']
-    output = _run_adb_command(command, device_id)
-    shortcuts = output.splitlines() if output else []
+    paths_to_search = [
+        '/storage/emulated/0/Download/Winlator/Frontend/',
+        '/storage/emulated/0/winlator/Shortcuts/'
+    ]
+    all_shortcuts = []
+    for search_path in paths_to_search:
+        command = ['shell', 'find', search_path, '-type', 'f', '-name', '*.desktop']
+        output = _run_adb_command(command, device_id, ignore_errors=True)
+        if output:
+            all_shortcuts.extend(output.splitlines())
 
     games_with_names = []
-    for path in shortcuts:
+    # Use a set to avoid duplicates if a shortcut exists in both locations
+    for path in sorted(list(set(all_shortcuts))):
         if path:
             basename = os.path.basename(path)
             name = basename.rsplit('.desktop', 1)[0]
             games_with_names.append((name, path))
     return games_with_names
+
+def get_package_name_from_shortcut(shortcut_path, device_id=None):
+    """Lê o arquivo .desktop para extrair o nome do pacote da linha 'Exec='."""
+    content = _run_adb_command(['shell', 'cat', shlex.quote(shortcut_path)], device_id)
+    if not content:
+        return "unknown"
+
+    for line in content.splitlines():
+        line = line.strip()
+        if line.lower().startswith('exec='):
+            match = re.search(r'/0/([^/]+)/files/', line)
+            if match:
+                return match.group(1)
+    return "unknown"
 
 def get_game_executable_info(shortcut_path, device_id=None):
     """Lê o arquivo .desktop para encontrar o caminho do .exe no /sdcard."""
@@ -110,7 +132,7 @@ def get_game_executable_info(shortcut_path, device_id=None):
     return None
 
 def pull_file(remote_path, local_path, device_id=None):
-    """Puxa (baixa) um arquivo do dispositivo para o computador local de forma síncrona."""
+    """Baixa um arquivo do dispositivo para o computador local de forma síncrona."""
     cmd = ['adb']
     if device_id:
         cmd.extend(['-s', device_id])
@@ -131,9 +153,7 @@ def pull_file(remote_path, local_path, device_id=None):
 
 def start_winlator_app(shortcut_path, display_id, package_name, device_id=None):
     """Inicia um aplicativo Winlator em um display virtual específico."""
-    file_name = os.path.basename(shortcut_path)
-    full_path = f"/storage/emulated/0/Download/Winlator/Frontend/{file_name}"
-    quoted_path = shlex.quote(full_path)
+    quoted_path = shlex.quote(shortcut_path)
     activity_name = ".XServerDisplayActivity"
     component = f"{package_name}/{activity_name}"
     remote_command_str = (
@@ -174,14 +194,14 @@ def get_default_launcher(device_id=None):
     output = _run_adb_command(command, device_id, ignore_errors=True)
     if not output:
         return None
-    
+
     # A saída pode ter várias linhas, a que nos interessa contém o '/'
     for line in output.splitlines():
         if '/' in line:
             # A linha é algo como: "com.mi.android.globallauncher/.MiuiHomeActivity"
             # Nós só queremos a primeira parte.
             return line.split('/')[0].strip()
-            
+
     return None # Retorna None se nenhuma linha com o nome do componente for encontrada
 
 def get_device_lock_state(device_id=None):
@@ -202,7 +222,7 @@ def get_device_lock_state(device_id=None):
         focused_line = [line for line in focused_window_output.splitlines() if 'mCurrentFocus' in line]
         if focused_line and ('Keyguard' in focused_line[0] or 'NotificationShade' in focused_line[0]):
             return 'LOCKED_SCREEN_ON'
-            
+
     return 'UNLOCKED'
 
 def unlock_device(device_id, pin):

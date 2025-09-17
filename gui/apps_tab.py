@@ -257,7 +257,7 @@ class AppsTab(BaseGridTab):
             config_to_save = global_config.copy()
 
         # Exclude keys that should not be part of a specific config
-        keys_to_exclude = {'device_id', 'theme', 'use_ludashi_pkg', 'device_commercial_name', 'show_system_apps', 'default_launcher'}
+        keys_to_exclude = {'device_id', 'theme', 'device_commercial_name', 'show_system_apps', 'default_launcher'}
         app_specific_config = {k: v for k, v in config_to_save.items() if k not in keys_to_exclude}
 
         self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)

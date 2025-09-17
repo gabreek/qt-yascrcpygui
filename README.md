@@ -18,6 +18,9 @@ A modern and robust GUI for `scrcpy` and Winlator, built with **PySide6 (Qt)**. 
     *   **Automatic Icon Extraction:** Fetches and caches game icons directly from the game's `.exe` file.
     *   Supports custom game icons via drag-and-drop.
     *   Save specific `scrcpy` settings for each game, perfect for custom resolutions and performance tuning.
+    *   **Compatible Versions:**
+        *   [Winlator CMOD](https://github.com/coffincolors/winlator/): More recent and updated, compatibility with multiple controllers.
+        *   [Bionic Ludashi](https://github.com/Succubussix/winlator-bionic-glibc/releases/tag/just-bionic): Higher performance, better keyboard/mouse compatibility in virtual display, but it is slightly outdated and it is necessary to find .wcp with updated deps.
 *   **Advanced Scrcpy Configuration:** A dedicated tab to tweak all major `scrcpy` settings, including resolution, bitrate, codecs, and more. All settings are saved automatically.
 *   **Custom Window Icons:** The `scrcpy` window will automatically use the game's or app's icon, providing a native look and feel.
 

@@ -48,10 +48,7 @@ class WinlatorTab(BaseGridTab):
             self.placeholder_icon.fill(Qt.GlobalColor.darkGray)
 
         top_panel = QHBoxLayout()
-        self.use_ludashi_check = QCheckBox("Use Ludashi pkg")
-        self.use_ludashi_check.setChecked(self.app_config.get('use_ludashi_pkg'))
-        self.use_ludashi_check.stateChanged.connect(lambda state: self.app_config.set('use_ludashi_pkg', bool(state)))
-        top_panel.addWidget(self.use_ludashi_check)
+        top_panel.addStretch(1)
 
         self.refresh_button = QPushButton("Refresh Apps")
         self.refresh_button.setFixedSize(90, 20)
@@ -111,8 +108,8 @@ class WinlatorTab(BaseGridTab):
         if self.main_window:
             self.main_window.start_worker(self.game_list_worker)
 
-    def _on_game_list_loaded(self, games_with_names):
-        self.all_games = sorted([{'name': name, 'path': path} for name, path in games_with_names], key=lambda x: x['name'].lower())
+    def _on_game_list_loaded(self, games_with_pkg):
+        self.all_games = sorted(games_with_pkg, key=lambda x: x['name'].lower())
 
         if not self.all_games:
             self.info_label.setText("No Winlator shortcut found on device.\nPlease export to frontend in Winlator app.")
@@ -135,39 +132,66 @@ class WinlatorTab(BaseGridTab):
 
     def _on_game_config_changed(self, game_path):
         self.config_changed.emit(game_path)
-        self.update_winlator_display()
+        self.populate_games_grid() # Repopulate to reflect potential changes
 
     def _on_game_config_deleted(self, game_path):
         self.config_deleted.emit(game_path)
-        self.update_winlator_display()
+        self.populate_games_grid() # Repopulate to reflect potential changes
 
     def populate_games_grid(self):
         self._clear_grid()
-
-        for i in range(4):
-            self.grid_layout.setColumnStretch(i, 1)
+        self.game_items = {}
 
         if not self.all_games:
-            self.info_label.setText("No Winlator shortcut found.")
-            self.info_label.setVisible(True)
+            self.show_message("No Winlator shortcut found.")
             return
 
-        row, col = 0, 0
-        for game_info in self.all_games:
-            item = WinlatorItemWidget(game_info, self.app_config, self.placeholder_icon) # Use WinlatorItemWidget
-            item.launch_requested.connect(self.launch_requested)
-            item.config_saved.connect(self._on_game_config_changed) # Refresh display after save
-            item.config_deleted.connect(self._on_game_config_deleted) # Refresh display after delete
-            item.icon_dropped.connect(self._on_icon_dropped)
+        self.show_grid()
 
-            self.grid_layout.addWidget(item, row, col)
-            self.game_items[game_info['path']] = item
+        # Separate games by package
+        cmod_games = [g for g in self.all_games if g['pkg'] == 'com.winlator.cmod']
+        ludashi_games = [g for g in self.all_games if g['pkg'] == 'com.ludashi.benchmark']
+        winlator_games = [g for g in self.all_games if g['pkg'] == 'com.winlator']
+        other_games = [g for g in self.all_games if g['pkg'] not in ['com.winlator.cmod', 'com.ludashi.benchmark', 'com.winlator']]
 
-            col += 1
-            if col > 3:
-                col = 0
+
+        row = 0
+        columns = 4
+        for i in range(columns):
+            self.grid_layout.setColumnStretch(i, 1)
+
+        def add_section(title, app_list):
+            nonlocal row
+            if not app_list: return
+            title_label = QLabel(f"<b>{title}</b>")
+            self.grid_layout.addWidget(title_label, row, 0, 1, columns)
+            row += 1
+            col = 0
+            for game_info in app_list:
+                item = WinlatorItemWidget(game_info, self.app_config, self.placeholder_icon)
+                item.launch_requested.connect(self.launch_requested)
+                item.config_saved.connect(self._on_game_config_changed)
+                item.config_deleted.connect(self._on_game_config_deleted)
+                item.icon_dropped.connect(self._on_icon_dropped)
+
+                self.grid_layout.addWidget(item, row, col)
+                self.game_items[game_info['path']] = item
+
+                col += 1
+                if col >= columns:
+                    col = 0
+                    row += 1
+            if col != 0:
                 row += 1
+
+        add_section("Winlator CMOD", cmod_games)
+        add_section("Ludashi", ludashi_games)
+        add_section("Winlator Official", winlator_games)
+        add_section("Other", other_games)
+
+        self.grid_layout.setRowStretch(row, 1)
         self.load_cached_icons()
+
 
     def load_cached_icons(self):
         for path, item in list(self.game_items.items()):
@@ -202,8 +226,10 @@ class WinlatorTab(BaseGridTab):
             return
 
         reply = show_message_box(
-            self, "Search missing icons?",
-            f"""{len(missing_icons)} games without icons.\n\n"
+            self,
+            "Search missing icons?",
+            f"""
+            {len(missing_icons)} games without icons.\n\n"
             "This process will download the .exe files to your phone temporarily and may take several minutes depending on the number and size of the file\n\n"
             "Wish to continue?""",
             icon=QMessageBox.Question,
@@ -266,6 +292,17 @@ class WinlatorTab(BaseGridTab):
         self.populate_games_grid() # Refresh grid after extraction
 
     def execute_launch(self, shortcut_path, game_name):
+        game_info = next((g for g in self.all_games if g['path'] == shortcut_path), None)
+        if not game_info:
+            show_message_box(self, "Error", "Could not find game information to launch.", icon=QMessageBox.Critical)
+            return
+
+        package_name = game_info.get('pkg', 'com.winlator.cmod') # Fallback just in case
+        if package_name == 'unknown':
+            show_message_box(self, "Error", "Could not determine Winlator package name from shortcut.\nCannot launch game.", icon=QMessageBox.Critical)
+            return
+
+
         game_specific_config = self.app_config.get_global_values_no_profile().copy()
         game_data = self.app_config.get_winlator_game_config(shortcut_path)
         if game_data:
@@ -273,9 +310,6 @@ class WinlatorTab(BaseGridTab):
 
         # IMPORTANT: Do NOT set 'start_app' here for Winlator flow
         game_specific_config['start_app'] = '' # Ensure it's empty for initial scrcpy launch
-
-        use_ludashi = self.app_config.get('use_ludashi_pkg')
-        package_name = "com.ludashi.benchmark" if use_ludashi else "com.winlator.cmod"
 
         icon_key = os.path.basename(shortcut_path)
         icon_path = os.path.join(self.app_config.get_icon_cache_dir(), f"{icon_key}.png")
@@ -320,6 +354,7 @@ class WinlatorTab(BaseGridTab):
         self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Winlator Launch Error", msg, icon=QMessageBox.Critical))
         if self.main_window:
             self.main_window.start_worker(self.winlator_launch_worker)
+
 
 
 

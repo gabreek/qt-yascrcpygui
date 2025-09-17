@@ -43,7 +43,7 @@ class AppConfig:
         'video_buffer': 0,
         'try_unlock': False,
     }
-    GLOBAL_KEYS = {'theme', 'use_ludashi_pkg'}
+    GLOBAL_KEYS = {'theme'}
     PROFILE_TYPES = {'app': 'app_metadata', 'winlator': 'winlator_game_configs'}
 
 

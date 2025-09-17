@@ -181,8 +181,12 @@ class GameListWorker(BaseRunnableWorker):
 
     def run(self):
         try:
-            games = adb_handler.list_winlator_shortcuts_with_names()
-            self.signals.result.emit(games)
+            shortcuts = adb_handler.list_winlator_shortcuts_with_names()
+            games_with_pkg = []
+            for name, path in shortcuts:
+                pkg = adb_handler.get_package_name_from_shortcut(path)
+                games_with_pkg.append({'name': name, 'path': path, 'pkg': pkg})
+            self.signals.result.emit(games_with_pkg)
         except Exception as e:
             self.signals.error.emit(str(e))
         finally:
