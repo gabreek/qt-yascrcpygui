@@ -3,7 +3,7 @@ import os
 from PySide6.QtCore import Qt, QPoint, QTimer, QThreadPool, Signal
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                                QPushButton, QLabel, QTabWidget, QMessageBox, QInputDialog, QLineEdit)
-from PySide6.QtGui import QIcon, QPalette
+from PySide6.QtGui import QIcon, QPalette, QColor
 
 from .scrcpy_tab import ScrcpyTab
 from .apps_tab import AppsTab
@@ -216,34 +216,39 @@ class MainWindow(QMainWindow):
 
     def update_theme(self):
         """Atualiza o tema da janela principal e da barra de título."""
-        # Unifica a lógica para usar a paleta do sistema para todos os temas
-        main_bg_color = self.palette().color(QPalette.ColorRole.Window).name()
-        border_color = self.palette().color(QPalette.ColorRole.Mid).name()
-        title_text_color = self.palette().color(QPalette.ColorRole.WindowText).name()
-        minimize_hover_color = self.palette().color(QPalette.ColorRole.AlternateBase).name()
-        minimize_pressed_color = self.palette().color(QPalette.ColorRole.Mid).name()
-        tab_bg_color = self.palette().color(QPalette.ColorRole.Base).name()
-        tab_text_color = self.palette().color(QPalette.ColorRole.ButtonText).name()
-        tab_selected_bg_color = self.palette().color(QPalette.ColorRole.Highlight).name()
-        tab_selected_text_color = self.palette().color(QPalette.ColorRole.HighlightedText).name()
-        tab_hover_bg_color = self.palette().color(QPalette.ColorRole.AlternateBase).name()
+        palette = self.palette()
+        window_bg_qcolor = palette.color(QPalette.ColorRole.Window)
+        main_bg_color = window_bg_qcolor.name()
+
+        if self.is_dark_theme():
+            border_color = window_bg_qcolor.lighter(170).name()
+        else:
+            border_color = window_bg_qcolor.darker(140).name()
+
+        title_text_color = palette.color(QPalette.ColorRole.WindowText).name()
+        minimize_hover_color = palette.color(QPalette.ColorRole.AlternateBase).name()
+        minimize_pressed_color = palette.color(QPalette.ColorRole.Mid).name()
+        tab_bg_color = palette.color(QPalette.ColorRole.Base).name()
+        tab_text_color = palette.color(QPalette.ColorRole.ButtonText).name()
+        tab_selected_bg_color = palette.color(QPalette.ColorRole.Highlight).name()
+        tab_selected_text_color = palette.color(QPalette.ColorRole.HighlightedText).name()
+        tab_hover_bg_color = palette.color(QPalette.ColorRole.AlternateBase).name()
 
         style = f"""
             #main_widget {{
                 background-color: {main_bg_color};
                 border: 1px solid {border_color};
-                border-radius: 8px;
+                border-radius: 15px;
             }}
             QTabWidget::pane {{
-                border: 1px solid {border_color};
-                border-top: none;
+                border: none;
             }}
             QTabBar::tab {{
                 background: {tab_bg_color};
                 color: {tab_text_color};
                 padding: 8px;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
             }}
             QTabBar::tab:selected {{
                 background: {tab_selected_bg_color};
@@ -251,6 +256,21 @@ class MainWindow(QMainWindow):
             }}
             QTabBar::tab:!selected:hover {{
                 background: {tab_hover_bg_color};
+            }}
+            QGroupBox {{
+                border: 1px solid {border_color};
+                border-radius: 10px;
+                margin-top: 7px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 10px;
+                color: {title_text_color};
+            }}
+            QScrollArea {{
+                border: none;
+                background-color: transparent;
             }}
             QPushButton {{
                 background-color: {main_bg_color};
