@@ -90,12 +90,12 @@ Then, you can run it directly:
 
 ### 1. System Dependencies
 
-First, ensure you have `adb` and `scrcpy` installed and available in your system's PATH.
+First, ensure you have `adb`, `scrcpy` and xcb platform plugins installed and available in your system's PATH.
 
 ```bash
 # On Debian/Ubuntu based systems
 sudo apt update
-sudo apt install adb scrcpy
+sudo apt install adb scrcpy libxcb-cursor0 libxcb-ewmh2 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0
 ```
 
 ### 2. Running from Source (Optional, for Developers)
