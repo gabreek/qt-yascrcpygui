@@ -247,8 +247,8 @@ class MainWindow(QMainWindow):
                 background: {tab_bg_color};
                 color: {tab_text_color};
                 padding: 8px;
-                border-top-left-radius: 10px;
-                border-top-right-radius: 10px;
+                border-radius: 10px;
+                margin: 4px 2px;
             }}
             QTabBar::tab:selected {{
                 background: {tab_selected_bg_color};
