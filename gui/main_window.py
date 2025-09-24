@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
                 min-height: 20px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: {title_text_color};
+                background: {tab_selected_bg_color};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0;
