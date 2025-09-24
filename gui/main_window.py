@@ -1,7 +1,7 @@
 import sys
 import os
 from PySide6.QtCore import Qt, QPoint, QTimer, QThreadPool, Signal
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                                QPushButton, QLabel, QTabWidget, QMessageBox, QInputDialog, QLineEdit)
 from PySide6.QtGui import QIcon, QPalette, QColor
 
@@ -191,7 +191,7 @@ class MainWindow(QMainWindow):
 
         if self.app_config.get('try_unlock'):
             lock_state = adb_handler.get_device_lock_state(device_id)
-            
+
             if lock_state in ['LOCKED_SCREEN_ON', 'LOCKED_SCREEN_OFF']:
                 pin, ok = QInputDialog.getText(self, "Device Locked", "Enter PIN to unlock:", QLineEdit.Password)
                 if ok and pin:
@@ -226,7 +226,8 @@ class MainWindow(QMainWindow):
             border_color = window_bg_qcolor.darker(140).name()
 
         title_text_color = palette.color(QPalette.ColorRole.WindowText).name()
-        minimize_hover_color = palette.color(QPalette.ColorRole.AlternateBase).name()
+        minimize_hover_qcolor = palette.color(QPalette.ColorRole.AlternateBase)
+        minimize_hover_color = minimize_hover_qcolor.lighter(130).name()
         minimize_pressed_color = palette.color(QPalette.ColorRole.Mid).name()
         tab_bg_color = palette.color(QPalette.ColorRole.Base).name()
         tab_text_color = palette.color(QPalette.ColorRole.ButtonText).name()
@@ -272,6 +273,28 @@ class MainWindow(QMainWindow):
                 border: none;
                 background-color: transparent;
             }}
+            QScrollBar:vertical {{
+                border: none;
+                background: transparent;
+                width: 6px;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {border_color};
+                border-radius: 2px;
+                min-height: 20px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {title_text_color};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+                border: none;
+                background: none;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
             QPushButton {{
                 background-color: {main_bg_color};
                 color: {title_text_color};
@@ -286,16 +309,17 @@ class MainWindow(QMainWindow):
             }}
         """
         self.setStyleSheet(style)
-        
+
         title_style = f"color: {title_text_color}; padding-left: 10px; font-weight: bold;"
         self.title_bar.title_label.setStyleSheet(title_style)
 
         close_button_style = f"""
             QPushButton {{
                 background-color: transparent;
-                color: {title_text_color};
+                color: {{title_text_color}};
                 border: none;
                 font-size: 16px;
+                border-radius: 10px;
             }}
             QPushButton:hover {{
                 background-color: #d32f2f;
@@ -312,6 +336,7 @@ class MainWindow(QMainWindow):
                 color: {title_text_color};
                 border: none;
                 font-size: 16px;
+                border-radius: 10px;
             }}
             QPushButton:hover {{
                 background-color: {minimize_hover_color};
