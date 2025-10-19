@@ -151,7 +151,7 @@ def pull_file(remote_path, local_path, device_id=None):
         print(f"Failed to pull file: {e}")
         return False
 
-def start_winlator_app(shortcut_path, display_id, package_name, device_id=None):
+def start_winlator_app(shortcut_path, display_id, package_name, device_id=None, windowing_mode=1):
     """Inicia um aplicativo Winlator em um display virtual específico."""
     quoted_path = shlex.quote(shortcut_path)
     activity_name = ".XServerDisplayActivity"
@@ -160,10 +160,43 @@ def start_winlator_app(shortcut_path, display_id, package_name, device_id=None):
         f"am start --display {display_id} "
         f"-n {component} "
         f"--es shortcut_path {quoted_path} "
-        f"--activity-clear-task --activity-clear-top --activity-no-history"
+        f"--activity-clear-task --activity-clear-top --activity-no-history --windowingMode {windowing_mode}"
     )
     command = ['shell', remote_command_str]
     _run_adb_command(command, device_id, print_command=True)
+
+def _get_launcher_activity(package_name, device_id=None):
+    """Resolves the main launcher activity for a given package."""
+    command = [
+        'shell', 'cmd', 'package', 'resolve-activity', '--brief',
+        '-a', 'android.intent.action.MAIN',
+        '-c', 'android.intent.category.LAUNCHER',
+        package_name
+    ]
+    output = _run_adb_command(command, device_id, ignore_errors=True)
+    if output:
+        # The output is typically the last line and looks like: com.package/.Activity
+        # Or it might have other lines, so we find the one with the package name.
+        for line in reversed(output.splitlines()):
+            if package_name in line and '/' in line:
+                return line.strip()
+    return None
+
+def start_app_on_display(package_name, display_id, windowing_mode, device_id=None):
+    """Inicia um aplicativo Android em um display virtual específico."""
+    component = _get_launcher_activity(package_name, device_id)
+    if not component:
+        print(f"Error: Could not resolve launcher activity for package {package_name}")
+        return
+
+    remote_command_str = (
+        f"am start --display {display_id} "
+        f"-n {shlex.quote(component)} "
+        f"--activity-clear-task --activity-clear-top --activity-no-history --windowingMode {windowing_mode}"
+    )
+    command = ['shell', remote_command_str]
+    _run_adb_command(command, device_id, print_command=True)
+
 
 def get_connected_device_id():
     """Retorna o ID do primeiro dispositivo ADB conectado que está online."""

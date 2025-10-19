@@ -1,7 +1,7 @@
 # FILE: gui/base_grid_tab.py
 # PURPOSE: Base class for tabs that display items in a grid.
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QGridLayout, QLabel, QStackedWidget
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QGridLayout, QLabel, QStackedWidget, QScroller
 from PySide6.QtCore import Qt
 
 class BaseGridTab(QWidget):
@@ -20,6 +20,8 @@ class BaseGridTab(QWidget):
 
         # Page 0: Scroll Area for items
         self.scroll_area = QScrollArea()
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.verticalScrollBar().setSingleStep(15)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_content = QWidget()

@@ -12,7 +12,7 @@ import sys
 
 from .base_grid_tab import BaseGridTab
 from .app_item_widget import AppItemWidget
-from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker
+from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker
 from .dialogs import show_message_box
 
 
@@ -290,6 +290,31 @@ class AppsTab(BaseGridTab):
         print(f"Icon error for {pkg_name}: {error_msg}")
         self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True})
 
+    def _on_display_id_found_for_alt_launch(self, display_id, shortcut_path, package_name):
+        if not display_id:
+            show_message_box(self, "Error", "Virtual display not found for alternate launch.", icon=QMessageBox.Critical)
+            return
+
+        # Correctly determine windowing mode: prioritize specific, then global, then default
+        full_config = self.app_config.get_global_values_no_profile().copy()
+        app_specific_config = self.app_config.get_app_metadata(package_name).get('config', {})
+        if app_specific_config:
+            full_config.update(app_specific_config)
+
+        windowing_mode_str = full_config.get('windowing_mode', 'Fullscreen') # Default to Fullscreen
+        windowing_mode_int = 1 if windowing_mode_str == 'Fullscreen' else 2
+
+        # Start the AppLaunchWorker
+        app_launch_worker = AppLaunchWorker(
+            package_name=package_name,
+            display_id=display_id,
+            windowing_mode=windowing_mode_int,
+            device_id=self.app_config.get('device_id')
+        )
+        app_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "App Launch Error", msg, icon=QMessageBox.Critical))
+        if self.main_window:
+            self.main_window.start_worker(app_launch_worker)
+
     def execute_launch(self, package_name, app_name):
         config_to_use = self.app_config.get_global_values_no_profile().copy()
         app_metadata = self.app_config.get_app_metadata(package_name)
@@ -297,27 +322,32 @@ class AppsTab(BaseGridTab):
         is_launcher = (package_name == self.app_config.get('default_launcher'))
         has_specific_config = 'config' in app_metadata and app_metadata['config']
 
-        if is_launcher:
-            if has_specific_config:
-                # Launcher has a specific config, so use it.
-                config_to_use.update(app_metadata['config'])
-            else:
-                # No specific config for launcher. Check if global setting is a virtual display.
-                if config_to_use.get('new_display') and config_to_use.get('new_display') != 'Disabled':
-                    # If so, override it to use max_size = 0 instead.
-                    config_to_use['new_display'] = 'Disabled'
-                    config_to_use['max_size'] = '0'
+        # Load specific config if it exists, for both regular apps and launcher
+        if has_specific_config:
+            config_to_use.update(app_metadata['config'])
 
-            # Always signal to scrcpy_handler to send a HOME keyevent for the launcher.
-            config_to_use['start_app'] = 'launcher_shortcut'
-        else:
-            # It's a regular app, just load its specific config if it exists.
-            if has_specific_config:
-                config_to_use.update(app_metadata['config'])
-            config_to_use['start_app'] = package_name
+        # Determine if we use the alternate launch method
+        use_alt_launch = config_to_use.get('alternate_launch_method', False)
 
+        # Prepare for launch
         window_title = app_name
         device_id = self.app_config.get('device_id')
+        session_type = 'app' # Default session type
+
+        if is_launcher:
+            # Launcher has special handling
+            if config_to_use.get('new_display') and config_to_use.get('new_display') != 'Disabled':
+                config_to_use['new_display'] = 'Disabled'
+                config_to_use['max_size'] = '0'
+            config_to_use['start_app'] = 'launcher_shortcut'
+        elif use_alt_launch:
+            # Alternate launch method for regular apps
+            session_type = 'app_alt_launch'
+            config_to_use['start_app'] = '' # scrcpy must not start the app directly
+            config_to_use['package_name_for_alt_launch'] = package_name
+        else:
+            # Standard app launch
+            config_to_use['start_app'] = package_name
 
         # Handle icon path
         if is_launcher:
@@ -328,7 +358,13 @@ class AppsTab(BaseGridTab):
         if not os.path.exists(icon_path):
             icon_path = None
 
-        launch_worker = ScrcpyLaunchWorker(config_to_use, window_title, device_id, icon_path, 'app')
+        # Create and configure the launch worker
+        launch_worker = ScrcpyLaunchWorker(config_to_use, window_title, device_id, icon_path, session_type)
         launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Scrcpy Error", msg, icon=QMessageBox.Critical))
+
+        # If using alternate launch, connect the signal to the appropriate slot
+        if use_alt_launch and not is_launcher:
+            launch_worker.signals.display_id_found.connect(self._on_display_id_found_for_alt_launch)
+
         if self.main_window:
             self.main_window.start_worker(launch_worker)

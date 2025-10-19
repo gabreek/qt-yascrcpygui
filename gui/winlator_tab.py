@@ -345,11 +345,21 @@ class WinlatorTab(BaseGridTab):
             show_message_box(self, "Error", "Virtual display not found.", icon=QMessageBox.Critical)
             return
 
+        # Correctly determine windowing mode: prioritize specific, then global, then default
+        full_config = self.app_config.get_global_values_no_profile().copy()
+        game_specific_config = self.app_config.get_winlator_game_config(shortcut_path)
+        if game_specific_config:
+            full_config.update(game_specific_config)
+
+        windowing_mode_str = full_config.get('windowing_mode', 'Fullscreen') # Default to Fullscreen
+        windowing_mode_int = 1 if windowing_mode_str == 'Fullscreen' else 2
+
         self.winlator_launch_worker = WinlatorLaunchWorker(
             shortcut_path=shortcut_path,
             display_id=display_id,
             package_name=package_name,
-            device_id=adb_handler.get_connected_device_id()
+            device_id=adb_handler.get_connected_device_id(),
+            windowing_mode=windowing_mode_int
         )
         self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Winlator Launch Error", msg, icon=QMessageBox.Critical))
         if self.main_window:

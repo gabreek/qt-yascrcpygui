@@ -42,6 +42,8 @@ class AppConfig:
         'audio_buffer': 5,
         'video_buffer': 0,
         'try_unlock': False,
+        'alternate_launch_method': False,
+        'windowing_mode': 'Fullscreen',
     }
     GLOBAL_KEYS = {'theme'}
     PROFILE_TYPES = {'app': 'app_metadata', 'winlator': 'winlator_game_configs'}

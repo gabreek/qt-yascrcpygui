@@ -49,6 +49,8 @@ class ScrcpyTab(QWidget):
         main_layout.setSpacing(10)
 
         self.scroll_area = QScrollArea(self)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.verticalScrollBar().setSingleStep(15)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         main_layout.addWidget(self.scroll_area)
@@ -120,6 +122,7 @@ class ScrcpyTab(QWidget):
         profile_key = self.profile_combo.itemData(index)
         self.app_config.load_profile(profile_key)
         self._update_all_widgets_from_config()
+        self._update_launch_control_widgets_state()
 
 
     def _add_combo_box_row(self, parent_layout, label_text, var_key, options):
@@ -146,7 +149,9 @@ class ScrcpyTab(QWidget):
 
     def _create_general_settings_group(self):
         self.general_settings_group, layout = self._create_group_box("General Settings")
+
         fields = [
+            ("Window Mode", 'windowing_mode', ["Fullscreen", "Freeform"]),
             ("Mouse Mode", 'mouse_mode', ["sdk","uhid","aoa"]),
             ("Gamepad Mode", 'gamepad_mode', ["disabled","uhid","aoa"]),
             ("Keyboard Mode", 'keyboard_mode', ["disabled","sdk","uhid","aoa"]),
@@ -181,8 +186,12 @@ class ScrcpyTab(QWidget):
 
                 if var_key == 'new_display':
                     editor.currentTextChanged.connect(self._update_resolution_state)
+                    editor.currentTextChanged.connect(self._update_launch_control_widgets_state)
                 elif var_key == 'max_size':
                     self.resolution_combo = editor
+                elif var_key == 'windowing_mode':
+                    self.windowing_mode_combo = editor
+
 
             editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             editor.setMaximumWidth(300)
@@ -191,6 +200,33 @@ class ScrcpyTab(QWidget):
             self.general_editors[var_key] = editor
 
         self._update_resolution_state()
+        self._update_launch_control_widgets_state()
+
+    def _update_launch_control_widgets_state(self):
+        if not hasattr(self, 'option_checkboxes') or not hasattr(self, 'windowing_mode_combo') or not hasattr(self, 'general_editors'):
+            return
+
+        alt_launch_checkbox = self.option_checkboxes.get('alternate_launch_method')
+        virtual_display_combo = self.general_editors.get('new_display')
+
+        if not alt_launch_checkbox or not virtual_display_combo:
+            return
+
+        # New Rule: Check if a virtual display is active
+        is_virtual_display_active = virtual_display_combo.currentText() != 'Disabled'
+
+        # Determine profile type
+        active_profile_key = self.app_config.active_profile
+        is_winlator_profile = active_profile_key in self.app_config.get_winlator_config_keys(include_name=False)
+
+        # Rule 1: Disable "Alternate Launch Method" for Winlator profiles or if no virtual display is active
+        alt_launch_checkbox.setDisabled(is_winlator_profile or not is_virtual_display_active)
+        if is_winlator_profile:
+            alt_launch_checkbox.setChecked(True) # It's the default method for them
+
+        # Rule 2: Manage "Windowing Mode" dropdown state
+        alt_launch_enabled = alt_launch_checkbox.isChecked()
+        self.windowing_mode_combo.setEnabled((is_winlator_profile or alt_launch_enabled) and is_virtual_display_active)
 
     def _create_video_settings_group(self):
         self.video_settings_group, layout = self._create_group_box("Video Settings")
@@ -258,11 +294,16 @@ class ScrcpyTab(QWidget):
             ("Stay Awake", 'stay_awake'), ("Disable mipmaps", 'mipmaps'),
             ("No Audio", 'no_audio'), ("No Video", 'no_video'),
             ("Unlock device", 'try_unlock'),
+            ("Alternate Launch Method", 'alternate_launch_method'),
         ]
         for i, (text, var_key) in enumerate(config_checkboxes):
             checkbox = QCheckBox(text)
             checkbox.setChecked(self.app_config.get(var_key, False))
             checkbox.stateChanged.connect(lambda state, vk=var_key: self.app_config.set(vk, bool(state)))
+
+            if var_key == 'alternate_launch_method':
+                checkbox.stateChanged.connect(self._update_launch_control_widgets_state)
+
             layout.addWidget(checkbox, i // 2, i % 2)
             self.option_checkboxes[var_key] = checkbox
         layout.setColumnStretch(0, 1)
@@ -458,6 +499,7 @@ class ScrcpyTab(QWidget):
         self._update_encoder_options(self.v_codec_combo, self.v_encoder_combo, self.video_encoders, 'video_encoder')
         self._update_encoder_options(self.a_codec_combo, self.a_encoder_combo, self.audio_encoders, 'audio_encoder')
         self._update_resolution_state()
+        self._update_launch_control_widgets_state()
 
         # Unblock signals
         for editor in self.general_editors.values(): editor.blockSignals(False)

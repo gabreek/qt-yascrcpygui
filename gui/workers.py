@@ -93,7 +93,7 @@ class ScrcpyLaunchWorker(BaseRunnableWorker):
             process = scrcpy_handler.launch_scrcpy(
                 config_values=self.config_values, window_title=self.window_title,
                 device_id=self.device_id, icon_path=self.icon_path, session_type=self.session_type,
-                capture_output=(self.session_type == 'winlator')
+                capture_output=(self.session_type in ['winlator', 'app_alt_launch'])
             )
 
             # Add the launched session to the global list
@@ -107,10 +107,10 @@ class ScrcpyLaunchWorker(BaseRunnableWorker):
 
             self.signals.scrcpy_process_started.emit(process)
 
-            if self.session_type == 'winlator':
-                self.display_id = None
-                for line in process.stdout:
-                    print(line, end='')
+            if self.session_type in ['winlator', 'app_alt_launch']:
+                display_id = None
+                for line in iter(process.stdout.readline, ''):
+                    print(line, end='') # Print scrcpy output in real-time
                     match = re.search(r'\[server\] INFO: New display: .*\(id=(\d+)\)', line)
                     if match:
                         display_id = match.group(1)
@@ -118,7 +118,13 @@ class ScrcpyLaunchWorker(BaseRunnableWorker):
                         break
 
                 if display_id:
-                    self.signals.display_id_found.emit(display_id, self.config_values.get('shortcut_path'), self.config_values.get('package_name'))
+                    if self.session_type == 'winlator':
+                        shortcut_path = self.config_values.get('shortcut_path')
+                        package_name = self.config_values.get('package_name')
+                        self.signals.display_id_found.emit(display_id, shortcut_path, package_name)
+                    elif self.session_type == 'app_alt_launch':
+                        package_name = self.config_values.get('package_name_for_alt_launch')
+                        self.signals.display_id_found.emit(display_id, None, package_name)
                 else:
                     process.terminate()
                     raise RuntimeError("Could not find display ID in Scrcpy output.")
@@ -263,13 +269,14 @@ class WinlatorLaunchWorkerSignals(QObject):
     error = Signal(str)
 
 class WinlatorLaunchWorker(BaseRunnableWorker):
-    def __init__(self, shortcut_path, display_id, package_name, device_id):
+    def __init__(self, shortcut_path, display_id, package_name, device_id, windowing_mode):
         super().__init__() # Call BaseRunnableWorker's init
         self.signals = WinlatorLaunchWorkerSignals() # Then set up specific signals
         self.shortcut_path = shortcut_path
         self.display_id = display_id
         self.package_name = package_name
         self.device_id = device_id
+        self.windowing_mode = windowing_mode
 
     def run(self):
         try:
@@ -277,12 +284,36 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
                 shortcut_path=self.shortcut_path,
                 display_id=self.display_id,
                 package_name=self.package_name,
-                device_id=self.device_id
+                device_id=self.device_id,
+                windowing_mode=self.windowing_mode
             )
         except Exception as e:
             self.signals.error.emit(f"Failed to launch Winlator app: {e}")
         finally:
             self.signals.finished.emit()
+
+class AppLaunchWorker(BaseRunnableWorker):
+    def __init__(self, package_name, display_id, windowing_mode, device_id):
+        super().__init__()
+        self.signals = BaseRunnableWorkerSignals() # Generic signals: finished, error
+        self.package_name = package_name
+        self.display_id = display_id
+        self.windowing_mode = windowing_mode
+        self.device_id = device_id
+
+    def run(self):
+        try:
+            adb_handler.start_app_on_display(
+                package_name=self.package_name,
+                display_id=self.display_id,
+                windowing_mode=self.windowing_mode,
+                device_id=self.device_id
+            )
+        except Exception as e:
+            self.signals.error.emit(f"Failed to launch app: {e}")
+        finally:
+            self.signals.finished.emit()
+
 
 # --- Main Window Workers ---
 class DeviceCheckWorkerSignals(QObject):
