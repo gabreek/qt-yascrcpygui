@@ -35,14 +35,14 @@ class AppListWorkerSignals(QObject):
     result = Signal(tuple)
 
 class AppListWorker(BaseRunnableWorker):
-    def __init__(self, device_id):
+    def __init__(self, connection_id):
         super().__init__()
-        self.device_id = device_id
+        self.connection_id = connection_id
         self.signals = AppListWorkerSignals()
 
     def run(self):
         try:
-            user_apps, system_apps = scrcpy_handler.list_installed_apps(self.device_id)
+            user_apps, system_apps = scrcpy_handler.list_installed_apps(self.connection_id)
             self.signals.result.emit((user_apps, system_apps))
         except Exception as e:
             self.signals.error.emit(str(e))
@@ -77,12 +77,12 @@ class ScrcpyLaunchWorkerSignals(QObject):
     display_id_found = Signal(str, str, str)
 
 class ScrcpyLaunchWorker(BaseRunnableWorker):
-    def __init__(self, config_values, window_title, device_id, icon_path, session_type):
+    def __init__(self, config_values, window_title, connection_id, icon_path, session_type):
         super().__init__() # Call BaseRunnableWorker's init
         self.signals = ScrcpyLaunchWorkerSignals() # Then set up specific signals
         self.config_values = config_values
         self.window_title = window_title
-        self.device_id = device_id
+        self.connection_id = connection_id
         self.icon_path = icon_path
         self.session_type = session_type
 
@@ -92,7 +92,7 @@ class ScrcpyLaunchWorker(BaseRunnableWorker):
         try:
             process = scrcpy_handler.launch_scrcpy(
                 config_values=self.config_values, window_title=self.window_title,
-                device_id=self.device_id, icon_path=self.icon_path, session_type=self.session_type,
+                device_id=self.connection_id, icon_path=self.icon_path, session_type=self.session_type,
                 capture_output=(self.session_type in ['winlator', 'app_alt_launch'])
             )
 
@@ -139,16 +139,16 @@ class DeviceInfoWorkerSignals(BaseRunnableWorkerSignals):
     result = Signal(dict)
 
 class DeviceInfoWorker(BaseRunnableWorker):
-    def __init__(self, device_id):
+    def __init__(self, connection_id):
         super().__init__()
-        self.device_id = device_id
+        self.connection_id = connection_id
         self.signals = DeviceInfoWorkerSignals()
 
     def run(self):
         try:
-            info = adb_handler.get_device_info(self.device_id)
+            info = adb_handler.get_device_info(self.connection_id)
             if info:
-                launcher = adb_handler.get_default_launcher(self.device_id)
+                launcher = adb_handler.get_default_launcher(self.connection_id)
                 info['default_launcher'] = launcher
                 self.signals.result.emit(info)
         except Exception as e:
@@ -181,16 +181,17 @@ class GameListWorkerSignals(QObject):
     result = Signal(object)
 
 class GameListWorker(BaseRunnableWorker):
-    def __init__(self):
+    def __init__(self, connection_id):
         super().__init__()
+        self.connection_id = connection_id
         self.signals = GameListWorkerSignals()
 
     def run(self):
         try:
-            shortcuts = adb_handler.list_winlator_shortcuts_with_names()
+            shortcuts = adb_handler.list_winlator_shortcuts_with_names(self.connection_id)
             games_with_pkg = []
             for name, path in shortcuts:
-                pkg = adb_handler.get_package_name_from_shortcut(path)
+                pkg = adb_handler.get_package_name_from_shortcut(path, self.connection_id)
                 games_with_pkg.append({'name': name, 'path': path, 'pkg': pkg})
             self.signals.result.emit(games_with_pkg)
         except Exception as e:
@@ -203,13 +204,14 @@ class IconExtractorWorkerSignals(QObject):
     finished = Signal()
 
 class IconExtractorWorker(BaseRunnableWorker):
-    def __init__(self, extraction_queue, app_config, temp_dir, placeholder_icon):
+    def __init__(self, extraction_queue, app_config, temp_dir, placeholder_icon, connection_id):
         super().__init__()
         self.signals = IconExtractorWorkerSignals()
         self.extraction_queue = extraction_queue
         self.app_config = app_config
         self.temp_dir = temp_dir
         self.placeholder_icon = placeholder_icon
+        self.connection_id = connection_id
 
     def run(self):
         while True:
@@ -224,10 +226,10 @@ class IconExtractorWorker(BaseRunnableWorker):
             local_exe_path = None
 
             try:
-                remote_exe_path = adb_handler.get_game_executable_info(path)
+                remote_exe_path = adb_handler.get_game_executable_info(path, self.connection_id)
                 if remote_exe_path:
                     local_exe_path = os.path.join(self.temp_dir, f"{os.path.basename(remote_exe_path)}_{int(time.time()*1000)}")
-                    adb_handler.pull_file(remote_exe_path, local_exe_path)
+                    adb_handler.pull_file(remote_exe_path, local_exe_path, self.connection_id)
                     if os.path.exists(local_exe_path):
                         result_queue = Queue()
                         process = Process(target=extract_icon_in_process, args=(local_exe_path, save_path, result_queue))
@@ -269,13 +271,13 @@ class WinlatorLaunchWorkerSignals(QObject):
     error = Signal(str)
 
 class WinlatorLaunchWorker(BaseRunnableWorker):
-    def __init__(self, shortcut_path, display_id, package_name, device_id, windowing_mode):
+    def __init__(self, shortcut_path, display_id, package_name, connection_id, windowing_mode):
         super().__init__() # Call BaseRunnableWorker's init
         self.signals = WinlatorLaunchWorkerSignals() # Then set up specific signals
         self.shortcut_path = shortcut_path
         self.display_id = display_id
         self.package_name = package_name
-        self.device_id = device_id
+        self.connection_id = connection_id
         self.windowing_mode = windowing_mode
 
     def run(self):
@@ -284,7 +286,7 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
                 shortcut_path=self.shortcut_path,
                 display_id=self.display_id,
                 package_name=self.package_name,
-                device_id=self.device_id,
+                device_id=self.connection_id,
                 windowing_mode=self.windowing_mode
             )
         except Exception as e:
@@ -293,13 +295,13 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
             self.signals.finished.emit()
 
 class AppLaunchWorker(BaseRunnableWorker):
-    def __init__(self, package_name, display_id, windowing_mode, device_id):
+    def __init__(self, package_name, display_id, windowing_mode, connection_id):
         super().__init__()
         self.signals = BaseRunnableWorkerSignals() # Generic signals: finished, error
         self.package_name = package_name
         self.display_id = display_id
         self.windowing_mode = windowing_mode
-        self.device_id = device_id
+        self.connection_id = connection_id
 
     def run(self):
         try:
@@ -307,7 +309,7 @@ class AppLaunchWorker(BaseRunnableWorker):
                 package_name=self.package_name,
                 display_id=self.display_id,
                 windowing_mode=self.windowing_mode,
-                device_id=self.device_id
+                device_id=self.connection_id
             )
         except Exception as e:
             self.signals.error.emit(f"Failed to launch app: {e}")
@@ -351,10 +353,26 @@ class DeviceConfigLoaderWorker(QRunnable):
 
     def run(self):
         try:
-            self.app_config.load_config_for_device(self.device_id)
-            device_info = adb_handler.get_device_info(self.device_id)
+            connection_id = self.device_id
+            configuration_id = self.device_id
+
+            if ':' in connection_id: # It's a Wi-Fi device
+                serial_no = adb_handler.get_serial_from_wifi_device(connection_id)
+                if serial_no:
+                    configuration_id = serial_no
+
+            # Load config using the real serial number (or IP if serial not found)
+            self.app_config.load_config_for_device(configuration_id)
+            
+            # Store the connection ID for the whole app to use for ADB commands
+            self.app_config.connection_id = connection_id
+            
+            # Run ADB commands using the ID that ADB recognizes
+            device_info = adb_handler.get_device_info(connection_id)
+            
+            # Pass the connection_id back to the main window
             output = {
-                "device_id": self.device_id,
+                "device_id": connection_id,
                 "device_info": device_info,
             }
             self.signals.result.emit(output)

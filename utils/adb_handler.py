@@ -198,6 +198,29 @@ def start_app_on_display(package_name, display_id, windowing_mode, device_id=Non
     _run_adb_command(command, device_id, print_command=True)
 
 
+def connect_wifi(address):
+    """Connects to a device via Wi-Fi."""
+    return _run_adb_command(['connect', address], print_command=True)
+
+def disconnect_wifi(address):
+    """Disconnects from a Wi-Fi device."""
+    return _run_adb_command(['disconnect', address], print_command=True)
+
+def get_device_ip(device_id):
+    """Gets the IP address of the device from wlan0 interface."""
+    output = _run_adb_command(['shell', 'ip', 'addr', 'show', 'wlan0'], device_id=device_id, ignore_errors=True)
+    if output:
+        match = re.search(r'inet (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/', output)
+        if match:
+            return match.group(1)
+    return None
+
+def get_serial_from_wifi_device(device_id):
+    """Gets the ro.serialno property from a device connected via Wi-Fi."""
+    if not device_id or ':' not in device_id:
+        return None
+    return _run_adb_command(['shell', 'getprop', 'ro.serialno'], device_id=device_id, ignore_errors=True)
+
 def get_connected_device_id():
     """Retorna o ID do primeiro dispositivo ADB conectado que está online."""
     try:

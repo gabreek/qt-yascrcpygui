@@ -52,7 +52,9 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
     if device_id:
         cmd.extend(['-s', device_id])
 
-    title = window_title or config_values.get('start_app_name') or 'Android Device'
+    # Sanitize device_id for window title if it's an IP address
+    title_device_part = device_id.replace(':', ' ') if device_id else 'Android Device'
+    title = window_title or config_values.get('start_app_name') or title_device_part
     if title and title != 'None':
         cmd.append(f"--window-title={title}")
 

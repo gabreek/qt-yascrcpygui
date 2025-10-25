@@ -54,6 +54,7 @@ class AppConfig:
         self.values = self._DEFAULT_VALUES.copy()
         self.CONFIG_FILE = None
         self.active_profile = 'global'
+        self.connection_id = None
 
         if platform.system() == "Windows":
             self.CONFIG_DIR = os.path.join(os.getenv('APPDATA'), 'ScrcpyLauncher')
@@ -73,6 +74,9 @@ class AppConfig:
 
     def get(self, key, default=None):
         return self.values.get(key, default)
+
+    def get_connection_id(self):
+        return self.connection_id or self.get('device_id')
 
     def set(self, key, value):
         if key in ['device_id', 'device_commercial_name']:
@@ -281,6 +285,7 @@ class AppConfig:
         if device_id is None or device_id == "no_device":
             self.CONFIG_FILE = None
             self.config_data = {}
+            self.connection_id = None
             default_values = self._DEFAULT_VALUES.copy()
             # Load global keys from file, fall back to defaults
             for key in self.GLOBAL_KEYS:
@@ -289,9 +294,18 @@ class AppConfig:
             self.values['device_id'] = None
             return False
 
-        self.CONFIG_FILE = os.path.join(self.CONFIG_DIR, f'config_{device_id}.json')
+        # device_id here is the configuration_id (serial number)
+        self.values['device_id'] = device_id
+
+        sanitized_id = device_id.replace(':', '_').replace('\\', '_').replace('/', '_')
+        self.CONFIG_FILE = os.path.join(self.CONFIG_DIR, f'config_{sanitized_id}.json')
         self.config_data = self._load_json(self.CONFIG_FILE)
         self.config_data.setdefault('general_config', {})
+        # Ensure general_config has all default keys, using defaults if not present in file
+        for key, default_value in self._DEFAULT_VALUES.items():
+            if key not in self.GLOBAL_KEYS and key not in self.config_data['general_config']:
+                self.config_data['general_config'][key] = default_value
+
         self.config_data.setdefault('app_metadata', {})
         self.config_data.setdefault('app_list_cache', {})
         self.config_data.setdefault('winlator_game_configs', {})
@@ -299,10 +313,3 @@ class AppConfig:
 
         # Load the global profile for the device by default
         self.load_profile('global')
-
-        # Ensure device_id and commercial_name are correctly set/maintained
-        self.values['device_id'] = device_id
-        if self.values.get('device_commercial_name') == 'Unknown Device':
-            self.values['device_commercial_name'] = self.config_data['general_config'].get('device_commercial_name', 'Unknown Device')
-
-        return True

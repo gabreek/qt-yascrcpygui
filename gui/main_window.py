@@ -11,6 +11,7 @@ from .scrcpy_session_manager_window_pyside import ScrcpySessionManagerWindow
 from .winlator_tab import WinlatorTab
 from .workers import DeviceCheckWorker, DeviceConfigLoaderWorker
 from .dialogs import show_message_box
+from .adb_wifi_window import AdbWifiWindow
 from utils import adb_handler
 
 
@@ -147,6 +148,11 @@ class MainWindow(QMainWindow):
 
         self.scrcpy_tab.config_updated_on_worker.connect(self._on_scrcpy_tab_config_ready)
 
+        self.wifi_button = QPushButton("📶")
+        self.wifi_button.setFixedSize(25, 25)
+        self.wifi_button.setToolTip("ADB over WiFi")
+        self.wifi_button.clicked.connect(self.open_adb_wifi_manager)
+
         self.session_manager_button = QPushButton(">")
         self.session_manager_button.setFixedSize(25, 25)
         self.session_manager_button.clicked.connect(self.toggle_scrcpy_session_manager)
@@ -155,6 +161,7 @@ class MainWindow(QMainWindow):
         button_container = QWidget()
         button_layout = QHBoxLayout(button_container)
         button_layout.setContentsMargins(0, 2, 5, 0)
+        button_layout.addWidget(self.wifi_button)
         button_layout.addWidget(self.session_manager_button)
         self.tabs.setCornerWidget(button_container)
 
@@ -167,6 +174,7 @@ class MainWindow(QMainWindow):
         self.resize(410, 650)
 
         self.scrcpy_session_manager_window = None
+        self.adb_wifi_window = None
 
         self.update_theme()
 
@@ -179,12 +187,18 @@ class MainWindow(QMainWindow):
         # Connect the new signal to the new slot
         self.device_status_updated.connect(self._handle_device_status_update)
 
+    def pause_device_check(self):
+        self.device_check_timer.stop()
+
+    def resume_device_check(self):
+        self.device_check_timer.start(2000)
+
     def _handle_launch_request(self, item_key, item_name, launch_type):
         """
         Central handler for all scrcpy launch requests.
         Orchestrates the optional unlock workflow before launching.
         """
-        device_id = self.app_config.get('device_id')
+        device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
             show_message_box(self, "Device Error", "No device connected.", icon=QMessageBox.Critical)
             return
@@ -382,6 +396,11 @@ class MainWindow(QMainWindow):
             self.scrcpy_session_manager_window = None
             self.session_manager_button.setText(">")
 
+    def open_adb_wifi_manager(self):
+        if self.adb_wifi_window is None or not self.adb_wifi_window.isVisible():
+            self.adb_wifi_window = AdbWifiWindow(self.app_config, self)
+            self.adb_wifi_window.show()
+
     def start_worker(self, worker):
         self.active_workers.append(worker)
         worker.signals.finished.connect(lambda: self._on_worker_finished(worker))
@@ -420,10 +439,11 @@ class MainWindow(QMainWindow):
 
             if current_device_id:
                 self._update_all_tabs_status("Please wait, loading...")
+                self.pause_device_check() # Pause device check during config loading
                 config_loader_worker = DeviceConfigLoaderWorker(current_device_id, self.app_config)
                 config_loader_worker.signals.result.connect(self._on_device_config_loaded)
                 config_loader_worker.signals.error.connect(self._on_device_load_error)
-                config_loader_worker.signals.finished.connect(lambda: self._on_worker_finished(config_loader_worker))
+                config_loader_worker.signals.finished.connect(self.resume_device_check) # Resume after worker finishes
                 self.active_workers.append(config_loader_worker)
                 self.thread_pool.start(config_loader_worker)
             else:
@@ -432,6 +452,8 @@ class MainWindow(QMainWindow):
 
     def _on_device_config_loaded(self, result_data):
         print("MainWindow: Device config loaded successfully.")
+        # Update last_known_device_id with the actual connection_id from the worker result
+        self.last_known_device_id = result_data["device_id"]
         self._update_all_tabs_status()
 
     def _on_device_load_error(self, error_message):

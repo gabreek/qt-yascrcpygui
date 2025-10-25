@@ -373,7 +373,7 @@ class ScrcpyTab(QWidget):
 
     def refresh_device_info(self, force_encoder_fetch=False):
         self.update_profile_dropdown()
-        device_id = self.app_config.get('device_id')
+        device_id = self.app_config.get_connection_id()
         if device_id == DEVICE_NOT_FOUND or device_id is None:
             self.device_info_label.setText("Please connect a device.")
             self._load_encoders_from_cache()
@@ -413,7 +413,7 @@ class ScrcpyTab(QWidget):
         self._load_encoders_from_cache()
 
     def _fetch_and_update_encoders(self):
-        if self.app_config.get('device_id') == DEVICE_NOT_FOUND: return
+        if self.app_config.get_connection_id() == DEVICE_NOT_FOUND: return
         self.device_info_label.setText("Fetching encoders...")
         worker = EncoderListWorker()
         worker.signals.result.connect(self._on_encoders_ready)

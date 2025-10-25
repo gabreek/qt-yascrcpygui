@@ -58,7 +58,7 @@ class AppsTab(BaseGridTab):
 
     def on_device_changed(self):
         self._clear_grid()
-        device_id = self.app_config.get('device_id')
+        device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
             self.show_message("Please connect a device.")
             self.refresh_button.setEnabled(False)
@@ -77,7 +77,7 @@ class AppsTab(BaseGridTab):
 
         self.show_message("Loading apps from device...")
         self.refresh_button.setEnabled(False)
-        current_device_id = self.app_config.get('device_id')
+        current_device_id = self.app_config.get_connection_id()
 
         worker = AppListWorker(current_device_id)
         worker.signals.result.connect(self._on_app_list_loaded)
@@ -309,7 +309,7 @@ class AppsTab(BaseGridTab):
             package_name=package_name,
             display_id=display_id,
             windowing_mode=windowing_mode_int,
-            device_id=self.app_config.get('device_id')
+            connection_id=self.app_config.get_connection_id()
         )
         app_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "App Launch Error", msg, icon=QMessageBox.Critical))
         if self.main_window:
@@ -331,7 +331,7 @@ class AppsTab(BaseGridTab):
 
         # Prepare for launch
         window_title = app_name
-        device_id = self.app_config.get('device_id')
+        device_id = self.app_config.get_connection_id()
         session_type = 'app' # Default session type
 
         if is_launcher:

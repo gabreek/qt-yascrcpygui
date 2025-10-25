@@ -69,7 +69,7 @@ class WinlatorTab(BaseGridTab):
 
     def on_device_changed(self):
         self._clear_grid()
-        device_id = self.app_config.get('device_id')
+        device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
             self.info_label.setText("Please connect a device.")
             self.stacked_widget.setCurrentWidget(self.info_label)
@@ -85,7 +85,7 @@ class WinlatorTab(BaseGridTab):
 
 
     def refresh_games_list(self):
-        device_id = adb_handler.get_connected_device_id()
+        device_id = self.app_config.get_connection_id()
         if device_id is None or device_id == "no_device":
             self.info_label.setText("Please connect a device to see Winlator games.")
             self.info_label.setVisible(True)
@@ -101,7 +101,7 @@ class WinlatorTab(BaseGridTab):
         self.info_label.setText("Searching for games...")
         self.info_label.setVisible(True)
 
-        self.game_list_worker = GameListWorker()
+        self.game_list_worker = GameListWorker(device_id)
         self.game_list_worker.signals.result.connect(self._on_game_list_loaded)
         self.game_list_worker.signals.error.connect(self._on_game_list_error)
         self.game_list_worker.signals.finished.connect(self._on_game_list_worker_finished)
@@ -252,7 +252,7 @@ class WinlatorTab(BaseGridTab):
         # Create and start workers dynamically
         self.icon_extractor_workers = []
         for _ in range(self.NUM_WORKERS):
-            worker = IconExtractorWorker(self.extraction_queue, self.app_config, self.temp_dir, self.placeholder_icon)
+            worker = IconExtractorWorker(self.extraction_queue, self.app_config, self.temp_dir, self.placeholder_icon, self.app_config.get_connection_id())
             worker.signals.icon_extracted.connect(self._on_icon_extracted)
             self.icon_extractor_workers.append(worker)
             if self.main_window:
@@ -323,7 +323,7 @@ class WinlatorTab(BaseGridTab):
         self.scrcpy_launch_worker = ScrcpyLaunchWorker(
             config_values=game_specific_config, # Now includes shortcut_path and package_name
             window_title=game_name,
-            device_id=adb_handler.get_connected_device_id(),
+            connection_id=self.app_config.get_connection_id(),
             icon_path=icon_path,
             session_type='winlator'
         )
@@ -358,7 +358,7 @@ class WinlatorTab(BaseGridTab):
             shortcut_path=shortcut_path,
             display_id=display_id,
             package_name=package_name,
-            device_id=adb_handler.get_connected_device_id(),
+            connection_id=self.app_config.get_connection_id(),
             windowing_mode=windowing_mode_int
         )
         self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Winlator Launch Error", msg, icon=QMessageBox.Critical))
