@@ -2,18 +2,97 @@
 # PURPOSE: Cria e gerencia a aba de controle do Scrcpy com PySide6.
 # VERSION: 3.0 (Configuration Profiles)
 
+from PySide6.QtCore import Qt, QThreadPool, Signal, QRect
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
                                QLineEdit, QCheckBox, QSlider, QGroupBox, QMessageBox,
-                               QScrollArea, QSizePolicy, QPushButton, QGridLayout)
-from PySide6.QtCore import Qt, QThreadPool, Signal
+                               QScrollArea, QSizePolicy, QPushButton, QGridLayout, QListView, QScrollBar, QStyle)
 
 from .workers import DeviceInfoWorker, EncoderListWorker
 from . import themes
 
 # --- Custom Widgets to Ignore Scroll Wheel ---
+
+class NoArrowScrollBar(QScrollBar):
+    def subControlRect(self, control, option):
+        # Override this method to return an empty rectangle for the add/sub-line controls (arrows)
+        if control == QStyle.SubControl.SC_ScrollBarAddLine or \
+           control == QStyle.SubControl.SC_ScrollBarSubLine:
+            return QRect() # Return an empty rectangle, effectively hiding them
+        return super().subControlRect(control, option)
+
 class NoScrollQComboBox(QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # Create a new QListView and set it as the view for this QComboBox.
+        # Then, set a unique object name on the view so we can style it directly.
+        view = QListView(self)
+        self.setView(view)
+        view.setObjectName("combo-dropdown-view")
+        view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        # Get the default scrollbar provided by QListView/QComboBox
+        old_scrollbar = view.verticalScrollBar()
+
+        # Create our custom NoArrowScrollBar
+        custom_scrollbar = NoArrowScrollBar(view) # Parent is the view
+
+        # Copy relevant properties from the old scrollbar to the new one
+        custom_scrollbar.setRange(old_scrollbar.minimum(), old_scrollbar.maximum())
+        custom_scrollbar.setValue(old_scrollbar.value())
+        custom_scrollbar.setSingleStep(old_scrollbar.singleStep())
+        custom_scrollbar.setPageStep(old_scrollbar.pageStep())
+
+        # Replace the QListView's vertical scrollbar with our custom one
+        view.setVerticalScrollBar(custom_scrollbar)
+
     def wheelEvent(self, event):
         event.ignore()
+
+    def showPopup(self):
+        # Allow the default popup to be shown and positioned initially by QComboBox
+        super().showPopup()
+
+        popup_widget = self.view().parentWidget()
+        if popup_widget:
+            # Get the global position of the QComboBox's bottom-left corner
+            combo_global_pos = self.mapToGlobal(self.rect().bottomLeft())
+
+            # The popup should typically have the same width as the combobox itself
+            desired_width = self.width()
+
+            # Calculate the actual height needed for all items dynamically
+            model = self.view().model()
+            desired_height = self.height() # Default to combobox height if no items or calculation fails
+
+            if model.rowCount() > 0:
+                # Try to get item height from the view
+                single_item_height = self.view().sizeHintForRow(0)
+                if single_item_height <= 0:
+                    # Fallback: estimate based on font metrics and stylesheet padding
+                    # font-size: 9pt; #combo-dropdown-view::item { padding: 5px 10px; }
+                    single_item_height = self.fontMetrics().height() + 10  # 5px top + 5px bottom padding
+
+                # Calculate total height for all visible items
+                total_content_height = single_item_height * model.rowCount()
+
+                # Add a small buffer for the QListView's own borders/margins/spacing
+                # This often needs to be a magic number, 4px is a common value (2px top, 2px bottom)
+                list_view_vertical_margin = 4
+
+                actual_list_view_height = total_content_height + list_view_vertical_margin
+
+                # Cap the height at a maximum of 250 pixels (approx. 10 items)
+                desired_height = min(actual_list_view_height, 250)
+
+            # Set the new geometry for the popup widget (x, y, width, height)
+            popup_widget.setGeometry(
+                combo_global_pos.x(),
+                combo_global_pos.y(),
+                desired_width,
+                desired_height
+            )
+
 
 class NoScrollQSlider(QSlider):
     def wheelEvent(self, event):
@@ -82,7 +161,7 @@ class ScrcpyTab(QWidget):
 
     def _create_yascrcpy_group(self):
         self.yascrcpy_group, layout = self._create_group_box("yaScrcpy")
-        
+
         row_layout = QHBoxLayout()
         label = QLabel("Theme")
         label.setMinimumWidth(100)
@@ -90,7 +169,7 @@ class ScrcpyTab(QWidget):
 
         self.theme_combo = NoScrollQComboBox()
         self.theme_combo.currentIndexChanged.connect(self._on_theme_selected)
-        
+
         row_layout.addWidget(self.theme_combo)
         layout.addLayout(row_layout)
 
@@ -99,12 +178,12 @@ class ScrcpyTab(QWidget):
         self.theme_combo.clear()
         available_themes = themes.get_available_themes()
         self.theme_combo.addItems(available_themes)
-        
+
         current_theme = self.app_config.get('theme', 'System')
         index = self.theme_combo.findText(current_theme)
         if index != -1:
             self.theme_combo.setCurrentIndex(index)
-            
+
         self.theme_combo.blockSignals(False)
 
     def _on_theme_selected(self, index):
@@ -417,7 +496,7 @@ class ScrcpyTab(QWidget):
             return
 
         self._set_all_widgets_enabled(True)
-        commercial_name = self.app_config.get('device_commercial_name', 'Unknown Device')
+        commercial_name = self.app_config.get('device_commercial_name', "Unknown Device")
         self.device_info_label.setText(f"Connected to {commercial_name} (Battery: ?%)" if commercial_name != 'Unknown Device' else "Fetching device info...")
 
         worker = DeviceInfoWorker(device_id)
@@ -472,7 +551,9 @@ class ScrcpyTab(QWidget):
 
     def _populate_encoder_widgets(self):
         self._update_combo_box(self.v_codec_combo, self._build_codec_options(self.video_encoders), self.app_config.get('video_codec'))
+        self._update_encoder_options(self.v_codec_combo, self.v_encoder_combo, self.video_encoders, 'video_encoder')
         self._update_combo_box(self.a_codec_combo, self._build_codec_options(self.audio_encoders), self.app_config.get('audio_codec'))
+        self._update_encoder_options(self.a_codec_combo, self.a_encoder_combo, self.audio_encoders, 'audio_encoder')
 
     def _build_codec_options(self, enc_map):
         opts = [CODEC_AUTO]
@@ -502,8 +583,6 @@ class ScrcpyTab(QWidget):
                 unique_encs = dict.fromkeys(map(tuple, encs))
                 vals.extend(sorted([f"{e} ({m})" for e, m in unique_encs]))
         self._update_combo_box(encoder_combo, vals, saved_encoder)
-        if not encoder_combo.signalsBlocked():
-            encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set(config_key, text))
 
     def _update_all_widgets_from_config(self):
         # Block signals to prevent feedback loops
@@ -540,10 +619,10 @@ class ScrcpyTab(QWidget):
         # Update Dropdowns that are not in general_editors
         self._update_theme_dropdown()
         self.update_profile_dropdown()
-        
+
         # Update Video/Audio Codec/Encoder Combos
         self._populate_encoder_widgets()
-        
+
         # Update states based on new values
         self._update_resolution_state()
         self._update_launch_control_widgets_state()
@@ -579,7 +658,7 @@ class ScrcpyTab(QWidget):
         groups = [self.yascrcpy_group, self.general_settings_group, self.video_settings_group,
                   self.audio_settings_group, self.options_group, self.device_info_group]
         if include_profile:
-            groups.append(self.profile_group)
+            groups.append(self.profile_combo) # Changed to self.profile_combo instead of self.profile_group for individual enable/disable
         for group in groups:
             if group:
                 group.setEnabled(enabled)

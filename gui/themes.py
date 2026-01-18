@@ -16,10 +16,10 @@ def get_theme_stylesheet(palette):
     main_bg_color = window_bg_qcolor.name()
     title_text_color = palette.color(QPalette.ColorRole.WindowText).name()
     border_color = window_bg_qcolor.darker(140).name() if not is_dark_theme(palette) else window_bg_qcolor.lighter(170).name()
-    
+
     base_bg_qcolor = palette.color(QPalette.ColorRole.Base)
     base_bg_color = base_bg_qcolor.name()
-    
+
     button_bg_color = palette.color(QPalette.ColorRole.Button).name()
     button_text_color = palette.color(QPalette.ColorRole.ButtonText).name()
 
@@ -90,7 +90,11 @@ def get_theme_stylesheet(palette):
         QScrollBar::handle:vertical:hover {{
             background: {highlight_color};
         }}
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0;
+            border: none;
+            background: none;
+        }}
         QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
             height: 0;
             border: none;
@@ -136,11 +140,15 @@ def get_theme_stylesheet(palette):
         QLineEdit:focus {{
             border: 1px solid {highlight_color};
         }}
+        QComboBox:focus, QComboBox:on {{
+            border: 1px solid {highlight_color};
+        }}
         QComboBox {{
             border: 1px solid {border_color};
             border-radius: 4px;
             padding: 1px 18px 1px 3px;
             min-width: 6em;
+            min-height: 20px; /* Match height with QLineEdit search bar */
         }}
         QComboBox:editable {{
             background: {base_bg_color};
@@ -172,12 +180,43 @@ def get_theme_stylesheet(palette):
             top: 1px;
             left: 1px;
         }}
-        QComboBox QAbstractItemView {{
+        #combo-dropdown-view {{
             border: 1px solid {border_color};
+            border-radius: 10px;
             background-color: {base_bg_color};
             color: {title_text_color};
             selection-background-color: {highlight_color};
             selection-color: {highlighted_text_color};
+            outline: 0px;
+        }}
+        QComboBox:focus #combo-dropdown-view, QComboBox:on #combo-dropdown-view {{
+            border: 1px solid {highlight_color};
+
+        }}
+        #combo-dropdown-view::item {{
+            padding: 5px 10px;
+        }}
+        #combo-dropdown-view QScrollBar:vertical {{
+            border: none;
+            background: transparent;
+            width: 8px;
+            margin: 4px 0 4px 0;
+        }}
+        #combo-dropdown-view QScrollBar::handle:vertical {{
+            background: {border_color};
+            border-radius: 4px;
+            min-height: 20px;
+        }}
+        #combo-dropdown-view QScrollBar::handle:vertical:hover {{
+            background: {highlight_color};
+        }}
+        #combo-dropdown-view QScrollBar::add-line:vertical, #combo-dropdown-view QScrollBar::sub-line:vertical {{
+            height: 0;
+            border: none;
+            background: none;
+        }}
+        #combo-dropdown-view QScrollBar::add-page:vertical, #combo-dropdown-view QScrollBar::sub-page:vertical {{
+            background: none;
         }}
         QListWidget, QTreeWidget {{
             background-color: {base_bg_color};
