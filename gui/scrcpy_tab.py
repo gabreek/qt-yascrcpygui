@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCombo
 from PySide6.QtCore import Qt, QThreadPool, Signal
 
 from .workers import DeviceInfoWorker, EncoderListWorker
+from . import themes
 
 # --- Custom Widgets to Ignore Scroll Wheel ---
 class NoScrollQComboBox(QComboBox):
@@ -25,6 +26,7 @@ PROFILE_ROLE = Qt.UserRole + 1
 
 class ScrcpyTab(QWidget):
     config_updated_on_worker = Signal()
+    theme_changed = Signal(str)
 
     def __init__(self, app_config):
         super().__init__()
@@ -42,6 +44,7 @@ class ScrcpyTab(QWidget):
 
         self._setup_ui()
         self.update_profile_dropdown()
+        self._update_theme_dropdown()
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -60,6 +63,7 @@ class ScrcpyTab(QWidget):
         self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll_area.setWidget(scroll_content)
 
+        self._create_yascrcpy_group()
         self._create_device_status_group()
         self._create_profile_group()
         self._create_general_settings_group()
@@ -75,6 +79,39 @@ class ScrcpyTab(QWidget):
         layout = layout_class(group)
         self.scroll_layout.addWidget(group)
         return group, layout
+
+    def _create_yascrcpy_group(self):
+        self.yascrcpy_group, layout = self._create_group_box("yaScrcpy")
+        
+        row_layout = QHBoxLayout()
+        label = QLabel("Theme")
+        label.setMinimumWidth(100)
+        row_layout.addWidget(label)
+
+        self.theme_combo = NoScrollQComboBox()
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_selected)
+        
+        row_layout.addWidget(self.theme_combo)
+        layout.addLayout(row_layout)
+
+    def _update_theme_dropdown(self):
+        self.theme_combo.blockSignals(True)
+        self.theme_combo.clear()
+        available_themes = themes.get_available_themes()
+        self.theme_combo.addItems(available_themes)
+        
+        current_theme = self.app_config.get('theme', 'System')
+        index = self.theme_combo.findText(current_theme)
+        if index != -1:
+            self.theme_combo.setCurrentIndex(index)
+            
+        self.theme_combo.blockSignals(False)
+
+    def _on_theme_selected(self, index):
+        if index == -1: return
+        theme_name = self.theme_combo.itemText(index)
+        self.app_config.set('theme', theme_name)
+        self.theme_changed.emit(theme_name)
 
     def _create_device_status_group(self):
         self.device_info_group, layout = self._create_group_box("Device Status")
@@ -212,19 +249,15 @@ class ScrcpyTab(QWidget):
         if not alt_launch_checkbox or not virtual_display_combo:
             return
 
-        # New Rule: Check if a virtual display is active
         is_virtual_display_active = virtual_display_combo.currentText() != 'Disabled'
 
-        # Determine profile type
         active_profile_key = self.app_config.active_profile
         is_winlator_profile = active_profile_key in self.app_config.get_winlator_config_keys(include_name=False)
 
-        # Rule 1: Disable "Alternate Launch Method" for Winlator profiles or if no virtual display is active
         alt_launch_checkbox.setDisabled(is_winlator_profile or not is_virtual_display_active)
         if is_winlator_profile:
-            alt_launch_checkbox.setChecked(True) # It's the default method for them
+            alt_launch_checkbox.setChecked(True)
 
-        # Rule 2: Manage "Windowing Mode" dropdown state
         alt_launch_enabled = alt_launch_checkbox.isChecked()
         self.windowing_mode_combo.setEnabled((is_winlator_profile or alt_launch_enabled) and is_virtual_display_active)
 
@@ -233,6 +266,8 @@ class ScrcpyTab(QWidget):
         self.v_codec_combo = NoScrollQComboBox()
         self.v_codec_combo.currentTextChanged.connect(self._on_video_codec_changed)
         self.v_encoder_combo = NoScrollQComboBox()
+        self.v_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set('video_encoder', text))
+
 
         codec_layout = QHBoxLayout()
         codec_label = QLabel("Codec")
@@ -266,6 +301,7 @@ class ScrcpyTab(QWidget):
         self.a_codec_combo = NoScrollQComboBox()
         self.a_codec_combo.currentTextChanged.connect(self._on_audio_codec_changed)
         self.a_encoder_combo = NoScrollQComboBox()
+        self.a_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set('audio_encoder', text))
 
         codec_layout = QHBoxLayout()
         codec_label = QLabel("Codec")
@@ -474,6 +510,13 @@ class ScrcpyTab(QWidget):
         for editor in self.general_editors.values(): editor.blockSignals(True)
         for checkbox in self.option_checkboxes.values(): checkbox.blockSignals(True)
         for slider, _ in self.sliders.values(): slider.blockSignals(True)
+        self.theme_combo.blockSignals(True)
+        self.profile_combo.blockSignals(True)
+        self.v_codec_combo.blockSignals(True)
+        self.v_encoder_combo.blockSignals(True)
+        self.a_codec_combo.blockSignals(True)
+        self.a_encoder_combo.blockSignals(True)
+
 
         # Update General Settings editors
         for var_key, editor in self.general_editors.items():
@@ -494,19 +537,27 @@ class ScrcpyTab(QWidget):
             unit = slider.property('unit')
             value_label.setText(f"{value}{unit}")
 
+        # Update Dropdowns that are not in general_editors
+        self._update_theme_dropdown()
+        self.update_profile_dropdown()
+        
         # Update Video/Audio Codec/Encoder Combos
         self._populate_encoder_widgets()
-        self._update_encoder_options(self.v_codec_combo, self.v_encoder_combo, self.video_encoders, 'video_encoder')
-        self._update_encoder_options(self.a_codec_combo, self.a_encoder_combo, self.audio_encoders, 'audio_encoder')
+        
+        # Update states based on new values
         self._update_resolution_state()
         self._update_launch_control_widgets_state()
 
-        # Unblock signals
+        # --- Unblock all signals ---
         for editor in self.general_editors.values(): editor.blockSignals(False)
         for checkbox in self.option_checkboxes.values(): checkbox.blockSignals(False)
         for slider, _ in self.sliders.values(): slider.blockSignals(False)
-
-        self.update_profile_dropdown()
+        self.theme_combo.blockSignals(False)
+        self.profile_combo.blockSignals(False)
+        self.v_codec_combo.blockSignals(False)
+        self.v_encoder_combo.blockSignals(False)
+        self.a_codec_combo.blockSignals(False)
+        self.a_encoder_combo.blockSignals(False)
 
 
     def _update_resolution_state(self):
@@ -525,7 +576,7 @@ class ScrcpyTab(QWidget):
         combo.blockSignals(False)
 
     def _set_all_widgets_enabled(self, enabled, include_profile=True):
-        groups = [self.general_settings_group, self.video_settings_group,
+        groups = [self.yascrcpy_group, self.general_settings_group, self.video_settings_group,
                   self.audio_settings_group, self.options_group, self.device_info_group]
         if include_profile:
             groups.append(self.profile_group)

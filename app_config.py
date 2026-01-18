@@ -8,7 +8,7 @@ import platform
 class AppConfig:
     _DEFAULT_VALUES = {
         'device_id': None,
-        'theme': 'superhero',
+        'theme': 'System',
         'device_commercial_name': 'Unknown Device',
         'start_app': '',
         'start_app_name': 'None',
@@ -78,18 +78,6 @@ class AppConfig:
     def get_connection_id(self):
         return self.connection_id or self.get('device_id')
 
-    def set(self, key, value):
-        if key in ['device_id', 'device_commercial_name']:
-            print(f"Warning: Attempted to set immutable config key: {key}.")
-            return
-
-        if self.values.get(key) != value:
-            self.values[key] = value
-            self.save_config()
-
-    def get_all_values(self):
-        return self.values
-
     def get_global_values_no_profile(self):
         """
         Returns a dictionary of the global configuration values, ignoring any active profile.
@@ -106,6 +94,15 @@ class AppConfig:
             values.update(self.config_data.get('general_config', {}))
 
         return values
+
+    def set(self, key, value):
+        if key in ['device_id', 'device_commercial_name']:
+            print(f"Warning: Attempted to set immutable config key: {key}.")
+            return
+
+        if self.values.get(key) != value:
+            self.values[key] = value
+            self.save_config()
 
     def _load_json(self, file_path):
         if os.path.exists(file_path):
@@ -134,9 +131,8 @@ class AppConfig:
             return
 
         # Separate global from device-specific settings
-        all_values = self.get_all_values()
-        global_settings = {key: all_values[key] for key in self.GLOBAL_KEYS if key in all_values}
-        device_settings = {k: v for k, v in all_values.items() if k not in self.GLOBAL_KEYS}
+        global_settings = {key: self.values[key] for key in self.GLOBAL_KEYS if key in self.values}
+        device_settings = {k: v for k, v in self.values.items() if k not in self.GLOBAL_KEYS}
 
         # Save global settings
         self._save_json(global_settings, self.GLOBAL_CONFIG_FILE)

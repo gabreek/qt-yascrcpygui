@@ -1,7 +1,7 @@
 # FILE: gui/base_grid_tab.py
 # PURPOSE: Base class for tabs that display items in a grid.
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QGridLayout, QLabel, QStackedWidget, QScroller
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QGridLayout, QLabel, QStackedWidget
 from PySide6.QtCore import Qt
 
 class BaseGridTab(QWidget):
@@ -34,7 +34,6 @@ class BaseGridTab(QWidget):
         # Page 1: Info Label
         self.info_label = QLabel()
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.info_label.setStyleSheet("color: white;")
         self.stacked_widget.addWidget(self.info_label)
 
     def _clear_grid(self):

@@ -32,7 +32,6 @@ def get_icon(app_name, package_name, cache_dir, app_config, download_if_missing=
         # Regex mais robusta que busca pela meta tag og:image.
         match = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', response.text)
         if not match:
-            print(f"Icon URL pattern not found for {package_name}")
             app_config.save_app_metadata(package_name, {"icon_fetch_failed": True})
             return None
 
@@ -52,11 +51,9 @@ def get_icon(app_name, package_name, cache_dir, app_config, download_if_missing=
         app_config.save_app_metadata(package_name, {"icon_fetch_failed": False})
         return icon_path
 
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to download icon for {package_name}: {e}")
+    except requests.exceptions.RequestException:
         app_config.save_app_metadata(package_name, {"icon_fetch_failed": True})
         return None
-    except Exception as e:
-        print(f"An error occurred while processing icon for {package_name}: {e}")
+    except Exception:
         app_config.save_app_metadata(package_name, {"icon_fetch_failed": True})
         return None

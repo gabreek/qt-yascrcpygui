@@ -5,7 +5,6 @@ import subprocess
 import shlex
 import psutil
 import os
-import json
 import re
 import threading
 
@@ -151,11 +150,10 @@ def _wait_for_scrcpy_and_post_cmds(scrcpy_process, post_cmds, startupinfo):
 
     for post_cmd_str in post_cmds:
         try:
-            print(f"Executing POST command: {post_cmd_str}")
             post_cmd = shlex.split(post_cmd_str)
             subprocess.run(post_cmd, check=True, startupinfo=startupinfo)
-        except (subprocess.SubprocessError, FileNotFoundError) as e:
-            print(f"Error executing POST command '{post_cmd_str}': {e}")
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass # Errors are not critical here
 
 def _run_adb_home_command(device_id, startupinfo):
     """Sends a 'HOME' key event via ADB."""
@@ -164,10 +162,9 @@ def _run_adb_home_command(device_id, startupinfo):
         if device_id:
             home_cmd.extend(['-s', device_id])
         home_cmd.extend(['shell', 'input', 'keyevent', 'KEYCODE_HOME'])
-        print(f"Executing ADB Command: {shlex.join(home_cmd)}")
         subprocess.run(home_cmd, check=True, startupinfo=startupinfo)
-    except (subprocess.SubprocessError, FileNotFoundError) as e:
-        print(f"Error sending HOME keyevent: {e}")
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass # Not critical if it fails
 
 def launch_scrcpy(config_values, capture_output=False, window_title=None, device_id=None, icon_path=None, session_type='app'):
     """Inicia o scrcpy com base na configuração fornecida, lidando com comandos PRE e POST."""
@@ -184,16 +181,14 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
     # Executar comandos PRE
     for pre_cmd_str in parsed_args['prepend']:
         try:
-            print(f"Executing PRE command: {pre_cmd_str}")
             pre_cmd = shlex.split(pre_cmd_str)
             subprocess.run(pre_cmd, check=True, startupinfo=startupinfo)
-        except (subprocess.SubprocessError, FileNotFoundError) as e:
-            print(f"Error executing PRE command '{pre_cmd_str}': {e}")
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass # Not critical
 
     # Construir e executar o comando scrcpy
     cmd = _build_command(config_values, parsed_args['scrcpy'], window_title, device_id)
-    print('Executing Scrcpy Command:', ' '.join(cmd))
-
+    
     env = os.environ.copy()
     if icon_path and os.path.exists(icon_path):
         env['SCRCPY_ICON_PATH'] = icon_path
@@ -226,7 +221,6 @@ def list_installed_apps(device_id=None):
     try:
         startupinfo = _get_startupinfo()
 
-        print(f"Executing: {' '.join(cmd)}")
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo)
 
         user_apps = {}
@@ -234,7 +228,6 @@ def list_installed_apps(device_id=None):
         output_lines = []
 
         for line in process.stdout:
-            print(line, end='')
             output_lines.append(line)
             line = line.strip()
             if not line or line[0] not in ('-', '*'):
@@ -257,9 +250,6 @@ def list_installed_apps(device_id=None):
             full_output = "".join(output_lines)
             raise RuntimeError(f"Scrcpy command failed with exit code {process.returncode}: {full_output.strip()}")
 
-        total_apps = len(user_apps) + len(system_apps)
-        print(f"Found {total_apps} apps ({len(user_apps)} user, {len(system_apps)} system).")
-
         return (user_apps, system_apps)
     except (subprocess.SubprocessError, FileNotFoundError) as e:
         raise RuntimeError(f"Could not list apps via scrcpy: {e}")
@@ -272,12 +262,10 @@ def list_encoders(device_id=None):
     try:
         startupinfo = _get_startupinfo()
 
-        print(f"Executing: {' '.join(cmd)}")
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo)
 
         output_lines = []
         for line in process.stdout:
-            print(line, end='')
             output_lines.append(line)
 
         output = "".join(output_lines)
@@ -381,12 +369,10 @@ def list_displays(device_id=None):
     try:
         startupinfo = _get_startupinfo()
 
-        print(f"Executing: {' '.join(cmd)}")
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo)
 
         output_lines = []
         for line in process.stdout:
-            print(line, end='')
             output_lines.append(line)
 
         output = "".join(output_lines)

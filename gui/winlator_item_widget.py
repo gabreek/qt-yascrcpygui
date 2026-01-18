@@ -1,9 +1,8 @@
 # FILE: gui/winlator_item_widget.py
 # PURPOSE: Defines the widget for a single Winlator game item in the grid, inheriting from BaseItemWidget.
 
-import os
 from PySide6.QtWidgets import QPushButton, QMessageBox
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from .base_item_widget import BaseItemWidget
 
 class WinlatorItemWidget(BaseItemWidget):

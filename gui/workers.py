@@ -1,29 +1,23 @@
-# FILE: gui/workers.py
-# PURPOSE: Centraliza todas as classes QRunnable e QObject workers para o aplicativo.
-
 from PySide6.QtCore import QObject, Signal, QRunnable
 from PySide6.QtGui import QPixmap
 from utils import scrcpy_handler, icon_scraper, adb_handler
-from utils.scrcpy_handler import add_active_scrcpy_session, remove_active_scrcpy_session
 import re
 import os
 import time
-import shlex
 from utils.isolated_extractor import extract_icon_in_process
 from multiprocessing import Process, Queue
 from PIL import Image
-import sys
 
 # --- Base Worker (for QRunnable) ---
 class BaseRunnableWorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
 
-class BaseRunnableWorker(QObject, QRunnable):
+class BaseRunnableWorker(QRunnable):
     def __init__(self):
-        QObject.__init__(self, parent=None)
-        QRunnable.__init__(self)
-        self.signals = BaseRunnableWorkerSignals()
+        super().__init__()
+        # Note: No QObject.__init__() here because QRunnable is not a QObject.
+        # Signals will be on a separate QObject.
 
     def run(self):
         raise NotImplementedError("Subclasses must implement the 'run' method.")
@@ -34,7 +28,7 @@ class AppListWorkerSignals(QObject):
     error = Signal(str)
     result = Signal(tuple)
 
-class AppListWorker(BaseRunnableWorker):
+class AppListWorker(QRunnable):
     def __init__(self, connection_id):
         super().__init__()
         self.connection_id = connection_id
@@ -53,7 +47,7 @@ class IconWorkerSignals(QObject):
     finished = Signal(str, QPixmap)
     error = Signal(str, str)
 
-class IconWorker(BaseRunnableWorker):
+class IconWorker(QRunnable):
     def __init__(self, pkg_name, app_name, cache_dir, app_config):
         super().__init__()
         self.pkg_name = pkg_name
@@ -76,17 +70,15 @@ class ScrcpyLaunchWorkerSignals(QObject):
     error = Signal(str)
     display_id_found = Signal(str, str, str)
 
-class ScrcpyLaunchWorker(BaseRunnableWorker):
+class ScrcpyLaunchWorker(QRunnable):
     def __init__(self, config_values, window_title, connection_id, icon_path, session_type):
-        super().__init__() # Call BaseRunnableWorker's init
-        self.signals = ScrcpyLaunchWorkerSignals() # Then set up specific signals
+        super().__init__()
+        self.signals = ScrcpyLaunchWorkerSignals()
         self.config_values = config_values
         self.window_title = window_title
         self.connection_id = connection_id
         self.icon_path = icon_path
         self.session_type = session_type
-
-
 
     def run(self):
         try:
@@ -96,11 +88,10 @@ class ScrcpyLaunchWorker(BaseRunnableWorker):
                 capture_output=(self.session_type in ['winlator', 'app_alt_launch'])
             )
 
-            # Add the launched session to the global list
             scrcpy_handler.add_active_scrcpy_session(
                 pid=process.pid,
-                app_name=self.window_title, # Use window_title as app_name for session manager
-                command_args=process.args, # Store the command arguments
+                app_name=self.window_title,
+                command_args=process.args,
                 icon_path=self.icon_path,
                 session_type=self.session_type
             )
@@ -110,11 +101,9 @@ class ScrcpyLaunchWorker(BaseRunnableWorker):
             if self.session_type in ['winlator', 'app_alt_launch']:
                 display_id = None
                 for line in iter(process.stdout.readline, ''):
-                    print(line, end='') # Print scrcpy output in real-time
                     match = re.search(r'\[server\] INFO: New display: .*\(id=(\d+)\)', line)
                     if match:
                         display_id = match.group(1)
-                        print(f"DEBUG: ScrcpyLaunchWorker extracted display_id: {display_id}")
                         break
 
                 if display_id:
@@ -234,7 +223,7 @@ class IconExtractorWorker(BaseRunnableWorker):
                         result_queue = Queue()
                         process = Process(target=extract_icon_in_process, args=(local_exe_path, save_path, result_queue))
                         process.start()
-                        process.join() # Espera o processo terminar, sem timeout
+                        process.join()
 
                         if not result_queue.empty():
                             result_success, result_data = result_queue.get()
@@ -242,13 +231,8 @@ class IconExtractorWorker(BaseRunnableWorker):
                                 img = Image.open(save_path).resize((48, 48), Image.LANCZOS)
                                 pixmap = QPixmap.fromImage(img.toqimage())
                                 success = True
-                            else:
-                                print(f"Error in isolated process for {item_widget.item_name}: {result_data}")
-                        else:
-                             print(f"Error in IconExtractorWorker for {item_widget.item_name}: result_queue empty")
-
-            except Exception as e:
-                print(f"Error in IconExtractorWorker for {item_widget.item_name}: {e}")
+            except Exception:
+                pass
             finally:
                 if local_exe_path and os.path.exists(local_exe_path):
                     os.remove(local_exe_path)
@@ -257,23 +241,14 @@ class IconExtractorWorker(BaseRunnableWorker):
                 self.extraction_queue.task_done()
         self.signals.finished.emit()
 
-class QueueJoinWorker(BaseRunnableWorker):
-    def __init__(self, queue_instance):
-        super().__init__()
-        self.queue_instance = queue_instance
-
-    def run(self):
-        self.queue_instance.join()
-        self.signals.finished.emit()
-
 class WinlatorLaunchWorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
 
 class WinlatorLaunchWorker(BaseRunnableWorker):
     def __init__(self, shortcut_path, display_id, package_name, connection_id, windowing_mode):
-        super().__init__() # Call BaseRunnableWorker's init
-        self.signals = WinlatorLaunchWorkerSignals() # Then set up specific signals
+        super().__init__()
+        self.signals = WinlatorLaunchWorkerSignals()
         self.shortcut_path = shortcut_path
         self.display_id = display_id
         self.package_name = package_name
@@ -297,7 +272,7 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
 class AppLaunchWorker(BaseRunnableWorker):
     def __init__(self, package_name, display_id, windowing_mode, connection_id):
         super().__init__()
-        self.signals = BaseRunnableWorkerSignals() # Generic signals: finished, error
+        self.signals = BaseRunnableWorkerSignals()
         self.package_name = package_name
         self.display_id = display_id
         self.windowing_mode = windowing_mode
@@ -331,8 +306,7 @@ class DeviceCheckWorker(QRunnable):
         try:
             device_id = adb_handler.get_connected_device_id()
             self.signals.result.emit(device_id)
-        except Exception as e:
-            print(f"Error checking device connection: {e}")
+        except Exception:
             self.signals.result.emit(None)
         finally:
             self.signals.finished.emit()
@@ -356,21 +330,17 @@ class DeviceConfigLoaderWorker(QRunnable):
             connection_id = self.device_id
             configuration_id = self.device_id
 
-            if ':' in connection_id: # It's a Wi-Fi device
+            if ':' in connection_id:
                 serial_no = adb_handler.get_serial_from_wifi_device(connection_id)
                 if serial_no:
                     configuration_id = serial_no
 
-            # Load config using the real serial number (or IP if serial not found)
             self.app_config.load_config_for_device(configuration_id)
             
-            # Store the connection ID for the whole app to use for ADB commands
             self.app_config.connection_id = connection_id
             
-            # Run ADB commands using the ID that ADB recognizes
             device_info = adb_handler.get_device_info(connection_id)
             
-            # Pass the connection_id back to the main window
             output = {
                 "device_id": connection_id,
                 "device_info": device_info,

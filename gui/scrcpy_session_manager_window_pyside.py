@@ -2,8 +2,8 @@ from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem,
     QLabel, QMessageBox, QTextEdit
 )
-from PySide6.QtGui import QPixmap, QImage, QIcon, QPalette
-from PySide6.QtCore import Qt, QTimer, Signal, QObject, QEvent, QPoint
+from PySide6.QtGui import QPixmap, QImage, QIcon
+from PySide6.QtCore import Qt, QTimer, Signal, QObject, QEvent
 
 import os
 import shlex
@@ -12,6 +12,7 @@ import subprocess
 from PIL import Image # Still need PIL for loading various image formats into QImage
 
 from utils import scrcpy_handler
+from . import themes
 
 
 class CustomSessionTitleBar(QWidget):
@@ -19,6 +20,7 @@ class CustomSessionTitleBar(QWidget):
     def __init__(self, parent, title_text="Active Scrcpy Sessions"):
         super().__init__(parent)
         self.parent = parent
+        self.setObjectName("CustomSessionTitleBar")
         self.setFixedHeight(35)
 
         layout = QHBoxLayout(self)
@@ -27,7 +29,6 @@ class CustomSessionTitleBar(QWidget):
 
         self.title_label = QLabel(title_text, self)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.title_label.setStyleSheet("color: white; padding-left: 10px; font-weight: bold;")
 
         layout.addWidget(self.title_label)
         layout.addStretch()
@@ -97,7 +98,6 @@ class ScrcpySessionManagerWindow(QWidget):
 
         main_layout.addWidget(content_widget)
 
-        self._setup_ui() # This method is now redundant, but keeping for now
         self._connect_signals()
         self._position_window(parent_x, parent_y, parent_width)
 
@@ -114,60 +114,12 @@ class ScrcpySessionManagerWindow(QWidget):
         self.populate_sessions()
 
         # Apply theme from parent
-        self.setPalette(self.parent_widget.palette())
         self.update_theme()
 
     def update_theme(self):
-        # Get colors from current palette
-        main_bg_color = self.palette().color(QPalette.ColorRole.Window).name()
-        border_color = self.palette().color(QPalette.ColorRole.Mid).name()
-        text_color = self.palette().color(QPalette.ColorRole.WindowText).name()
-        button_bg_color = self.palette().color(QPalette.ColorRole.Button).name()
-        button_text_color = self.palette().color(QPalette.ColorRole.ButtonText).name()
-        button_hover_color = self.palette().color(QPalette.ColorRole.AlternateBase).name()
-        button_pressed_color = self.palette().color(QPalette.ColorRole.Mid).name()
-        tree_bg_color = self.palette().color(QPalette.ColorRole.Base).name()
-        tree_item_selected_bg = self.palette().color(QPalette.ColorRole.Highlight).name()
-
-        style = f"""
-            #container_widget {{
-                background-color: {main_bg_color};
-                border: 1px solid {border_color};
-                border-radius: 8px;
-            }}
-            QDialog {{
-                background-color: transparent;
-            }}
-            QLabel {{
-                color: {text_color};
-            }}
-            QPushButton {{
-                background-color: {button_bg_color};
-                color: {button_text_color};
-                border: 1px solid {border_color};
-                border-radius: 5px;
-            }}
-            QPushButton:hover {{
-                background-color: {button_hover_color};
-            }}
-            QPushButton:pressed {{
-                background-color: {button_pressed_color};
-            }}
-            QTreeWidget {{
-                background-color: {tree_bg_color};
-                color: {text_color};
-                border: 1px solid {border_color};
-                border-radius: 5px;
-            }}
-            QTreeWidget::item:selected {{
-                background-color: {tree_item_selected_bg};
-            }}
-        """
-        self.setStyleSheet(style)
-
-        # Update title bar style
-        title_bar_style = f"color: {text_color}; padding-left: 10px; font-weight: bold;"
-        self.title_bar.title_label.setStyleSheet(title_bar_style)
+        if self.parent_widget:
+            self.setPalette(self.parent_widget.palette())
+        themes.apply_stylesheet_to_window(self)
 
 
     def _load_icon(self, relative_path):
@@ -186,14 +138,8 @@ class ScrcpySessionManagerWindow(QWidget):
             img = Image.open(full_path).resize((32, 32), Image.LANCZOS)
             qimage = QImage(img.tobytes(), img.width, img.height, QImage.Format_RGBA8888)
             return QPixmap.fromImage(qimage)
-        except Exception as e:
-            if not isinstance(e, FileNotFoundError):
-                print(f"Error loading icon {full_path}: {e}")
+        except Exception:
             return None
-
-    def _setup_ui(self):
-        # This method is now mostly handled in __init__
-        pass
 
     def _connect_signals(self):
         self.tree.itemSelectionChanged.connect(self._on_tree_select)
@@ -237,17 +183,10 @@ class ScrcpySessionManagerWindow(QWidget):
         try:
             # Use wmctrl to activate the window by its title
             cmd = ['wmctrl', '-a', window_title]
-            result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-            if result.returncode != 0:
-                # Check if wmctrl is installed
-                if "No command 'wmctrl' found" in result.stderr or "not found" in result.stderr:
-                    print("Error: 'wmctrl' is not installed. Please install it to use this feature (e.g., 'sudo apt-get install wmctrl').")
-                else:
-                    print(f"wmctrl error: Could not activate window '{window_title}'.\n{result.stderr}")
-        except FileNotFoundError:
-            print("Error: 'wmctrl' is not installed. Please install it to use this feature (e.g., 'sudo apt-get install wmctrl').")
-        except Exception as e:
-            print(f"An error occurred while trying to focus the window: {e}")
+            subprocess.run(cmd, check=False, capture_output=True, text=True)
+        except (FileNotFoundError, Exception):
+            # Fail silently if wmctrl is not available or if there's an error
+            pass
 
     def populate_sessions(self):
         current_selection_id = None

@@ -8,9 +8,9 @@ import multiprocessing
 from PySide6.QtWidgets import QApplication
 from utils.dependencies import check_dependencies
 from utils import adb_handler
-from utils import adb_handler
 from app_config import AppConfig
 from gui.main_window import MainWindow
+from gui import themes
 
 def main():
     """
@@ -20,18 +20,16 @@ def main():
         return
 
     app = QApplication(sys.argv)
-    print("QApplication initialization")
 
     app_config = AppConfig(None)
-    print("AppConfig initialized")
+    
+    # Apply the initial theme
+    themes.apply_theme(app, app_config.get('theme', 'System'))
 
     main_window = MainWindow(app_config)
-    print("MainWindow initialization")
 
     main_window.show()
-    print("Main_window.show()")
 
-    print("app.exec()")
     sys.exit(app.exec())
 
 if __name__ == "__main__":

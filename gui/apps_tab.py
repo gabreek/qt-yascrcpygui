@@ -1,11 +1,7 @@
-# FILE: gui/apps_tab.py
-# PURPOSE: Cria e gerencia a aba de Apps com PySide6.
-# VERSION: 10.0 (Fixed silent crash and added system apps filter)
-
 import os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
                                QPushButton, QScrollArea, QGridLayout, QLabel,
-                               QStackedWidget, QMessageBox)
+                               QMessageBox)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 import sys
@@ -44,7 +40,6 @@ class AppsTab(BaseGridTab):
         self.search_input.setPlaceholderText("Search apps...")
 
         self.refresh_button = QPushButton("Refresh Apps")
-        self.refresh_button.setFixedSize(90, 20)
 
         top_panel.addWidget(self.search_input)
         top_panel.addWidget(self.refresh_button)
@@ -287,7 +282,6 @@ class AppsTab(BaseGridTab):
         if widget := self.app_items.get(pkg_name): widget.set_icon(pixmap)
 
     def _on_icon_error(self, pkg_name, error_msg):
-        print(f"Icon error for {pkg_name}: {error_msg}")
         self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True})
 
     def _on_display_id_found_for_alt_launch(self, display_id, shortcut_path, package_name):

@@ -2,7 +2,6 @@
 # PURPOSE: Widget base para itens de aplicativo/jogo, contendo lógica comum de UI e ícones.
 
 import os
-import shutil
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout, QGraphicsOpacityEffect
 from PySide6.QtGui import QPixmap, QCursor, QDragEnterEvent, QDropEvent
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
@@ -155,6 +154,5 @@ class BaseItemWidget(QWidget):
                 QMessageBox.information(self, "Ícone Atualizado", f"Ícone personalizado definido para {self.item_name}.")
                 event.acceptProposedAction()
             except Exception as e:
-                print(f"Erro ao copiar ícone personalizado: {e}")
                 QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao processar o ícone: {e}")
                 event.ignore()

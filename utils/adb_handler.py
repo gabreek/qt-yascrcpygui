@@ -5,6 +5,7 @@ import subprocess
 import shlex
 import re
 import os
+import time
 
 def _get_startupinfo():
     """Returns a startupinfo object for subprocesses on Windows to suppress console window."""
@@ -32,15 +33,14 @@ def _run_adb_command(command, device_id=None, print_command=False, ignore_errors
         return result.strip()
     except FileNotFoundError:
         if not ignore_errors:
+            # This is a critical error, so we can leave the print
             print(f"Error: ADB command '{full_cmd[0]}' not found. Please ensure ADB is in your system's PATH.")
         return ""
-    except subprocess.CalledProcessError as e:
-        if not ignore_errors:
-            print(f"ADB command '{shlex.join(full_cmd)}' failed with exit code {e.returncode}: {e.stderr.strip()}")
+    except subprocess.CalledProcessError:
+        # These are common and should be handled by the calling function
         return ""
-    except Exception as e:
-        if not ignore_errors:
-            print(f"An unexpected error occurred while running ADB command '{shlex.join(full_cmd)}': {e}")
+    except Exception:
+        # General exceptions should also be handled by the caller
         return ""
 
 def get_device_info(device_id=None):
@@ -144,11 +144,10 @@ def pull_file(remote_path, local_path, device_id=None):
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', startupinfo=startupinfo)
         stdout, stderr = process.communicate()
         if process.returncode != 0:
-            print(f"Error pulling file '{remote_path}': {stderr.strip()}")
+            # Error is handled by the caller, no need to print here
             return False
         return True
-    except (subprocess.SubprocessError, FileNotFoundError) as e:
-        print(f"Failed to pull file: {e}")
+    except (subprocess.SubprocessError, FileNotFoundError):
         return False
 
 def start_winlator_app(shortcut_path, display_id, package_name, device_id=None, windowing_mode=1):
@@ -186,7 +185,7 @@ def start_app_on_display(package_name, display_id, windowing_mode, device_id=Non
     """Inicia um aplicativo Android em um display virtual específico."""
     component = _get_launcher_activity(package_name, device_id)
     if not component:
-        print(f"Error: Could not resolve launcher activity for package {package_name}")
+        # Error should be handled by the caller
         return
 
     remote_command_str = (
@@ -235,8 +234,7 @@ def get_connected_device_id():
                     if device_id and state == 'device': # Only return 'device' state, ignore 'offline', 'unauthorized', etc.
                         return device_id
         return None
-    except Exception as e:
-        print(f"Error getting connected device ID: {e}")
+    except Exception:
         return None
 
 def get_default_launcher(device_id=None):
@@ -295,17 +293,14 @@ def unlock_device(device_id, pin):
         # Send POWER keyevent to wake up the screen
         _run_adb_command(['shell', 'input', 'keyevent', '26'], device_id)
         # Add a small delay to allow the screen to turn on
-        import time
         time.sleep(0.5)
 
     # Swipe up to dismiss the lock screen
     _run_adb_command(['shell', 'input', 'swipe', '500', '1500', '500', '500'], device_id)
-    import time
     time.sleep(0.5)
 
     # Input the PIN
     _run_adb_command(['shell', 'input', 'text', shlex.quote(pin)], device_id)
-    import time
     time.sleep(0.5)
 
     # Press Enter to confirm the PIN
