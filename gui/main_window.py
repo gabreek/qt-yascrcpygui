@@ -12,55 +12,8 @@ from .workers import DeviceCheckWorker, DeviceConfigLoaderWorker
 from .dialogs import show_message_box
 from .adb_wifi_window import AdbWifiWindow
 from . import themes
+from .common_widgets import CustomTitleBar
 from utils import adb_handler
-
-
-class CustomTitleBar(QWidget):
-    """Barra de título customizada."""
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.parent = parent
-        self.setObjectName("CustomTitleBar")
-        self.setFixedHeight(35)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        self.title_label = QLabel("yaScrcpy", self)
-        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.close_button = QPushButton("✕", self)
-        self.close_button.setObjectName("close_button")
-        self.close_button.setFixedSize(40, 35)
-        self.close_button.clicked.connect(self.parent.close)
-
-        self.minimize_button = QPushButton("-", self)
-        self.minimize_button.setObjectName("minimize_button")
-        self.minimize_button.setFixedSize(40, 35)
-        self.minimize_button.clicked.connect(self.parent.minimize)
-
-        layout.addWidget(self.title_label)
-        layout.addStretch()
-        layout.addWidget(self.minimize_button)
-        layout.addWidget(self.close_button)
-
-        self.pressing = False
-        self.start_pos = QPoint(0, 0)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.pressing = True
-            self.start_pos = event.globalPosition().toPoint() - self.parent.frameGeometry().topLeft()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if self.pressing:
-            self.parent.move(event.globalPosition().toPoint() - self.start_pos)
-            event.accept()
-
-    def mouseReleaseEvent(self, event):
-        self.pressing = False
-        event.accept()
 
 
 class MainWindow(QMainWindow):
@@ -84,7 +37,7 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        self.title_bar = CustomTitleBar(self)
+        self.title_bar = CustomTitleBar(self, title="yaScrcpy")
 
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
@@ -282,9 +235,11 @@ class MainWindow(QMainWindow):
                 self.app_config.load_config_for_device(None)
                 self._update_all_tabs_status()
 
-    def _on_device_config_loaded(self, result_data):
+    def _on_device_config_loaded(self, result_data, installed_apps_packages, winlator_shortcuts_on_device):
         # Update last_known_device_id with the actual connection_id from the worker result
         self.last_known_device_id = result_data["device_id"]
+        self.app_config.device_app_cache['installed_apps'] = installed_apps_packages
+        self.app_config.device_app_cache['winlator_shortcuts'] = winlator_shortcuts_on_device
         self._update_all_tabs_status()
 
     def _on_device_load_error(self, error_message):
@@ -292,3 +247,5 @@ class MainWindow(QMainWindow):
 
     def _on_scrcpy_tab_config_ready(self):
         self.scrcpy_tab._update_all_widgets_from_config()
+        # Add this line to update the Apps tab display
+        self.apps_tab._update_display()

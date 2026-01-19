@@ -173,13 +173,7 @@ def get_theme_stylesheet(palette):
             border-top-right-radius: 3px;
             border-bottom-right-radius: 3px;
         }}
-        QComboBox::down-arrow {{
-            image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBkPSJNIDQgNiBMIDggMTIgTCAxMiA2IFoiIGZpbGw9IiN{"FFFFFF" if is_dark_theme(palette) else "000000"}fSIgLz48L3N2Zz4=);
-        }}
-        QComboBox::down-arrow:on {{ /* shift the arrow when popup is open */
-            top: 1px;
-            left: 1px;
-        }}
+
         #combo-dropdown-view {{
             border: 1px solid {border_color};
             border-radius: 10px;
@@ -232,6 +226,27 @@ def get_theme_stylesheet(palette):
             color: {title_text_color};
             background-color: transparent;
         }}
+        /* --- Custom Widget Styles --- */
+        #adb_status_label[error="true"] {{
+            color: red;
+        }}
+        #adb_status_label[error="false"] {{
+            color: {title_text_color};
+        }}
+        #item_name_label {{
+            font-size: 8pt;
+        }}
+        #item_action_button {{
+            padding: 0;
+            padding-top: 2px;
+        }}
+        #scrcpy_bitrate_button {{
+            font-size: 10px;
+        }}
+        #session_tree_widget::item {{
+            height: 32px;
+        }}
+        /* --- End Custom Widget Styles --- */
     """
     return style
 
@@ -264,8 +279,7 @@ def apply_stylesheet_to_window(window):
     Applies the application's stylesheet and specific title bar styling
     to any given window (QMainWindow, QWidget, QDialog).
     """
-    from .main_window import CustomTitleBar
-    from .scrcpy_session_manager_window_pyside import CustomSessionTitleBar
+    from .common_widgets import CustomTitleBar # Updated import
 
     app_palette = window.palette()
     app_stylesheet = get_theme_stylesheet(app_palette)
@@ -275,9 +289,3 @@ def apply_stylesheet_to_window(window):
     title_bar = window.findChild(CustomTitleBar, "CustomTitleBar")
     if title_bar:
         apply_theme_to_custom_title_bar(title_bar, app_palette)
-
-    # Also handle the session manager's specific title bar
-    session_title_bar = window.findChild(CustomSessionTitleBar, "CustomSessionTitleBar")
-    if session_title_bar:
-        title_text_color = app_palette.color(QPalette.ColorRole.WindowText).name()
-        session_title_bar.title_label.setStyleSheet(f"color: {title_text_color}; padding-left: 10px; font-weight: bold;")

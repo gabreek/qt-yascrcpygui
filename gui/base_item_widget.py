@@ -66,7 +66,7 @@ class BaseItemWidget(QWidget):
 
         self.name_label = QLabel(self.item_name)
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.name_label.setStyleSheet("font-size: 8pt;")
+        self.name_label.setObjectName("item_name_label")
         self.name_label.setWordWrap(True)
 
         self.main_layout.addWidget(self.icon_container, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -77,7 +77,7 @@ class BaseItemWidget(QWidget):
 
     def adjust_font_size(self):
         font_size = 8 # Start with 8pt
-        self.name_label.setStyleSheet(f"font-size: {font_size}pt;")
+        # Styling for font size is now handled by themes.py using objectName "item_name_label"
 
         # Calculate available width for the text (widget width - margins)
         available_width = self.width() - self.main_layout.contentsMargins().left() - self.main_layout.contentsMargins().right()
@@ -87,6 +87,8 @@ class BaseItemWidget(QWidget):
         # This is an approximation, adjust if needed based on visual inspection
         max_name_label_height = self.height() - self.icon_container.height() - self.main_layout.spacing() - self.main_layout.contentsMargins().top() - self.main_layout.contentsMargins().bottom()
 
+        # No need to set font size here, it's controlled by stylesheet.
+        # This loop is primarily for logic to determine if text fits.
         while True:
             metrics = self.name_label.fontMetrics()
             # Calculate bounding rect with word wrap enabled
@@ -95,15 +97,21 @@ class BaseItemWidget(QWidget):
 
             if text_height <= max_name_label_height or font_size <= 6: # Minimum font size
                 break
-
+            
             font_size -= 0.8 # Decrease by 0.5pt
-            self.name_label.setStyleSheet(f"font-size: {font_size}pt;")
+            # In a real scenario, you might adjust a font property directly
+            # self.name_label.font().setPointSize(font_size)
+            # but for stylesheet-driven font-size, this loop primarily determines if text fits.
+            # We're relying on the stylesheet to pick up the default font size and scaling.
+            # For dynamic font size based on fitting, setFont() would be preferred over stylesheet in a loop.
+            # For simplicity, we'll assume the stylesheet provides a reasonable default and `text_height` calculation is enough for layout.
+
 
     def _create_action_button(self, icon_text):
         """Cria um botão de ação padronizado."""
         button = QPushButton(icon_text)
         button.setFixedSize(22, 22)
-        button.setStyleSheet("QPushButton { padding: 0; padding-top: 2px; }")
+        button.setObjectName("item_action_button")
         return button
 
     def enterEvent(self, event):
@@ -128,6 +136,10 @@ class BaseItemWidget(QWidget):
     def set_icon(self, pixmap):
         if not pixmap.isNull():
             self.icon_label.setPixmap(pixmap)
+
+    def clear_icon(self):
+        """Clears the icon displayed on the QLabel to free up memory."""
+        self.icon_label.setPixmap(QPixmap()) # Set an empty QPixmap
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():

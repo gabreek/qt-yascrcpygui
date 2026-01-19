@@ -44,8 +44,9 @@ class AppConfig:
         'try_unlock': False,
         'alternate_launch_method': False,
         'windowing_mode': 'Fullscreen',
+        'show_system_apps': True,
     }
-    GLOBAL_KEYS = {'theme'}
+    GLOBAL_KEYS = {'theme', 'show_system_apps'}
     PROFILE_TYPES = {'app': 'app_metadata', 'winlator': 'winlator_game_configs'}
 
 
@@ -55,6 +56,7 @@ class AppConfig:
         self.CONFIG_FILE = None
         self.active_profile = 'global'
         self.connection_id = None
+        self.device_app_cache = {'installed_apps': set(), 'winlator_shortcuts': set()} # New attribute
 
         if platform.system() == "Windows":
             self.CONFIG_DIR = os.path.join(os.getenv('APPDATA'), 'ScrcpyLauncher')

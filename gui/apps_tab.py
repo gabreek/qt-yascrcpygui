@@ -73,8 +73,9 @@ class AppsTab(BaseGridTab):
         self.show_message("Loading apps from device...")
         self.refresh_button.setEnabled(False)
         current_device_id = self.app_config.get_connection_id()
+        show_system_apps_setting = self.app_config.get('show_system_apps', False)
 
-        worker = AppListWorker(current_device_id)
+        worker = AppListWorker(current_device_id, show_system_apps_setting)
         worker.signals.result.connect(self._on_app_list_loaded)
         worker.signals.error.connect(self._on_app_list_error)
         if self.main_window and hasattr(self.main_window, 'resume_device_check'):
@@ -94,9 +95,13 @@ class AppsTab(BaseGridTab):
         user_apps, system_apps = result_tuple
 
         user_app_list = [{'key': pkg, 'name': name} for name, pkg in user_apps.items()]
+        system_app_list = [{'key': pkg, 'name': name} for name, pkg in system_apps.items()]
 
 
-        new_cache = {'user_apps': user_app_list}
+        new_cache = {
+            'user_apps': user_app_list,
+            'system_apps': system_app_list,
+        }
         self.app_config.save_app_list_cache(new_cache)
 
         self._update_display()
@@ -109,11 +114,16 @@ class AppsTab(BaseGridTab):
             return
 
         user_apps = cached_data.get('user_apps', [])
+        system_apps = cached_data.get('system_apps', []) # Retrieve system apps from cache
+
+        show_system_apps = self.app_config.get('show_system_apps', False) # Get the setting
 
         apps_to_display = list(user_apps)
+        if show_system_apps:
+            apps_to_display.extend(system_apps)
 
         if not apps_to_display:
-            self.show_message("No user applications to display.")
+            self.show_message("No applications to display.") # Generic message now
             return
 
         self._clear_grid()
@@ -193,6 +203,10 @@ class AppsTab(BaseGridTab):
     def on_delete_config_requested(self, pkg_name):
         if not (widget := self.app_items.get(pkg_name)): return
         app_name = widget.item_name
+        
+        icon_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
+        if not os.path.exists(icon_path):
+            icon_path = None # Fallback to default icon if not found
 
         reply = show_message_box(
             self,
@@ -200,20 +214,32 @@ class AppsTab(BaseGridTab):
             f"Are you sure you want to delete the specific configuration for<br><b>{app_name}</b>?",
             icon=QMessageBox.Question,
             buttons=QMessageBox.Yes | QMessageBox.No,
-            default_button=QMessageBox.No
+            default_button=QMessageBox.No,
+            app_icon_path=icon_path
         )
 
         if reply == QMessageBox.Yes:
             if self.app_config.delete_app_scrcpy_config(pkg_name):
-                show_message_box(self, "Success", f"Specific configuration for {app_name} has been deleted.", icon=QMessageBox.Information)
+                show_message_box(self, "Success", f"Specific configuration for {app_name} has been deleted.", icon=QMessageBox.Information, app_icon_path=icon_path)
                 self.config_deleted.emit(pkg_name)
             else:
-                show_message_box(self, "Not Found", f"No specific configuration was found for {app_name}.", icon=QMessageBox.Warning)
+                show_message_box(self, "Not Found", f"No specific configuration was found for {app_name}.", icon=QMessageBox.Warning, app_icon_path=icon_path)
 
     def on_settings_requested(self, pkg_name):
         app_name = "this app"
+        icon_path = None # Default to no specific icon
+        
         if widget := self.app_items.get(pkg_name):
             app_name = widget.item_name
+            
+            is_launcher_shortcut = widget.item_info.get('is_launcher_shortcut', False)
+            if is_launcher_shortcut:
+                icon_path = os.path.join(os.path.dirname(__file__), "launcher.png")
+            else:
+                cached_icon_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
+                if os.path.exists(cached_icon_path):
+                    icon_path = cached_icon_path
+
 
         is_launcher = (pkg_name == self.app_config.get('default_launcher'))
         global_config = self.app_config.get_global_values_no_profile()
@@ -228,7 +254,8 @@ class AppsTab(BaseGridTab):
                 "Would you like to save a specific configuration for the Launcher with 'Max Size' set to 0 (native resolution) instead?",
                 icon=QMessageBox.Warning,
                 buttons=QMessageBox.Yes | QMessageBox.No,
-                default_button=QMessageBox.Yes
+                default_button=QMessageBox.Yes,
+                app_icon_path=icon_path
             )
 
             if reply == QMessageBox.Yes:
@@ -244,7 +271,8 @@ class AppsTab(BaseGridTab):
                     "No specific configuration was saved for the Launcher.\n\n"
                     "To use the Launcher without a virtual display, please go to the 'Scrcpy' tab, "
                     "set 'Virtual Display' to 'Disabled', and select a desired 'Max Size'.",
-                    icon=QMessageBox.Information
+                    icon=QMessageBox.Information,
+                    app_icon_path=icon_path
                 )
                 return # Stop further execution
         else:
@@ -256,7 +284,7 @@ class AppsTab(BaseGridTab):
         app_specific_config = {k: v for k, v in config_to_save.items() if k not in keys_to_exclude}
 
         self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)
-        show_message_box(self, "Success", f"Current settings have been saved as a specific configuration for <b>{app_name}</b>.", icon=QMessageBox.Information)
+        show_message_box(self, "Success", f"Current settings have been saved as a specific configuration for <b>{app_name}</b>.", icon=QMessageBox.Information, app_icon_path=icon_path)
         self.config_changed.emit(pkg_name)
 
     def filter_apps(self):
@@ -286,7 +314,10 @@ class AppsTab(BaseGridTab):
 
     def _on_display_id_found_for_alt_launch(self, display_id, shortcut_path, package_name):
         if not display_id:
-            show_message_box(self, "Error", "Virtual display not found for alternate launch.", icon=QMessageBox.Critical)
+            app_icon_path = os.path.join(self.icon_cache_dir, f"{package_name}.png")
+            if not os.path.exists(app_icon_path):
+                app_icon_path = None
+            show_message_box(self, "Error", "Virtual display not found for alternate launch.", icon=QMessageBox.Critical, app_icon_path=app_icon_path)
             return
 
         # Correctly determine windowing mode: prioritize specific, then global, then default
@@ -305,7 +336,11 @@ class AppsTab(BaseGridTab):
             windowing_mode=windowing_mode_int,
             connection_id=self.app_config.get_connection_id()
         )
-        app_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "App Launch Error", msg, icon=QMessageBox.Critical))
+        # Handle icon path for the error message
+        app_icon_path_for_error = os.path.join(self.icon_cache_dir, f"{package_name}.png")
+        if not os.path.exists(app_icon_path_for_error):
+            app_icon_path_for_error = None
+        app_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "App Launch Error", msg, icon=QMessageBox.Critical, app_icon_path=app_icon_path_for_error))
         if self.main_window:
             self.main_window.start_worker(app_launch_worker)
 
@@ -354,7 +389,7 @@ class AppsTab(BaseGridTab):
 
         # Create and configure the launch worker
         launch_worker = ScrcpyLaunchWorker(config_to_use, window_title, device_id, icon_path, session_type)
-        launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Scrcpy Error", msg, icon=QMessageBox.Critical))
+        launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Scrcpy Error", msg, icon=QMessageBox.Critical, app_icon_path=icon_path))
 
         # If using alternate launch, connect the signal to the appropriate slot
         if use_alt_launch and not is_launcher:

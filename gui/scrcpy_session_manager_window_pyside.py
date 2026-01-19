@@ -13,25 +13,7 @@ from PIL import Image # Still need PIL for loading various image formats into QI
 
 from utils import scrcpy_handler
 from . import themes
-
-
-class CustomSessionTitleBar(QWidget):
-    """Barra de título customizada para a janela de sessões, sem botão de fechar."""
-    def __init__(self, parent, title_text="Active Scrcpy Sessions"):
-        super().__init__(parent)
-        self.parent = parent
-        self.setObjectName("CustomSessionTitleBar")
-        self.setFixedHeight(35)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        self.title_label = QLabel(title_text, self)
-        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        layout.addWidget(self.title_label)
-        layout.addStretch()
+from .common_widgets import CustomTitleBar, CustomThemedDialog
 
 
 class ScrcpySessionManagerWindow(QWidget):
@@ -52,7 +34,7 @@ class ScrcpySessionManagerWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground) # For rounded corners and shadows
 
         self.container_widget = QWidget()
-        self.container_widget.setObjectName("container_widget")
+        self.container_widget.setObjectName("main_widget")
 
         main_layout = QVBoxLayout(self.container_widget)
         main_layout.setContentsMargins(0, 0, 0, 0) # Remove margins for frameless window
@@ -62,7 +44,7 @@ class ScrcpySessionManagerWindow(QWidget):
         dialog_layout.setContentsMargins(0, 0, 0, 0)
         dialog_layout.addWidget(self.container_widget)
 
-        self.title_bar = CustomSessionTitleBar(self, title_text="Active Scrcpy Sessions")
+        self.title_bar = CustomTitleBar(parent_window=self, title="Active Scrcpy Sessions")
         main_layout.addWidget(self.title_bar)
 
         # Content widget to hold the tree and buttons, with proper margins
@@ -76,7 +58,7 @@ class ScrcpySessionManagerWindow(QWidget):
         self.tree.setHeaderHidden(True) # Only show the tree column
         self.tree.setColumnCount(1)
         self.tree.setIndentation(0) # Remove indentation for cleaner look
-        self.tree.setStyleSheet("QTreeWidget::item { height: 32px; }") # Set row height
+        self.tree.setObjectName("session_tree_widget") # Add objectName
         content_layout.addWidget(self.tree)
 
         # Bottom command buttons
@@ -273,20 +255,18 @@ class ScrcpySessionManagerWindow(QWidget):
         command_args = session_data.get('command_args', ["N/A"])
         command_str = shlex.join(command_args)
 
-        command_dialog = QDialog(self)
-        command_dialog.setWindowTitle(f"Command for {session_data['app_name']}")
+        command_dialog = CustomThemedDialog(self, title=f"Command for {session_data['app_name']}")
         command_dialog.setFixedSize(600, 200)
         command_dialog.setWindowModality(Qt.ApplicationModal) # Make it modal
 
-        layout = QVBoxLayout(command_dialog)
         text_edit = QTextEdit()
         text_edit.setPlainText(command_str)
         text_edit.setReadOnly(True)
-        layout.addWidget(text_edit)
+        command_dialog.add_content_widget(text_edit)
 
         close_button = QPushButton("Close")
         close_button.clicked.connect(command_dialog.accept)
-        layout.addWidget(close_button, alignment=Qt.AlignCenter)
+        command_dialog.add_content_widget(close_button)
 
         command_dialog.exec()
 

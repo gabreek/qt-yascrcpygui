@@ -3,7 +3,7 @@ import tempfile
 import queue
 from PIL import Image
 
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QGridLayout, QLabel, QProgressDialog, QMessageBox)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QGridLayout, QLabel, QMessageBox) # Removed QProgressDialog
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 import sys
@@ -13,6 +13,7 @@ from utils import scrcpy_handler
 from .workers import GameListWorker, IconExtractorWorker, WinlatorLaunchWorker, ScrcpyLaunchWorker
 from .dialogs import show_message_box
 from .base_grid_tab import BaseGridTab
+from .common_widgets import CustomThemedProgressDialog # Import CustomThemedProgressDialog
 
 class WinlatorTab(BaseGridTab):
     launch_requested = Signal(str, str)
@@ -188,7 +189,7 @@ class WinlatorTab(BaseGridTab):
             if not os.path.exists(cached_icon_path):
                 metadata = self.app_config.get_app_metadata(path)
                 if not metadata.get('exe_icon_fetch_failed') and not metadata.get('custom_icon'):
-                    missing_icons.append((path, item, cached_icon_path))
+                    missing_icons.append((path, cached_icon_path))
 
         if not missing_icons:
             show_message_box(self, "Icons", "No icons to extract.")
@@ -202,7 +203,8 @@ class WinlatorTab(BaseGridTab):
             "This process will download the .exe files to your phone temporarily and may take several minutes depending on the number and size of the file\n\n"
             "Wish to continue?""",
             icon=QMessageBox.Question,
-            buttons=QMessageBox.Yes | QMessageBox.No
+            buttons=QMessageBox.Yes | QMessageBox.No,
+            app_icon_path=None # No specific app icon for this general question
         )
         if reply == QMessageBox.Yes:
             self.start_icon_extraction_flow(missing_icons)
@@ -210,11 +212,9 @@ class WinlatorTab(BaseGridTab):
     def start_icon_extraction_flow(self, tasks):
         self.total_tasks = len(tasks)
         self.completed_tasks_count = 0
-        self.progress_dialog = QProgressDialog("Starting...", "Cancel", 0, self.total_tasks, self)
-        self.progress_dialog.setWindowTitle("Extracting Icons")
-        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self.progress_dialog.setAutoClose(False)
-        self.progress_dialog.setMinimumDuration(0)
+        self.progress_dialog = CustomThemedProgressDialog("Extracting Icons", "Cancel", 0, self.total_tasks, self)
+        # CustomThemedProgressDialog constructor already sets the title, modality, and min/max.
+        # So, the explicit calls for setWindowTitle, setWindowModality, setAutoClose, setMinimumDuration are removed.
         self.progress_dialog.setValue(0)
         self.progress_dialog.show()
 
@@ -223,6 +223,8 @@ class WinlatorTab(BaseGridTab):
         for _ in range(self.NUM_WORKERS):
             worker = IconExtractorWorker(self.extraction_queue, self.app_config, self.temp_dir, self.placeholder_icon, self.app_config.get_connection_id())
             worker.signals.icon_extracted.connect(self._on_icon_extracted)
+            worker.signals.error.connect(self._on_icon_extraction_error) # Connect error signal
+            worker.signals.finished.connect(self._on_worker_finished_in_extraction_flow) # Connect worker finished signal
             self.icon_extractor_workers.append(worker)
             if self.main_window:
                 self.main_window.start_worker(worker)
@@ -230,8 +232,9 @@ class WinlatorTab(BaseGridTab):
         for task in tasks:
             self.extraction_queue.put(task)
 
-        for _ in range(len(self.icon_extractor_workers)):
-            self.extraction_queue.put(None)
+        for _ in range(self.NUM_WORKERS):
+            self.extraction_queue.put(None) # Add None sentinel for each worker
+
 
     def _on_icon_extracted(self, path, success, pixmap=None):
         self.completed_tasks_count += 1
@@ -248,10 +251,48 @@ class WinlatorTab(BaseGridTab):
         if self.completed_tasks_count >= self.total_tasks:
             self._on_all_icons_extracted()
 
+    def _on_icon_extraction_error(self, path, error_msg):
+        print(f"Error extracting icon for {path}: {error_msg}")
+        self.completed_tasks_count += 1 # Increment count even on error
+        self.progress_dialog.setValue(self.completed_tasks_count)
+        self.progress_dialog.setLabelText(f"Processing {self.completed_tasks_count} of {self.total_tasks}...")
+
+        # If there's an error, make sure the item's icon is set to placeholder
+        if path in self.game_items:
+            item = self.game_items[path]
+            item.set_icon(self.placeholder_icon)
+        
+        if self.completed_tasks_count >= self.total_tasks:
+            self._on_all_icons_extracted()
+
+    def _on_worker_finished_in_extraction_flow(self):
+        # This slot is called when a worker finishes.
+        # It's primarily for cleanup if needed, but for task completion logic,
+        # we rely on completed_tasks_count and _on_all_icons_extracted.
+        pass
+
+    def _on_icon_extraction_error(self, path, error_msg):
+        # This slot is called when a worker encounters an error during icon extraction
+        # The worker itself will still emit icon_extracted with success=False in its finally block
+        # So, we just log the error and ensure the progress count is updated.
+        print(f"Error extracting icon for {path}: {error_msg}")
+        # The progress count and display update is already handled by _on_icon_extracted
+        # which will be called regardless of success due to the worker's finally block.
+        # No need to increment completed_tasks_count here again.
+        # If we need to show specific errors per item, we would do it here.
+
+    # This slot will be called when each worker finishes (after processing its None sentinel)
+    # However, with queue.join(), we don't need to explicitly wait for workers to finish
+    # for total task completion.
+    def _on_worker_finished_in_extraction_flow(self):
+        # This can be used for cleanup specific to the worker thread.
+        # For now, simply ensures the worker is properly managed by the thread pool.
+        pass
+
     def _on_all_icons_extracted(self):
         if self.progress_dialog.isVisible():
             self.progress_dialog.close()
-        show_message_box(self, "Finished", "Icons extraction finished!")
+        show_message_box(self, "Finished", "Icons extraction finished!", app_icon_path=None) # No specific app icon
         self.icon_extractor_workers.clear()
         self.populate_games_grid()
 
@@ -288,21 +329,21 @@ class WinlatorTab(BaseGridTab):
             icon_path=icon_path,
             session_type='winlator'
         )
-        self.scrcpy_launch_worker.signals.error.connect(self._on_scrcpy_launch_error)
+        self.scrcpy_launch_worker.signals.error.connect(lambda msg: self._on_scrcpy_launch_error(msg, icon_path))
         self.scrcpy_launch_worker.signals.scrcpy_process_started.connect(self._on_scrcpy_process_started)
-        self.scrcpy_launch_worker.signals.display_id_found.connect(self._on_display_id_found)
+        self.scrcpy_launch_worker.signals.display_id_found.connect(lambda display_id, shortcut_path, package_name: self._on_display_id_found(display_id, shortcut_path, package_name, icon_path))
         if self.main_window:
             self.main_window.start_worker(self.scrcpy_launch_worker)
 
-    def _on_scrcpy_launch_error(self, error_msg):
-        show_message_box(self, "Scrcpy Error", f"Failed to start scrcpy for game: {error_msg}", icon=QMessageBox.Critical)
+    def _on_scrcpy_launch_error(self, error_msg, icon_path=None):
+        show_message_box(self, "Scrcpy Error", f"Failed to start scrcpy for game: {error_msg}", icon=QMessageBox.Critical, app_icon_path=icon_path)
 
     def _on_scrcpy_process_started(self, process):
         self.scrcpy_process = process
 
-    def _on_display_id_found(self, display_id, shortcut_path, package_name):
+    def _on_display_id_found(self, display_id, shortcut_path, package_name, icon_path=None):
         if not display_id:
-            show_message_box(self, "Error", "Virtual display not found.", icon=QMessageBox.Critical)
+            show_message_box(self, "Error", "Virtual display not found.", icon=QMessageBox.Critical, app_icon_path=icon_path)
             return
 
         full_config = self.app_config.get_global_values_no_profile().copy()
@@ -320,6 +361,6 @@ class WinlatorTab(BaseGridTab):
             connection_id=self.app_config.get_connection_id(),
             windowing_mode=windowing_mode_int
         )
-        self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Winlator Launch Error", msg, icon=QMessageBox.Critical))
+        self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Winlator Launch Error", msg, icon=QMessageBox.Critical, app_icon_path=icon_path))
         if self.main_window:
             self.main_window.start_worker(self.winlator_launch_worker)

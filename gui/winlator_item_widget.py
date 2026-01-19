@@ -4,6 +4,9 @@
 from PySide6.QtWidgets import QPushButton, QMessageBox
 from PySide6.QtCore import Signal
 from .base_item_widget import BaseItemWidget
+from .dialogs import show_message_box # Import show_message_box
+import os # Import os for path manipulation
+
 
 class WinlatorItemWidget(BaseItemWidget):
     # Specific signals for WinlatorItemWidget
@@ -18,7 +21,7 @@ class WinlatorItemWidget(BaseItemWidget):
 
         # Style adjustments for Winlator (removing size and bold overrides)
         # The widget and icon size are now defined by BaseItemWidget (75x110 and 32x32)
-        self.name_label.setStyleSheet("font-size: 8pt;") # Removed font-weight: bold;
+        # Styling for name_label is handled by themes.py using objectName "item_name_label"
 
         # Adds specific buttons using the base class's centralized method
         self.settings_button = self._create_action_button("⚙️")
@@ -33,19 +36,27 @@ class WinlatorItemWidget(BaseItemWidget):
         self.settings_button.clicked.connect(self.save_game_config)
         self.delete_button.clicked.connect(self.delete_game_config)
 
+    def _get_game_icon_path(self):
+        icon_key = os.path.basename(self.game_path)
+        icon_path = os.path.join(self.app_config.get_icon_cache_dir(), f"{icon_key}.png")
+        return icon_path if os.path.exists(icon_path) else None
+
     def save_game_config(self):
         current_scrcpy_config = self.app_config.get_global_values_no_profile().copy()
         self.app_config.save_winlator_game_config(self.game_path, current_scrcpy_config)
-        QMessageBox.information(self, "Configuration Saved", f"Configuration saved for {self.game_name}.")
+        show_message_box(self, "Configuration Saved", f"Configuration saved for {self.game_name}.", icon=QMessageBox.Information, app_icon_path=self._get_game_icon_path())
         self.config_saved.emit(self.game_path)
 
     def delete_game_config(self):
-        reply = QMessageBox.question(self, "Confirm Deletion",
+        icon_path = self._get_game_icon_path()
+        reply = show_message_box(self, "Confirm Deletion",
                                      f"Are you sure you want to delete the saved configuration for {self.game_name}?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
+                                     icon=QMessageBox.Question,
+                                     buttons=QMessageBox.Yes | QMessageBox.No,
+                                     app_icon_path=icon_path)
+        if reply == QMessageBox.Yes:
             if self.app_config.delete_winlator_game_config(self.game_path):
-                QMessageBox.information(self, "Configuration Deleted", f"Configuration for {self.game_name} has been deleted.")
+                show_message_box(self, "Configuration Deleted", f"Configuration for {self.game_name} has been deleted.", icon=QMessageBox.Information, app_icon_path=icon_path)
                 self.config_deleted.emit(self.game_path)
             else:
-                QMessageBox.warning(self, "No Configuration Found", f"No specific configuration was found for {self.game_name} to delete.")
+                show_message_box(self, "No Configuration Found", f"No specific configuration was found for {self.game_name} to delete.", icon=QMessageBox.Warning, app_icon_path=icon_path)

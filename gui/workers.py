@@ -29,9 +29,10 @@ class AppListWorkerSignals(QObject):
     result = Signal(tuple)
 
 class AppListWorker(QRunnable):
-    def __init__(self, connection_id):
+    def __init__(self, connection_id, show_system_apps):
         super().__init__()
         self.connection_id = connection_id
+        self.show_system_apps = show_system_apps
         self.signals = AppListWorkerSignals()
 
     def run(self):
@@ -190,6 +191,7 @@ class GameListWorker(BaseRunnableWorker):
 
 class IconExtractorWorkerSignals(QObject):
     icon_extracted = Signal(str, bool, QPixmap)
+    error = Signal(str, str) # Added error signal
     finished = Signal()
 
 class IconExtractorWorker(BaseRunnableWorker):
@@ -203,43 +205,47 @@ class IconExtractorWorker(BaseRunnableWorker):
         self.connection_id = connection_id
 
     def run(self):
-        while True:
-            task = self.extraction_queue.get()
-            if task is None:
-                self.extraction_queue.task_done()
-                break
+        try:
+            while True:
+                task = self.extraction_queue.get()
+                if task is None:
+                    self.extraction_queue.task_done()
+                    break
 
-            path, item_widget, save_path = task
-            success = False
-            pixmap = None
-            local_exe_path = None
+                path, save_path = task
+                success = False
+                pixmap = None
+                local_exe_path = None
 
-            try:
-                remote_exe_path = adb_handler.get_game_executable_info(path, self.connection_id)
-                if remote_exe_path:
-                    local_exe_path = os.path.join(self.temp_dir, f"{os.path.basename(remote_exe_path)}_{int(time.time()*1000)}")
-                    adb_handler.pull_file(remote_exe_path, local_exe_path, self.connection_id)
-                    if os.path.exists(local_exe_path):
-                        result_queue = Queue()
-                        process = Process(target=extract_icon_in_process, args=(local_exe_path, save_path, result_queue))
-                        process.start()
-                        process.join()
+                try:
+                    remote_exe_path = adb_handler.get_game_executable_info(path, self.connection_id)
+                    if remote_exe_path:
+                        local_exe_path = os.path.join(self.temp_dir, f"{os.path.basename(remote_exe_path)}_{int(time.time()*1000)}")
+                        adb_handler.pull_file(remote_exe_path, local_exe_path, self.connection_id)
+                        if os.path.exists(local_exe_path):
+                            result_queue = Queue()
+                            process = Process(target=extract_icon_in_process, args=(local_exe_path, save_path, result_queue))
+                            process.start()
+                            process.join()
 
-                        if not result_queue.empty():
-                            result_success, result_data = result_queue.get()
-                            if result_success:
-                                img = Image.open(save_path).resize((48, 48), Image.LANCZOS)
-                                pixmap = QPixmap.fromImage(img.toqimage())
-                                success = True
-            except Exception:
-                pass
-            finally:
-                if local_exe_path and os.path.exists(local_exe_path):
-                    os.remove(local_exe_path)
-                self.app_config.save_app_metadata(path, {'exe_icon_fetch_failed': not success})
-                self.signals.icon_extracted.emit(path, success, pixmap if pixmap else self.placeholder_icon)
-                self.extraction_queue.task_done()
-        self.signals.finished.emit()
+                            if not result_queue.empty():
+                                result_success, result_data = result_queue.get()
+                                if result_success:
+                                    img = Image.open(save_path).resize((48, 48), Image.LANCZOS)
+                                    pixmap = QPixmap.fromImage(img.toqimage())
+                                    success = True
+                except Exception as e:
+                    self.signals.error.emit(path, str(e)) # Emit error signal with path and message
+                finally:
+                    if local_exe_path and os.path.exists(local_exe_path):
+                        os.remove(local_exe_path)
+                    self.app_config.save_app_metadata(path, {'exe_icon_fetch_failed': not success})
+                    self.signals.icon_extracted.emit(path, success, pixmap if pixmap else self.placeholder_icon)
+                    self.extraction_queue.task_done()
+        except Exception as e:
+            self.signals.error.emit("worker_startup_error", str(e)) # Catch any unexpected worker-level errors
+        finally:
+            self.signals.finished.emit() # Ensure finished is always emitted
 
 class WinlatorLaunchWorkerSignals(QObject):
     finished = Signal()
@@ -315,7 +321,7 @@ class DeviceCheckWorker(QRunnable):
 class DeviceConfigLoaderWorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
-    result = Signal(dict)
+    result = Signal(dict, set, set) # Modified result signal
 
 
 class DeviceConfigLoaderWorker(QRunnable):
@@ -340,12 +346,27 @@ class DeviceConfigLoaderWorker(QRunnable):
             self.app_config.connection_id = connection_id
             
             device_info = adb_handler.get_device_info(connection_id)
+
+            # --- New: Fetch installed apps and Winlator shortcuts ---
+            installed_apps_packages = set()
+            winlator_shortcuts_on_device = set()
+            try:
+                user_apps, system_apps = scrcpy_handler.list_installed_apps(connection_id)
+                installed_apps_packages = set(user_apps.values()) | set(system_apps.values())
+            except Exception as e:
+                self.signals.error.emit(f"Error listing installed apps during config load: {e}")
+
+            try:
+                winlator_shortcuts_on_device = {s[1] for s in adb_handler.list_winlator_shortcuts_with_names(connection_id)}
+            except Exception as e:
+                self.signals.error.emit(f"Error listing Winlator shortcuts during config load: {e}")
+            # --- End New ---
             
             output = {
                 "device_id": connection_id,
                 "device_info": device_info,
             }
-            self.signals.result.emit(output)
+            self.signals.result.emit(output, installed_apps_packages, winlator_shortcuts_on_device) # Modified emit
         except Exception as e:
             self.signals.error.emit(str(e))
         finally:

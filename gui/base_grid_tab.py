@@ -40,6 +40,9 @@ class BaseGridTab(QWidget):
         self.items.clear()
         while (item := self.grid_layout.takeAt(0)) is not None:
             if item.widget():
+                # Explicitly clear the icon to release pixmap memory
+                if hasattr(item.widget(), 'clear_icon'):
+                    item.widget().clear_icon()
                 item.widget().deleteLater()
 
     def show_message(self, text):

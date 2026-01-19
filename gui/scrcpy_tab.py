@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCombo
 
 from .workers import DeviceInfoWorker, EncoderListWorker
 from . import themes
+from utils import scrcpy_handler, adb_handler # Add these imports
 
 # --- Custom Widgets to Ignore Scroll Wheel ---
 
@@ -173,6 +174,16 @@ class ScrcpyTab(QWidget):
         row_layout.addWidget(self.theme_combo)
         layout.addLayout(row_layout)
 
+        # New: Show System Apps checkbox
+        self.show_system_apps_checkbox = QCheckBox("Show System Apps")
+        self.show_system_apps_checkbox.setChecked(self.app_config.get('show_system_apps', False))
+        self.show_system_apps_checkbox.stateChanged.connect(self._on_show_system_apps_changed)
+        layout.addWidget(self.show_system_apps_checkbox) # Add it to the layout
+
+    def _on_show_system_apps_changed(self, state):
+        self.app_config.set('show_system_apps', bool(state))
+        self.config_updated_on_worker.emit() # Trigger a refresh of the app list
+
     def _update_theme_dropdown(self):
         self.theme_combo.blockSignals(True)
         self.theme_combo.clear()
@@ -208,21 +219,50 @@ class ScrcpyTab(QWidget):
         self.profile_combo.blockSignals(True)
         self.profile_combo.clear()
 
-        # Add Global Config
+        # Add Global Config (always present)
         self.profile_combo.addItem("Global Config", userData="global")
 
+        device_id = self.app_config.get_connection_id()
+        if device_id == DEVICE_NOT_FOUND or device_id is None:
+            # If no device, only show Global Config
+            # Set current item
+            active_profile = self.app_config.active_profile
+            index = self.profile_combo.findData(active_profile)
+            if index != -1:
+                self.profile_combo.setCurrentIndex(index)
+            self.profile_combo.blockSignals(False)
+            return
+
+        # 1. Get installed apps from cache
+        installed_apps_packages = self.app_config.device_app_cache.get('installed_apps', set())
+
+        # 2. Get Winlator shortcuts from cache
+        winlator_shortcuts_on_device = self.app_config.device_app_cache.get('winlator_shortcuts', set())
+
+
         # Add App Configs
-        app_configs = self.app_config.get_app_config_keys()
-        if app_configs:
+        filtered_app_configs = []
+        app_configs_from_settings = self.app_config.get_app_config_keys()
+        for key, name in app_configs_from_settings:
+            if key in installed_apps_packages:
+                filtered_app_configs.append((key, name))
+        
+        if filtered_app_configs:
             self.profile_combo.insertSeparator(self.profile_combo.count())
-            for key, name in app_configs:
+            for key, name in sorted(filtered_app_configs, key=lambda x: x[1].lower()):
                 self.profile_combo.addItem(f"{name} (App)", userData=key)
 
         # Add Winlator Configs
-        winlator_configs = self.app_config.get_winlator_config_keys()
-        if winlator_configs:
+        filtered_winlator_configs = []
+        winlator_configs_from_settings = self.app_config.get_winlator_config_keys()
+        for key, name in winlator_configs_from_settings:
+            # For Winlator, 'key' is the shortcut path
+            if key in winlator_shortcuts_on_device:
+                filtered_winlator_configs.append((key, name))
+
+        if filtered_winlator_configs:
             self.profile_combo.insertSeparator(self.profile_combo.count())
-            for key, name in winlator_configs:
+            for key, name in sorted(filtered_winlator_configs, key=lambda x: x[1].lower()):
                 self.profile_combo.addItem(f"{name} (Winlator)", userData=key)
 
         # Set current item
@@ -230,6 +270,13 @@ class ScrcpyTab(QWidget):
         index = self.profile_combo.findData(active_profile)
         if index != -1:
             self.profile_combo.setCurrentIndex(index)
+        else:
+            # If the active profile is no longer available (e.g., app uninstalled),
+            # revert to global config.
+            self.app_config.load_profile("global")
+            self.profile_combo.setCurrentIndex(0) # Select "Global Config"
+            self._update_all_widgets_from_config()
+
 
         self.profile_combo.blockSignals(False)
 
@@ -481,7 +528,7 @@ class ScrcpyTab(QWidget):
             button = QPushButton(f"{btn_val}{unit}")
             button.clicked.connect(lambda checked, val=btn_val: slider.setValue(val))
             button.setFixedWidth(50)
-            button.setStyleSheet("font-size: 10px;")
+            button.setObjectName("scrcpy_bitrate_button")
             button_layout.addWidget(button)
         parent_layout.addLayout(button_layout)
         self.sliders[var_key] = (slider, value_label)
