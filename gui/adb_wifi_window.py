@@ -6,11 +6,7 @@ from PySide6.QtGui import QPalette
 from utils import adb_handler
 from . import themes
 from .common_widgets import CustomTitleBar
-
-class AdbWorkerSignals(QObject):
-    result = Signal(str)
-    error = Signal(str)
-    finished = Signal()
+from .workers import AdbConnectWorker, AdbWorkerSignals
 
 class AdbWifiWindow(QWidget):
     def __init__(self, app_config, parent=None):

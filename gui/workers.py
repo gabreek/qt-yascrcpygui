@@ -371,3 +371,28 @@ class DeviceConfigLoaderWorker(QRunnable):
             self.signals.error.emit(str(e))
         finally:
             self.signals.finished.emit()
+
+
+class AdbWorkerSignals(QObject):
+    result = Signal(str)
+    error = Signal(str)
+    finished = Signal()
+
+
+class AdbConnectWorker(BaseRunnableWorker):
+    def __init__(self, address):
+        super().__init__()
+        self.address = address
+        self.signals = AdbWorkerSignals()
+
+    def run(self):
+        try:
+            result = adb_handler.connect_wifi(self.address)
+            if "connected" in result or "already connected" in result:
+                self.signals.result.emit(result)
+            else:
+                self.signals.error.emit(result)
+        except Exception as e:
+            self.signals.error.emit(str(e))
+        finally:
+            self.signals.finished.emit()
