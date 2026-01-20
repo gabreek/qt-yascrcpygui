@@ -45,8 +45,9 @@ class AppConfig:
         'alternate_launch_method': False,
         'windowing_mode': 'Fullscreen',
         'show_system_apps': True,
+        'start_web_server_on_launch': False,
     }
-    GLOBAL_KEYS = {'theme', 'show_system_apps'}
+    GLOBAL_KEYS = {'theme', 'show_system_apps', 'start_web_server_on_launch'}
     PROFILE_TYPES = {'app': 'app_metadata', 'winlator': 'winlator_game_configs'}
 
 

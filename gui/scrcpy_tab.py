@@ -1,6 +1,6 @@
 # FILE: gui/scrcpy_tab.py
 # PURPOSE: Cria e gerencia a aba de controle do Scrcpy com PySide6.
-# VERSION: 3.0 (Configuration Profiles)
+# VERSION: 3.1 (Web Server Config)
 
 from PySide6.QtCore import Qt, QThreadPool, Signal, QRect
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
@@ -9,84 +9,51 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCombo
 
 from .workers import DeviceInfoWorker, EncoderListWorker
 from . import themes
-from utils import scrcpy_handler, adb_handler # Add these imports
+from utils import scrcpy_handler, adb_handler
+from .web_server_config_window import WebServerConfigWindow
 
-# --- Custom Widgets to Ignore Scroll Wheel ---
 
 class NoArrowScrollBar(QScrollBar):
     def subControlRect(self, control, option):
-        # Override this method to return an empty rectangle for the add/sub-line controls (arrows)
         if control == QStyle.SubControl.SC_ScrollBarAddLine or \
            control == QStyle.SubControl.SC_ScrollBarSubLine:
-            return QRect() # Return an empty rectangle, effectively hiding them
+            return QRect()
         return super().subControlRect(control, option)
 
 class NoScrollQComboBox(QComboBox):
     def __init__(self, parent=None):
         super().__init__(parent)
-
-        # Create a new QListView and set it as the view for this QComboBox.
-        # Then, set a unique object name on the view so we can style it directly.
         view = QListView(self)
         self.setView(view)
         view.setObjectName("combo-dropdown-view")
         view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-
-        # Get the default scrollbar provided by QListView/QComboBox
         old_scrollbar = view.verticalScrollBar()
-
-        # Create our custom NoArrowScrollBar
-        custom_scrollbar = NoArrowScrollBar(view) # Parent is the view
-
-        # Copy relevant properties from the old scrollbar to the new one
+        custom_scrollbar = NoArrowScrollBar(view)
         custom_scrollbar.setRange(old_scrollbar.minimum(), old_scrollbar.maximum())
         custom_scrollbar.setValue(old_scrollbar.value())
         custom_scrollbar.setSingleStep(old_scrollbar.singleStep())
         custom_scrollbar.setPageStep(old_scrollbar.pageStep())
-
-        # Replace the QListView's vertical scrollbar with our custom one
         view.setVerticalScrollBar(custom_scrollbar)
 
     def wheelEvent(self, event):
         event.ignore()
 
     def showPopup(self):
-        # Allow the default popup to be shown and positioned initially by QComboBox
         super().showPopup()
-
         popup_widget = self.view().parentWidget()
         if popup_widget:
-            # Get the global position of the QComboBox's bottom-left corner
             combo_global_pos = self.mapToGlobal(self.rect().bottomLeft())
-
-            # The popup should typically have the same width as the combobox itself
             desired_width = self.width()
-
-            # Calculate the actual height needed for all items dynamically
             model = self.view().model()
-            desired_height = self.height() # Default to combobox height if no items or calculation fails
-
+            desired_height = self.height()
             if model.rowCount() > 0:
-                # Try to get item height from the view
                 single_item_height = self.view().sizeHintForRow(0)
                 if single_item_height <= 0:
-                    # Fallback: estimate based on font metrics and stylesheet padding
-                    # font-size: 9pt; #combo-dropdown-view::item { padding: 5px 10px; }
-                    single_item_height = self.fontMetrics().height() + 10  # 5px top + 5px bottom padding
-
-                # Calculate total height for all visible items
+                    single_item_height = self.fontMetrics().height() + 10
                 total_content_height = single_item_height * model.rowCount()
-
-                # Add a small buffer for the QListView's own borders/margins/spacing
-                # This often needs to be a magic number, 4px is a common value (2px top, 2px bottom)
                 list_view_vertical_margin = 4
-
                 actual_list_view_height = total_content_height + list_view_vertical_margin
-
-                # Cap the height at a maximum of 250 pixels (approx. 10 items)
                 desired_height = min(actual_list_view_height, 250)
-
-            # Set the new geometry for the popup widget (x, y, width, height)
             popup_widget.setGeometry(
                 combo_global_pos.x(),
                 combo_global_pos.y(),
@@ -94,12 +61,10 @@ class NoScrollQComboBox(QComboBox):
                 desired_height
             )
 
-
 class NoScrollQSlider(QSlider):
     def wheelEvent(self, event):
         event.ignore()
 
-# --- Constants ---
 CODEC_AUTO = "Auto"
 DEVICE_NOT_FOUND = "no_device"
 PROFILE_ROLE = Qt.UserRole + 1
@@ -108,20 +73,18 @@ class ScrcpyTab(QWidget):
     config_updated_on_worker = Signal()
     theme_changed = Signal(str)
 
-    def __init__(self, app_config):
+    def __init__(self, app_config, main_window=None):
         super().__init__()
         self.app_config = app_config
+        self.main_window = main_window
         self.video_encoders = {}
         self.audio_encoders = {}
         self.last_device_info = {}
-
         self.general_editors = {}
         self.option_checkboxes = {}
         self.sliders = {}
-
         self.thread_pool = QThreadPool.globalInstance()
         self.active_workers = []
-
         self._setup_ui()
         self.update_profile_dropdown()
         self._update_theme_dropdown()
@@ -130,19 +93,16 @@ class ScrcpyTab(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
-
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scroll_area.verticalScrollBar().setSingleStep(15)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         main_layout.addWidget(self.scroll_area)
-
         scroll_content = QWidget()
         self.scroll_layout = QVBoxLayout(scroll_content)
         self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll_area.setWidget(scroll_content)
-
         self._create_yascrcpy_group()
         self._create_device_status_group()
         self._create_profile_group()
@@ -162,39 +122,53 @@ class ScrcpyTab(QWidget):
 
     def _create_yascrcpy_group(self):
         self.yascrcpy_group, layout = self._create_group_box("yaScrcpy")
-
         row_layout = QHBoxLayout()
         label = QLabel("Theme")
         label.setMinimumWidth(100)
         row_layout.addWidget(label)
-
         self.theme_combo = NoScrollQComboBox()
         self.theme_combo.currentIndexChanged.connect(self._on_theme_selected)
-
         row_layout.addWidget(self.theme_combo)
         layout.addLayout(row_layout)
-
-        # New: Show System Apps checkbox
         self.show_system_apps_checkbox = QCheckBox("Show System Apps")
         self.show_system_apps_checkbox.setChecked(self.app_config.get('show_system_apps', False))
         self.show_system_apps_checkbox.stateChanged.connect(self._on_show_system_apps_changed)
-        layout.addWidget(self.show_system_apps_checkbox) # Add it to the layout
+        layout.addWidget(self.show_system_apps_checkbox)
+        
+        # Add Configure Web Server button
+        self.web_server_config_button = QPushButton("Web Server")
+        self.web_server_config_button.clicked.connect(self._open_web_server_config)
+        layout.addWidget(self.web_server_config_button)
+
+    def _open_web_server_config(self):
+        if not self.main_window:
+            QMessageBox.warning(self, "Error", "Main window reference not available.")
+            return
+
+        if self.main_window.web_config_window is None or not self.main_window.web_config_window.isVisible():
+            self.main_window.web_config_window = WebServerConfigWindow(self.app_config, self.main_window)
+            self.main_window.web_config_window.start_server_requested.connect(self.main_window.start_web_server)
+            self.main_window.web_config_window.stop_server_requested.connect(self.main_window.stop_web_server)
+            self.main_window.web_server_status_changed.connect(self.main_window.web_config_window.update_status)
+        
+        self.main_window.web_config_window.show()
+        self.main_window.web_config_window.raise_()
+        self.main_window.web_config_window.activateWindow()
+        self.main_window.web_config_window.update_status(self.main_window.is_web_server_running())
 
     def _on_show_system_apps_changed(self, state):
         self.app_config.set('show_system_apps', bool(state))
-        self.config_updated_on_worker.emit() # Trigger a refresh of the app list
+        self.config_updated_on_worker.emit()
 
     def _update_theme_dropdown(self):
         self.theme_combo.blockSignals(True)
         self.theme_combo.clear()
         available_themes = themes.get_available_themes()
         self.theme_combo.addItems(available_themes)
-
         current_theme = self.app_config.get('theme', 'System')
         index = self.theme_combo.findText(current_theme)
         if index != -1:
             self.theme_combo.setCurrentIndex(index)
-
         self.theme_combo.blockSignals(False)
 
     def _on_theme_selected(self, index):
@@ -218,66 +192,43 @@ class ScrcpyTab(QWidget):
     def update_profile_dropdown(self):
         self.profile_combo.blockSignals(True)
         self.profile_combo.clear()
-
-        # Add Global Config (always present)
         self.profile_combo.addItem("Global Config", userData="global")
-
         device_id = self.app_config.get_connection_id()
         if device_id == DEVICE_NOT_FOUND or device_id is None:
-            # If no device, only show Global Config
-            # Set current item
             active_profile = self.app_config.active_profile
             index = self.profile_combo.findData(active_profile)
             if index != -1:
                 self.profile_combo.setCurrentIndex(index)
             self.profile_combo.blockSignals(False)
             return
-
-        # 1. Get installed apps from cache
         installed_apps_packages = self.app_config.device_app_cache.get('installed_apps', set())
-
-        # 2. Get Winlator shortcuts from cache
         winlator_shortcuts_on_device = self.app_config.device_app_cache.get('winlator_shortcuts', set())
-
-
-        # Add App Configs
         filtered_app_configs = []
         app_configs_from_settings = self.app_config.get_app_config_keys()
         for key, name in app_configs_from_settings:
             if key in installed_apps_packages:
                 filtered_app_configs.append((key, name))
-        
         if filtered_app_configs:
             self.profile_combo.insertSeparator(self.profile_combo.count())
             for key, name in sorted(filtered_app_configs, key=lambda x: x[1].lower()):
                 self.profile_combo.addItem(f"{name} (App)", userData=key)
-
-        # Add Winlator Configs
         filtered_winlator_configs = []
         winlator_configs_from_settings = self.app_config.get_winlator_config_keys()
         for key, name in winlator_configs_from_settings:
-            # For Winlator, 'key' is the shortcut path
             if key in winlator_shortcuts_on_device:
                 filtered_winlator_configs.append((key, name))
-
         if filtered_winlator_configs:
             self.profile_combo.insertSeparator(self.profile_combo.count())
             for key, name in sorted(filtered_winlator_configs, key=lambda x: x[1].lower()):
                 self.profile_combo.addItem(f"{name} (Winlator)", userData=key)
-
-        # Set current item
         active_profile = self.app_config.active_profile
         index = self.profile_combo.findData(active_profile)
         if index != -1:
             self.profile_combo.setCurrentIndex(index)
         else:
-            # If the active profile is no longer available (e.g., app uninstalled),
-            # revert to global config.
             self.app_config.load_profile("global")
-            self.profile_combo.setCurrentIndex(0) # Select "Global Config"
+            self.profile_combo.setCurrentIndex(0)
             self._update_all_widgets_from_config()
-
-
         self.profile_combo.blockSignals(False)
 
     def _on_profile_selected(self, index):
@@ -287,20 +238,17 @@ class ScrcpyTab(QWidget):
         self._update_all_widgets_from_config()
         self._update_launch_control_widgets_state()
 
-
     def _add_combo_box_row(self, parent_layout, label_text, var_key, options):
         row_layout = QHBoxLayout()
         label = QLabel(label_text)
         label.setMinimumWidth(100)
         row_layout.addWidget(label)
-
         editor = NoScrollQComboBox()
         editor.addItems(options)
         value = self.app_config.get(var_key, options[0])
         if value in options:
             editor.setCurrentText(str(value))
         editor.currentTextChanged.connect(lambda text, vk=var_key: self.app_config.set(vk, text))
-
         editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         editor.setMaximumWidth(300)
         row_layout.addWidget(editor)
@@ -309,10 +257,8 @@ class ScrcpyTab(QWidget):
         parent_layout.addLayout(row_layout)
         self.general_editors[var_key] = editor
 
-
     def _create_general_settings_group(self):
         self.general_settings_group, layout = self._create_group_box("General Settings")
-
         fields = [
             ("Window Mode", 'windowing_mode', ["Fullscreen", "Freeform"]),
             ("Mouse Mode", 'mouse_mode', ["sdk","uhid","aoa"]),
@@ -330,7 +276,6 @@ class ScrcpyTab(QWidget):
             label = QLabel(label_text)
             label.setMinimumWidth(100)
             row_layout.addWidget(label)
-
             value = self.app_config.get(var_key, "")
             if opts is None:
                 editor = QLineEdit(str(value))
@@ -338,15 +283,11 @@ class ScrcpyTab(QWidget):
             else:
                 editor = NoScrollQComboBox()
                 editor.addItems(opts)
-
                 if var_key in ['mouse_bind', 'max_fps', 'new_display', 'max_size']:
                     editor.setEditable(True)
-
                 saved_value = self.app_config.get(var_key, opts[0] if opts else "")
                 editor.setCurrentText(str(saved_value))
-
                 editor.currentTextChanged.connect(lambda text, vk=var_key: self.app_config.set(vk, text))
-
                 if var_key == 'new_display':
                     editor.currentTextChanged.connect(self._update_resolution_state)
                     editor.currentTextChanged.connect(self._update_launch_control_widgets_state)
@@ -354,36 +295,27 @@ class ScrcpyTab(QWidget):
                     self.resolution_combo = editor
                 elif var_key == 'windowing_mode':
                     self.windowing_mode_combo = editor
-
-
             editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             editor.setMaximumWidth(300)
             row_layout.addWidget(editor)
             layout.addLayout(row_layout)
             self.general_editors[var_key] = editor
-
         self._update_resolution_state()
         self._update_launch_control_widgets_state()
 
     def _update_launch_control_widgets_state(self):
         if not hasattr(self, 'option_checkboxes') or not hasattr(self, 'windowing_mode_combo') or not hasattr(self, 'general_editors'):
             return
-
         alt_launch_checkbox = self.option_checkboxes.get('alternate_launch_method')
         virtual_display_combo = self.general_editors.get('new_display')
-
         if not alt_launch_checkbox or not virtual_display_combo:
             return
-
         is_virtual_display_active = virtual_display_combo.currentText() != 'Disabled'
-
         active_profile_key = self.app_config.active_profile
         is_winlator_profile = active_profile_key in self.app_config.get_winlator_config_keys(include_name=False)
-
         alt_launch_checkbox.setDisabled(is_winlator_profile or not is_virtual_display_active)
         if is_winlator_profile:
             alt_launch_checkbox.setChecked(True)
-
         alt_launch_enabled = alt_launch_checkbox.isChecked()
         self.windowing_mode_combo.setEnabled((is_winlator_profile or alt_launch_enabled) and is_virtual_display_active)
 
@@ -393,8 +325,6 @@ class ScrcpyTab(QWidget):
         self.v_codec_combo.currentTextChanged.connect(self._on_video_codec_changed)
         self.v_encoder_combo = NoScrollQComboBox()
         self.v_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set('video_encoder', text))
-
-
         codec_layout = QHBoxLayout()
         codec_label = QLabel("Codec")
         codec_label.setMinimumWidth(100)
@@ -403,7 +333,6 @@ class ScrcpyTab(QWidget):
         self.v_codec_combo.setMaximumWidth(300)
         codec_layout.addWidget(self.v_codec_combo)
         layout.addLayout(codec_layout)
-
         encoder_layout = QHBoxLayout()
         encoder_label = QLabel("Encoder")
         encoder_label.setMinimumWidth(100)
@@ -412,13 +341,11 @@ class ScrcpyTab(QWidget):
         self.v_encoder_combo.setMaximumWidth(300)
         encoder_layout.addWidget(self.v_encoder_combo)
         layout.addLayout(encoder_layout)
-
         self._add_combo_box_row(layout, "Render Driver", 'render_driver', ["opengles2", "opengles", "opengl", "direct3d", "metal", "software"])
         self._add_combo_box_row(layout, "Frame Drop", 'allow_frame_drop', ["Enabled", "Disabled"])
         self._add_combo_box_row(layout, "Low Latency", 'low_latency', ["Enabled", "Disabled"])
         self._add_combo_box_row(layout, "Priority", 'priority_mode', ["Realtime", "Normal"])
         self._add_combo_box_row(layout, "Bitrate Mode", 'bitrate_mode', ["CBR", "VBR"])
-
         self._create_slider(layout, "Video Buffer", 'video_buffer', 0, 500, 1, "ms")
         self._create_slider_with_buttons(layout, "Video Bitrate", 'video_bitrate_slider', 10, 8000, 10, "K", [1000, 2000, 4000, 6000, 8000])
 
@@ -428,7 +355,6 @@ class ScrcpyTab(QWidget):
         self.a_codec_combo.currentTextChanged.connect(self._on_audio_codec_changed)
         self.a_encoder_combo = NoScrollQComboBox()
         self.a_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set('audio_encoder', text))
-
         codec_layout = QHBoxLayout()
         codec_label = QLabel("Codec")
         codec_label.setMinimumWidth(100)
@@ -437,7 +363,6 @@ class ScrcpyTab(QWidget):
         self.a_codec_combo.setMaximumWidth(300)
         codec_layout.addWidget(self.a_codec_combo)
         layout.addLayout(codec_layout)
-
         encoder_layout = QHBoxLayout()
         encoder_label = QLabel("Encoder")
         encoder_label.setMinimumWidth(100)
@@ -446,7 +371,6 @@ class ScrcpyTab(QWidget):
         self.a_encoder_combo.setMaximumWidth(300)
         encoder_layout.addWidget(self.a_encoder_combo)
         layout.addLayout(encoder_layout)
-
         self._create_slider(layout, "Audio Buffer", 'audio_buffer', 5, 500, 1, "ms")
 
     def _create_options_group(self):
@@ -462,10 +386,8 @@ class ScrcpyTab(QWidget):
             checkbox = QCheckBox(text)
             checkbox.setChecked(self.app_config.get(var_key, False))
             checkbox.stateChanged.connect(lambda state, vk=var_key: self.app_config.set(vk, bool(state)))
-
             if var_key == 'alternate_launch_method':
                 checkbox.stateChanged.connect(self._update_launch_control_widgets_state)
-
             layout.addWidget(checkbox, i // 2, i % 2)
             self.option_checkboxes[var_key] = checkbox
         layout.setColumnStretch(0, 1)
@@ -482,18 +404,15 @@ class ScrcpyTab(QWidget):
         label = QLabel(label_text)
         label.setMinimumWidth(100)
         row_layout.addWidget(label)
-
         slider = NoScrollQSlider(Qt.Horizontal)
         slider.setRange(min_val, max_val)
         slider.setSingleStep(step)
         slider.setPageStep(step * 10)
         slider.setProperty('unit', unit)
         slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-
         value_label = QLabel()
         value_label.setMinimumWidth(50)
         value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
         row_layout.addWidget(slider)
         row_layout.addWidget(value_label)
         parent_layout.addLayout(row_layout)
@@ -505,24 +424,19 @@ class ScrcpyTab(QWidget):
         label = QLabel(label_text)
         label.setMinimumWidth(100)
         row_layout.addWidget(label)
-
         slider = NoScrollQSlider(Qt.Horizontal)
         slider.setRange(min_val, max_val)
         slider.setSingleStep(step)
         slider.setPageStep(step * 10)
         slider.setProperty('unit', unit)
         slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-
         value_label = QLabel()
         value_label.setMinimumWidth(50)
         value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
         self._setup_slider_common(slider, value_label, var_key, unit, min_val)
-
         row_layout.addWidget(slider)
         row_layout.addWidget(value_label)
         parent_layout.addLayout(row_layout)
-
         button_layout = QHBoxLayout()
         for btn_val in button_values:
             button = QPushButton(f"{btn_val}{unit}")
@@ -541,11 +455,9 @@ class ScrcpyTab(QWidget):
             self._load_encoders_from_cache()
             self._set_all_widgets_enabled(False)
             return
-
         self._set_all_widgets_enabled(True)
         commercial_name = self.app_config.get('device_commercial_name', "Unknown Device")
         self.device_info_label.setText(f"Connected to {commercial_name} (Battery: ?%)" if commercial_name != 'Unknown Device' else "Fetching device info...")
-
         worker = DeviceInfoWorker(device_id)
         worker.signals.result.connect(lambda info: self.on_device_info_ready(info, force_encoder_fetch))
         worker.signals.error.connect(self.on_device_info_error)
@@ -557,17 +469,13 @@ class ScrcpyTab(QWidget):
         if self.app_config.values.get('device_commercial_name') == 'Unknown Device':
             self.app_config.values['device_commercial_name'] = commercial_name
             self.app_config.save_config()
-
         if default_launcher := info.get('default_launcher'):
             self.app_config.set('default_launcher', default_launcher)
-
         self.device_info_label.setText(f"Connected to {commercial_name} (Battery: {info.get('battery', '?')}%)")
-
         if force_encoder_fetch or not self.app_config.has_encoder_cache():
             self._fetch_and_update_encoders()
         else:
             self._load_encoders_from_cache()
-
         self.config_updated_on_worker.emit()
 
     def on_device_info_error(self, error_msg):
@@ -632,7 +540,6 @@ class ScrcpyTab(QWidget):
         self._update_combo_box(encoder_combo, vals, saved_encoder)
 
     def _update_all_widgets_from_config(self):
-        # Block signals to prevent feedback loops
         for editor in self.general_editors.values(): editor.blockSignals(True)
         for checkbox in self.option_checkboxes.values(): checkbox.blockSignals(True)
         for slider, _ in self.sliders.values(): slider.blockSignals(True)
@@ -642,39 +549,24 @@ class ScrcpyTab(QWidget):
         self.v_encoder_combo.blockSignals(True)
         self.a_codec_combo.blockSignals(True)
         self.a_encoder_combo.blockSignals(True)
-
-
-        # Update General Settings editors
         for var_key, editor in self.general_editors.items():
             value = self.app_config.get(var_key, "")
             if isinstance(editor, QLineEdit):
                 editor.setText(str(value))
             elif isinstance(editor, QComboBox):
                 editor.setCurrentText(str(value))
-
-        # Update Checkboxes
         for var_key, checkbox in self.option_checkboxes.items():
             checkbox.setChecked(self.app_config.get(var_key, False))
-
-        # Update Sliders
         for var_key, (slider, value_label) in self.sliders.items():
             value = self.app_config.get(var_key, 0)
             slider.setValue(int(value))
             unit = slider.property('unit')
             value_label.setText(f"{value}{unit}")
-
-        # Update Dropdowns that are not in general_editors
         self._update_theme_dropdown()
         self.update_profile_dropdown()
-
-        # Update Video/Audio Codec/Encoder Combos
         self._populate_encoder_widgets()
-
-        # Update states based on new values
         self._update_resolution_state()
         self._update_launch_control_widgets_state()
-
-        # --- Unblock all signals ---
         for editor in self.general_editors.values(): editor.blockSignals(False)
         for checkbox in self.option_checkboxes.values(): checkbox.blockSignals(False)
         for slider, _ in self.sliders.values(): slider.blockSignals(False)
@@ -684,7 +576,6 @@ class ScrcpyTab(QWidget):
         self.v_encoder_combo.blockSignals(False)
         self.a_codec_combo.blockSignals(False)
         self.a_encoder_combo.blockSignals(False)
-
 
     def _update_resolution_state(self):
         if hasattr(self, 'resolution_combo') and self.resolution_combo:
@@ -702,10 +593,11 @@ class ScrcpyTab(QWidget):
         combo.blockSignals(False)
 
     def _set_all_widgets_enabled(self, enabled, include_profile=True):
-        groups = [self.yascrcpy_group, self.general_settings_group, self.video_settings_group,
+        # The yascrcpy_group contains non-device-specific settings, so it should not be disabled.
+        groups = [self.general_settings_group, self.video_settings_group,
                   self.audio_settings_group, self.options_group, self.device_info_group]
         if include_profile:
-            groups.append(self.profile_combo) # Changed to self.profile_combo instead of self.profile_group for individual enable/disable
+            groups.append(self.profile_combo)
         for group in groups:
             if group:
                 group.setEnabled(enabled)
