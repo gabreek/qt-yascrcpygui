@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCombo
                                QLineEdit, QCheckBox, QSlider, QGroupBox, QMessageBox,
                                QScrollArea, QSizePolicy, QPushButton, QGridLayout, QListView, QScrollBar, QStyle)
 
-from .workers import DeviceInfoWorker, EncoderListWorker
+from .workers import DeviceInfoWorker, EncoderListWorker, DeviceConfigLoaderWorker
 from . import themes
 from utils import scrcpy_handler, adb_handler
 from .web_server_config_window import WebServerConfigWindow
@@ -88,6 +88,58 @@ class ScrcpyTab(QWidget):
         self._setup_ui()
         self.update_profile_dropdown()
         self._update_theme_dropdown()
+
+    def on_config_reloaded(self):
+        print("Reloading GUI config due to external change (in worker thread)...")
+        
+        device_id = self.app_config.get_connection_id()
+        if not device_id or device_id == DEVICE_NOT_FOUND:
+            print("No device connected, skipping cache refresh.")
+            self._update_all_widgets_from_config() # Still update widgets if device status changed.
+            self.update_profile_dropdown()
+            return
+        
+        # Store current profile to restore later
+        self._pending_profile_restore_key = self.profile_combo.currentData()
+
+        # Disable UI elements to prevent interaction while loading
+        self._set_all_widgets_enabled(False) # Temporarily disable all widgets
+
+        # Launch worker to load config and refresh cache in background
+        worker = DeviceConfigLoaderWorker(device_id, self.app_config)
+        worker.signals.result.connect(self._on_device_cache_refreshed)
+        worker.signals.error.connect(self._on_cache_refresh_error)
+        worker.signals.finished.connect(lambda: self._set_all_widgets_enabled(True)) # Re-enable on finish
+        self._start_worker(worker)
+
+
+    def _on_device_cache_refreshed(self, result_data, installed_apps_packages, winlator_shortcuts_on_device):
+        print("Device cache refreshed by worker, updating GUI.")
+        # DeviceConfigLoaderWorker already populates app_config.device_app_cache
+        # So we just need to update the UI
+        self.update_profile_dropdown()
+        self._update_all_widgets_from_config()
+
+        # Restore profile selection after UI update
+        if hasattr(self, '_pending_profile_restore_key') and self._pending_profile_restore_key:
+            index = self.profile_combo.findData(self._pending_profile_restore_key)
+            if index != -1:
+                self.profile_combo.setCurrentIndex(index)
+            else:
+                self.profile_combo.setCurrentIndex(0) # Default to global if not found
+            del self._pending_profile_restore_key
+        else:
+            self.profile_combo.setCurrentIndex(0) # Default to global
+
+    def _on_cache_refresh_error(self, error_message):
+        print(f"ERROR: Cache refresh failed: {error_message}")
+        show_message_box(self, "Error", f"Failed to refresh app list: {error_message}", icon=QMessageBox.Critical)
+        # Fallback to showing only global config if an error occurs
+        self.app_config.device_app_cache['installed_apps'] = set()
+        self.app_config.device_app_cache['winlator_shortcuts'] = set()
+        self.update_profile_dropdown()
+        self._update_all_widgets_from_config()
+
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)

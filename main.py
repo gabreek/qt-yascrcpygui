@@ -6,7 +6,7 @@
 import sys
 import multiprocessing
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QThread, Signal
 from utils.dependencies import check_dependencies
 from app_config import AppConfig
 from gui.main_window import MainWindow
@@ -17,8 +17,9 @@ class WebServerThread(QThread):
     """
     Thread to run the FastAPI web server without blocking the main GUI thread.
     """
+    config_needs_reload = Signal()
     def run(self):
-        web_server.run_server()
+        web_server.run_server(self)
 
 def main():
     """

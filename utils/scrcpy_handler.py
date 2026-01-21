@@ -147,65 +147,59 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
 def _parse_scrcpy_output_for_display_id(scrcpy_process, timeout=20):
     """
     Reads scrcpy output to find the virtual display ID.
-    Returns the display ID as an int, or None if not found within the timeout.
+    Returns the display ID as a string, or None if not found within the timeout.
     """
     start_time = time.monotonic()
-    # Match "[server] INFO: New display: XxY/Z (id=N)" from scrcpy output
-    display_id_pattern = re.compile(r"\\[server\\] INFO: New display: .*\(id=(\\d+)\")")
-    
-    # Read output line by line until display ID is found or timeout
-    while True:
-        line = scrcpy_process.stdout.readline()
-        if not line: # EOF or pipe closed
-            # If the process is still alive, it might just be waiting.
-            # If it's dead, then we broke because there's no more output.
-            if scrcpy_process.poll() is None: # check if scrcpy process is still running
-                time.sleep(0.1) # Wait a bit before checking again
-                continue
-            break # Process has exited and no more output
+    display_id_pattern = re.compile(r"\[server\] INFO: New display: .*\(id=(\d+)\)")
 
-        print(f"Scrcpy stdout (alt launch): {line.strip()}") # DEBUG PRINT
+    for line in iter(scrcpy_process.stdout.readline, ''):
+        if not line:
+            if scrcpy_process.poll() is not None:
+                break
+            time.sleep(0.1)
+            continue
+
+        print(f"Scrcpy stdout (alt launch): {line.strip()}")
 
         match = display_id_pattern.search(line)
         if match:
-            return int(match.group(1))
-        
+            return match.group(1)
+
         if time.monotonic() - start_time > timeout:
             print("Timeout while waiting for display ID from scrcpy for alternate launch.")
             break
-        
-        # Avoid busy-waiting, give some time for output to appear
-        time.sleep(0.05) 
-        
+
     return None
 
-
-def _alternate_launch_background_task(scrcpy_process, device_id, target_app_id, windowing_mode, session_type, startupinfo, original_post_cmds):
+def _alternate_launch_background_task(scrcpy_process, device_id, config_values, windowing_mode, session_type, startupinfo, original_post_cmds):
     """
     Background task to monitor scrcpy output for display ID and then launch the app via ADB.
     This also handles the remaining scrcpy process lifecycle.
     """
     display_id = None
     try:
-        display_id = _parse_scrcpy_output_for_display_id(scrcpy_process) # Pass scrcpy_process here
+        display_id = _parse_scrcpy_output_for_display_id(scrcpy_process)
         if display_id is None:
             print("Error: Could not find virtual display ID from scrcpy output for alternate launch. App will not be launched.")
+            scrcpy_process.terminate()
             return
 
-        if session_type == 'app':
-            utils.adb_handler.start_app_on_display(target_app_id, display_id, windowing_mode, device_id)
-            print(f"Launched app '{target_app_id}' on display {display_id} via ADB.")
+        if session_type in ['app', 'app_alt_launch']:
+            target_app_id = config_values.get('start_app') or config_values.get('package_name_for_alt_launch')
+            if target_app_id:
+                utils.adb_handler.start_app_on_display(target_app_id, display_id, windowing_mode, device_id)
+                print(f"Launched app '{target_app_id}' on display {display_id} via ADB.")
+            else:
+                print("Error: No application package name provided for alternate launch.")
+        
         elif session_type == 'winlator':
-            # For winlator, target_app_id is the shortcut_path
-            # The adb_handler.start_winlator_app takes (shortcut_path, display_id, package_name, device_id, windowing_mode)
-            # We assume target_app_id is shortcut_path. The package_name should be extracted or passed.
-            # For now, let's assume target_app_id = shortcut_path and package_name can be derived or is not strictly needed by adb_handler
-            # Re-checking adb_handler.start_winlator_app: (shortcut_path, display_id, package_name, device_id, windowing_mode)
-            # Need actual package_name. Let's assume config_values has 'winlator_package_name' if session_type is 'winlator'
-            print("Warning: Winlator alternate launch needs package name for 'am start' command. Using placeholder 'com.winlator.something'.")
-            winlator_pkg_name = 'com.winlator.something' # Placeholder, needs to be passed from web server
-            utils.adb_handler.start_winlator_app(target_app_id, display_id, winlator_pkg_name, device_id, windowing_mode)
-            print(f"Launched Winlator app '{target_app_id}' on display {display_id} via ADB.")
+            shortcut_path = config_values.get('shortcut_path')
+            package_name = config_values.get('package_name_for_alt_launch')
+            if shortcut_path and package_name:
+                utils.adb_handler.start_winlator_app(shortcut_path, display_id, package_name, device_id, windowing_mode)
+                print(f"Launched Winlator app '{shortcut_path}' on display {display_id} via ADB.")
+            else:
+                print("Error: Missing shortcut_path or package_name for Winlator alternate launch.")
 
     except Exception as e:
         print(f"Error in alternate launch background task: {e}")
@@ -216,7 +210,7 @@ def _alternate_launch_background_task(scrcpy_process, device_id, target_app_id, 
                 for line in scrcpy_process.stdout:
                     # Log this output for debugging, it's not normal Scrcpy output
                     print(f"Scrcpy stdout (remainder): {line.strip()}")
-            except ValueError: # Occurs if stream is closed unexpectedly
+            except (IOError, ValueError): # Occurs if stream is closed unexpectedly
                 pass
         
     # Wait for scrcpy process to finish (and run POST commands if any)
@@ -274,7 +268,7 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
             pass # Not critical
 
     # Determine if --start-app should be suppressed for alternate launch
-    force_no_start_app = perform_alternate_app_launch and config_values.get('start_app') not in ('', 'None', 'launcher_shortcut')
+    force_no_start_app = perform_alternate_app_launch
     
     # Construir e executar o comando scrcpy
     cmd = _build_command(config_values, parsed_args['scrcpy'], window_title, device_id, force_no_start_app=force_no_start_app)
@@ -287,7 +281,7 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
     for var_name, var_value in parsed_args['env_vars'].items():
         env[var_name] = var_value
 
-    # Always capture output if alternate app launch is requested
+    # Always capture output if alternate app launch is requested or explicitly asked for
     actual_capture_output = capture_output or perform_alternate_app_launch
 
     if actual_capture_output:
@@ -296,14 +290,13 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
         scrcpy_process = subprocess.Popen(cmd, startupinfo=startupinfo, env=env)
 
     # If alternate app launch is requested, start a background task to handle it
-    if perform_alternate_app_launch and config_values.get('start_app') not in ('', 'None', 'launcher_shortcut'):
-        target_app_id = config_values.get('start_app') # This is the package name or shortcut path
+    if perform_alternate_app_launch:
         windowing_mode_str = config_values.get('windowing_mode', 'Fullscreen')
         windowing_mode_int = 1 if windowing_mode_str == 'Fullscreen' else 2 # Default to Fullscreen for windowingMode
 
         alt_launch_thread = threading.Thread(
             target=_alternate_launch_background_task,
-            args=(scrcpy_process, device_id, target_app_id, windowing_mode_int, session_type, startupinfo, parsed_args['append'])
+            args=(scrcpy_process, device_id, config_values, windowing_mode_int, session_type, startupinfo, parsed_args['append'])
         )
         alt_launch_thread.daemon = True
         alt_launch_thread.start()
@@ -380,13 +373,13 @@ def list_encoders(device_id=None):
         for line in output.splitlines():
             line = line.strip()
             if "(alias for" in line: continue
-            vm = re.match(r"--video-codec=(\\w+)\s+--video-encoder='?([\\w.-]+)'?\s+\(hw|sw\)", line)
+            vm = re.match(r"--video-codec=(\w+)\s+--video-encoder='?([\w.-]+)'?\s+\(hw|sw\)", line)
             if vm:
                 codec, encoder, mode = vm.groups()
                 video_encoders.setdefault(codec, [])
                 if (encoder, mode) not in video_encoders[codec]:
                     video_encoders[codec].append((encoder, mode))
-            am = re.match(r"--audio-codec=(\\w+)\s+--audio-encoder='?([\\w.-]+)'?\s+\(hw|sw\)", line)
+            am = re.match(r"--audio-codec=(\w+)\s+--audio-encoder='?([\w.-]+)'?\s+\(hw|sw\)", line)
             if am:
                 codec, encoder, mode = am.groups()
                 audio_encoders.setdefault(codec, [])

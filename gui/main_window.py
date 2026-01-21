@@ -23,6 +23,7 @@ class WebServerThread(QThread):
     """
     Thread to run the FastAPI web server with graceful shutdown using uvicorn.Server.
     """
+    config_needs_reload = Signal() # Added for synchronization
     def __init__(self, parent=None):
         super().__init__(parent)
         self.server_config = None
@@ -34,35 +35,9 @@ class WebServerThread(QThread):
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
 
-        self.server_config = uvicorn.Config(
-            web_server.app,
-            host="0.0.0.0",
-            port=8000,
-            log_level="info",
-            loop="asyncio"
-        )
-        self.server = uvicorn.Server(self.server_config)
+        # Pass 'self' (the thread instance) to web_server.run_server for signaling
+        web_server.run_server(self)
 
-        # Uvicorn's serve() is an async method
-        async def serve_with_graceful_shutdown():
-            await self.server.serve()
-
-        try:
-            self._loop.run_until_complete(serve_with_graceful_shutdown())
-        except asyncio.CancelledError:
-            print("Web server thread cancelled.")
-        except Exception as e:
-            print(f"Web server crashed: {e}")
-        finally:
-            if self._loop and not self._loop.is_closed():
-                # Ensure pending tasks are cancelled and loop is properly closed
-                for task in asyncio.all_tasks(self._loop):
-                    task.cancel()
-                self._loop.run_until_complete(self._loop.shutdown_asyncgens())
-                self._loop.close()
-            self._loop = None
-            self.server = None
-            self.server_config = None
 
     def stop(self):
         """Gracefully signals the uvicorn server to shut down."""
@@ -171,6 +146,8 @@ class MainWindow(QMainWindow):
         if self.is_web_server_running():
             return
         self.web_server_thread = WebServerThread()
+        # Connect the signal from the web server thread to the ScrcpyTab's reload slot
+        self.web_server_thread.config_needs_reload.connect(self.scrcpy_tab.on_config_reloaded)
         self.web_server_thread.start()
         self.web_server_status_changed.emit(True)
         print("Web server started.")

@@ -8,97 +8,60 @@
     <meta name="theme-color" content="#1e1e1e">
     <meta name="mobile-web-app-capable" content="yes">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 1.5em; background-color: #1e1e1e; color: #d4d4d4; }
-        h1, h2 { border-bottom: 1px solid #444; padding-bottom: 5px; }
-        ul { list-style-type: none; padding: 0; }
-        li.device-li { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background-color: #2a2a2a; border-radius: 4px; cursor: pointer; }
-        .device-li.selected { background-color: #007acc; }
-        .device-li:not(.selected):hover { background-color: #3a3a3a; }
-        button { cursor: pointer; margin-left: 5px; background-color: #007acc; color: white; border: none; border-radius: 4px; padding: 8px 12px; font-size: 14px; }
-        button:hover { background-color: #005a9e; }
-        .modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); }
-        .modal-content {
-            background-color: #2a2a2a; /* Ensure dark background */
-            position: fixed; /* Use fixed for centering */
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%); /* Centering trick */
-            padding: 20px;
-            border: 1px solid #555; /* Add a visible border */
-            width: 80%;
-            max-width: 600px;
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        :root {
+            --bg-color: #1e1e1e;
+            --text-color: #d4d4d4;
+            --primary-color: #007acc;
+            --hover-color: #005a9e;
+            --panel-bg: #2a2a2a;
+            --border-color: #444;
+            --input-bg: #1e1e1e;
+            --input-border: #555;
         }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 1em; background-color: var(--bg-color); color: var(--text-color); }
+        h1, h2 { border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+        ul { list-style-type: none; padding: 0; }
+        li.device-li { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background-color: var(--panel-bg); border-radius: 4px; cursor: pointer; }
+        .device-li.selected { background-color: var(--primary-color); }
+        .device-li:not(.selected):hover { background-color: #3a3a3a; }
+        button { cursor: pointer; margin-left: 5px; background-color: var(--primary-color); color: white; border: none; border-radius: 4px; padding: 8px 12px; font-size: 14px; }
+        button:hover { background-color: var(--hover-color); }
+        .modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); }
+        .modal-content { background-color: var(--panel-bg); position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; border: 1px solid var(--input-border); width: 80%; max-width: 600px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
         .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
         .close-btn:hover, .close-btn:focus { color: white; text-decoration: none; cursor: pointer; }
-        textarea, input[type="text"] { width: 95%; padding: 8px; margin-bottom: 10px; background-color: #1e1e1e; color: #d4d4d4; border: 1px solid #555; border-radius: 4px; }
-        .controls { margin-top: 1em; padding: 1em; background-color: #2a2a2a; border-radius: 4px; }
+        textarea, input[type="text"], input[type="number"], select { width: 95%; padding: 8px; margin-bottom: 10px; background-color: var(--input-bg); color: var(--text-color); border: 1px solid var(--input-border); border-radius: 4px; }
         .device-selector-container { display: flex; align-items: flex-start; margin-bottom: 1em; }
-        #wifi-connect-btn { font-size: 18px; padding: 4px 10px; margin-right: 10px; }
 
         /* Tabs */
-        .tab { overflow: hidden; border-bottom: 1px solid #444; margin-bottom: 1em; }
-        .tab button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; font-size: 17px; color: #d4d4d4; }
+        .tab { overflow: hidden; border-bottom: 1px solid var(--border-color); margin-bottom: 1em; }
+        .tab button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; font-size: 17px; color: var(--text-color); }
         .tab button:hover { background-color: #3a3a3a; }
-        .tab button.active { background-color: #007acc; color: white; }
-        .tabcontent { display: none; padding: 0; border-top: none; }
+        .tab button.active { background-color: var(--primary-color); color: white; }
+        .tabcontent { display: none; padding: 0; border-top: none; animation: fadeEffect 0.5s; }
+        @keyframes fadeEffect { from {opacity: 0;} to {opacity: 1;} }
 
         /* Grid */
-        .grid-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5 em; }
-        .grid-item {
-            display: flex; flex-direction: column; align-items: center; text-align: center; background-color: transparent; padding: 1em; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; height: 140px; /* Ensures consistent height */
-        }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 1em; }
+        .grid-item { display: flex; flex-direction: column; align-items: center; text-align: center; background-color: transparent; padding: 0.5em; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; height: 120px; }
         .grid-item:hover { background-color: #3a3a3a; }
-        .icon-container { /* New icon container styling */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 64px; /* Slightly larger than the icon */
-            height: 64px; /* Slightly larger than the icon */
-            background-color: #363636; /* Lighter background for the icon area */
-            border-radius: 12px; /* Rounded corners for the icon background */
-            margin-bottom: 0.8em; /* Space between icon container and text */
-        }
-        .grid-item img { width: 48px; height: 48px; border-radius: 8px; /* Removed margin-bottom */ }
-        .grid-item span {
-            word-break: break-word; font-size: 13px; /* Slightly reduced font size */
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            text-overflow: ellipsis; /* Optional: adds ellipsis for truncated text */
-        }
-        .grid-item .pkg-name { display: none; } /* Hide package name */
+        .icon-container { display: flex; justify-content: center; align-items: center; width: 48px; height: 48px; background-color: #363636; border-radius: 12px; margin-bottom: 0.5em; }
+        .grid-item img { width: 36px; height: 36px; border-radius: 8px; }
+        .grid-item span { word-break: break-word; font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; }
+        .grid-item .pkg-name { display: none; }
+        .grid-section-title { font-size: 16px; margin-bottom: 0.5em; padding-bottom: 5px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        .app-section-wrapper { display: block; width: 100%; }
 
-        /* Responsive grid */
-        @media (max-width: 768px) {
-            .grid-container {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-
-        @media (max-width: 480px) {
-            .grid-container {
-                grid-template-columns: repeat(4, 1fr);
-                gap: 0.8em;
-            }
-            .grid-item {
-                padding: 0.5em;
-            }
-        }
-
-        .grid-section-title {
-            font-size: 16px; /* Larger font size for section titles */
-            margin-bottom: 0.5em; /* Adjust margin for spacing */
-            padding-bottom: 5px; /* Add padding-bottom to match h2 style */
-            text-align: left; /* Keep text aligned left */
-            border-bottom: 1px solid #444; /* Explicitly add border bottom */
-        }
-        .app-section-wrapper { /* Ensure sections stack vertically */
-            display: block;
-            width: 100%;
-        }
+        /* Config Tab Styles */
+        #Config { display: flex; flex-wrap: wrap; gap: 20px; }
+        .config-group { background-color: var(--panel-bg); border-radius: 8px; padding: 15px; flex: 1 1 300px; min-width: 300px; }
+        .config-group h3 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        .config-item { display: flex; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+        .config-item label { width: 120px; flex-shrink: 0; margin-bottom: 5px; }
+        .config-item select, .config-item input { flex-grow: 1; min-width: 150px;}
+        .config-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .config-options-grid div { display: flex; align-items: center; }
+        .config-options-grid label { width: auto; margin-left: 5px; }
     </style>
 </head>
 <body>
@@ -106,23 +69,18 @@
     <div id="devices"></div>
     <hr>
 
-
-    <!-- Tabs -->
     <div class="tab">
-      <button class="tablinks active" onclick="openTab(event, 'Apps')">Apps</button>
-      <button class="tablinks" onclick="openTab(event, 'Winlator')">Winlator</button>
+        <button class="tablinks active" onclick="openTab(event, 'Apps')">Apps</button>
+        <button class="tablinks" onclick="openTab(event, 'Winlator')">Winlator</button>
+        <button class="tablinks" onclick="openTab(event, 'Config')">Config</button>
     </div>
 
-    <!-- Tab content -->
-    <div id="Apps" class="tabcontent">
-      <div id="apps-grid"></div>
+    <div id="Apps" class="tabcontent"><div id="apps-grid"></div></div>
+    <div id="Winlator" class="tabcontent"><div id="winlator-grid"></div></div>
+    <div id="Config" class="tabcontent">
+        <!-- Configuration UI will be built here by JS -->
     </div>
 
-    <div id="Winlator" class="tabcontent">
-      <div id="winlator-grid"></div>
-    </div>
-
-    <!-- (Modals would go here, unchanged) -->
     <div id="wifi-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" id="wifi-close-btn">&times;</span>
@@ -135,109 +93,118 @@
 
     <script>
         const devicesContainer = document.getElementById('devices');
-        const deviceControlsPanel = document.getElementById('device-controls-panel');
         const appsGrid = document.getElementById('apps-grid');
         const winlatorGrid = document.getElementById('winlator-grid');
-
+        const configTab = document.getElementById('Config');
         const wifiModal = document.getElementById('wifi-modal');
         const wifiCloseBtn = document.getElementById('wifi-close-btn');
         const wifiConnectSubmitBtn = document.getElementById('wifi-connect-submit-btn');
-        const wifiAddressInput = document.getElementById('wifi-address-input');
-        const wifiStatus = document.getElementById('wifi-status');
-
         let currentDeviceId = null;
+        let videoEncoders = {};
+        let audioEncoders = {};
+
         const placeholderIcon = "/gui_assets/placeholder.png";
         const winlatorPlaceholderIcon = "/gui_assets/winlator_placeholder.png";
 
         wifiCloseBtn.onclick = () => wifiModal.style.display = "none";
-        window.onclick = (event) => {
-          if (event.target == wifiModal) wifiModal.style.display = "none";
-        }
+
+        wifiConnectSubmitBtn.onclick = async () => {
+            const address = document.getElementById('wifi-address-input').value;
+            const statusP = document.getElementById('wifi-status');
+            if (!address) {
+                statusP.textContent = 'Please enter an IP:Port address.';
+                return;
+            }
+            statusP.textContent = 'Connecting...';
+            try {
+                const response = await fetch('/api/adb/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: address })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    statusP.textContent = `Success: ${result.message}`;
+                    setTimeout(() => {
+                        wifiModal.style.display = "none";
+                        fetchDevices();
+                    }, 1000);
+                } else {
+                    statusP.textContent = `Error: ${result.detail || 'Failed to connect.'}`;
+                }
+            } catch (error) {
+                statusP.textContent = 'An unexpected error occurred while trying to connect.';
+                console.error('ADB WiFi Connect Error:', error);
+            }
+        };
+
+        window.onclick = (event) => { if (event.target == wifiModal) wifiModal.style.display = "none"; };
 
         function openTab(evt, tabName) {
-            var i, tabcontent, tablinks;
-            tabcontent = document.getElementsByClassName("tabcontent");
-            for (i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-            }
-            tablinks = document.getElementsByClassName("tablinks");
-            for (i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
+            document.querySelectorAll(".tabcontent").forEach(tc => tc.style.display = "none");
+            document.querySelectorAll(".tablinks").forEach(tl => tl.classList.remove("active"));
+            document.getElementById(tabName).style.display = tabName === 'Config' ? "flex" : "block";
+            evt.currentTarget.classList.add("active");
 
             if (currentDeviceId) {
                 if (tabName === 'Apps') fetchApps(currentDeviceId);
                 if (tabName === 'Winlator') fetchWinlatorApps(currentDeviceId);
+                if (tabName === 'Config') loadConfigUI();
             }
         }
-        document.querySelector('.tablinks.active').click(); // Open the default tab
 
         async function fetchDevices() {
             devicesContainer.innerHTML = '<h2>Connected Devices:</h2>';
-            const deviceListContainer = document.createElement('div');
-            deviceListContainer.style.flexGrow = '1';
-
+            
+            const wifiContainer = document.createElement('div');
+            wifiContainer.style.marginBottom = "1em";
             const wifiBtn = document.createElement('button');
-            wifiBtn.id = 'wifi-connect-btn';
-            wifiBtn.textContent = '📶';
+            wifiBtn.textContent = 'ADB WiFi Connect';
             wifiBtn.title = 'ADB over WiFi';
             wifiBtn.onclick = () => { wifiModal.style.display = 'block'; };
+            wifiContainer.appendChild(wifiBtn);
+            devicesContainer.appendChild(wifiContainer);
 
-            devicesContainer.appendChild(wifiBtn); // Append button directly
-            devicesContainer.appendChild(deviceListContainer); // Append list container directly
+            const deviceListContainer = document.createElement('div');
+            devicesContainer.appendChild(deviceListContainer);
 
             try {
-                deviceListContainer.innerHTML = '<p>Loading devices...</p>';
                 const response = await fetch('/api/devices');
                 const devices = await response.json();
-
                 if (devices.length === 0) {
                     deviceListContainer.innerHTML = '<p>No devices found.</p>';
-                } else {
-                    const ul = document.createElement('ul');
-                    devices.forEach(device => {
-                        const li = document.createElement('li');
-                        li.className = 'device-li';
-                        li.dataset.deviceId = device.id;
-                        li.textContent = `${device.name} (${device.id})`;
-                        li.onclick = () => {
-                            currentDeviceId = device.id;
-                            document.querySelectorAll('.device-li').forEach(item => item.classList.remove('selected'));
-                            li.classList.add('selected');
-
-                            // Fetch content for the currently active tab
-                            const activeTab = document.querySelector('.tablinks.active').textContent;
-                            if (activeTab === 'Apps') fetchApps(currentDeviceId);
-                            if (activeTab === 'Winlator') fetchWinlatorApps(currentDeviceId);
-                        };
-                        ul.appendChild(li);
-                    });
-                    deviceListContainer.innerHTML = '';
-                    deviceListContainer.appendChild(ul);
-
-                    // Auto-select the first device and load its apps
-                    if (devices.length > 0) {
-                        const firstDevice = devices[0];
-                        currentDeviceId = firstDevice.id;
-                        const firstLi = ul.querySelector(`[data-device-id="${firstDevice.id}"]`);
-                        if (firstLi) {
-                            firstLi.classList.add('selected');
-                            const activeTab = document.querySelector('.tablinks.active').textContent;
-                            if (activeTab === 'Apps') fetchApps(currentDeviceId);
-                            else if (activeTab === 'Winlator') fetchWinlatorApps(currentDeviceId);
-                        }
-                    }
+                    return;
                 }
+
+                const ul = document.createElement('ul');
+                devices.forEach(device => {
+                    const li = document.createElement('li');
+                    li.className = 'device-li';
+                    li.dataset.deviceId = device.id;
+                    li.textContent = `${device.name} (${device.id})`;
+                    li.onclick = () => selectDevice(device.id, li);
+                    ul.appendChild(li);
+                });
+                deviceListContainer.innerHTML = '';
+                deviceListContainer.appendChild(ul);
+
+                selectDevice(devices[0].id, ul.firstChild);
+
             } catch (error) {
                 deviceListContainer.innerHTML = '<p>Error fetching devices.</p>';
-                console.error('Fetch Devices Error:', error);
             }
         }
 
+        function selectDevice(deviceId, liElement) {
+            currentDeviceId = deviceId;
+            document.querySelectorAll('.device-li').forEach(item => item.classList.remove('selected'));
+            liElement.classList.add('selected');
+            const activeTab = document.querySelector('.tablinks.active').textContent;
+            openTab({ currentTarget: document.querySelector('.tablinks.active') }, activeTab);
+        }
+
         function renderGrid(container, items, placeholder, launchFn) {
-            container.innerHTML = '';
+             container.innerHTML = '';
             if (items.length === 0) {
                 container.innerHTML = '<p>No items found.</p>';
                 return;
@@ -250,27 +217,25 @@
                 if (appList.length === 0) return;
 
                 const sectionWrapper = document.createElement('div');
-                sectionWrapper.className = 'app-section-wrapper'; // New wrapper for section title and grid
+                sectionWrapper.className = 'app-section-wrapper';
 
                 const sectionTitle = document.createElement('h2');
                 sectionTitle.textContent = title;
                 sectionTitle.className = 'grid-section-title';
-                sectionWrapper.appendChild(sectionTitle); // Title inside the wrapper
+                sectionWrapper.appendChild(sectionTitle);
 
                 const sectionGrid = document.createElement('div');
-                sectionGrid.className = 'grid-container'; // Reuse grid-container styling
+                sectionGrid.className = 'grid-container';
 
                 appList.forEach(item => {
                     const gridItem = document.createElement('div');
                     gridItem.className = 'grid-item';
                     gridItem.onclick = () => launchFn(item);
+                    gridItem.dataset.pkgName = item.pkg_name || item.path;
 
                     const img = document.createElement('img');
                     img.src = item.icon ? `/icons/${item.icon}` : placeholder;
-                    img.onerror = () => {
-                        img.onerror = null; // Prevent infinite loops
-                        img.src = placeholder;
-                    };
+                    img.onerror = () => { img.onerror = null; img.src = placeholder; };
 
                     const iconContainer = document.createElement('div');
                     iconContainer.className = 'icon-container';
@@ -279,17 +244,12 @@
                     const nameSpan = document.createElement('span');
                     nameSpan.textContent = item.name;
 
-                    const pkgSpan = document.createElement('span');
-                    pkgSpan.className = 'pkg-name';
-                    pkgSpan.textContent = item.pkg_name || item.path;
-
                     gridItem.appendChild(iconContainer);
                     gridItem.appendChild(nameSpan);
-                    gridItem.appendChild(pkgSpan);
                     sectionGrid.appendChild(gridItem);
                 });
-                sectionWrapper.appendChild(sectionGrid); // Grid inside the wrapper
-                container.appendChild(sectionWrapper); // Append the whole wrapper
+                sectionWrapper.appendChild(sectionGrid);
+                container.appendChild(sectionWrapper);
             };
 
             renderSection('Pinned Apps', pinnedApps);
@@ -299,7 +259,7 @@
         async function fetchApps(deviceId) {
             appsGrid.innerHTML = '<p>Loading apps...</p>';
             try {
-                const response = await fetch(`/api/apps?device_id=${deviceId}`);
+                const response = await fetch(`/api/apps?device_id=${deviceId}&include_system_apps=true`);
                 const apps = await response.json();
                 if (apps.error) throw new Error(apps.error);
                 renderGrid(appsGrid, apps, placeholderIcon, (item) => launchApp(item.pkg_name, item.name));
@@ -312,39 +272,9 @@
                 const response = await fetch(`/api/winlator/apps?device_id=${deviceId}`);
                 const games = await response.json();
                 if (games.error) throw new Error(games.error);
-                renderGrid(winlatorGrid, games, winlatorPlaceholderIcon, (item) => {
-                    // Launching winlator apps might need a different function/endpoint
-                    // For now, we'll just log it.
-                    console.log("Launching Winlator game:", item);
-                    alert(`Launching Winlator game: ${item.name}. (Note: Launch logic not fully implemented in web UI yet)`);
-                });
+                renderGrid(winlatorGrid, games, winlatorPlaceholderIcon, launchWinlatorApp);
             } catch (error) { winlatorGrid.innerHTML = `<p>Error fetching games: ${error.message}</p>`; }
         }
-
-        wifiConnectSubmitBtn.onclick = async () => {
-            const address = wifiAddressInput.value.trim();
-            if (!address) return;
-            wifiStatus.textContent = `Connecting to ${address}...`;
-            try {
-                const response = await fetch('/api/adb/connect', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ address: address })
-                });
-                const result = await response.json();
-
-                wifiStatus.textContent = result.message;
-                if (result.status === 'success') {
-                    setTimeout(() => {
-                        wifiModal.style.display = 'none';
-                        fetchDevices();
-                    }, 1500);
-                }
-            } catch (error) {
-                wifiStatus.textContent = 'An error occurred.';
-                console.error('WiFi Connect Error:', error);
-            }
-        };
 
         async function launchApp(pkgName, appName) {
             if (!currentDeviceId) { alert('Please select a device first.'); return; }
@@ -357,9 +287,348 @@
             } catch (error) { alert('Failed to send launch command.'); }
         }
 
+        async function launchWinlatorApp(item) {
+            if (!currentDeviceId) { alert('Please select a device first.'); return; }
+            try {
+                await fetch('/api/winlator/launch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_id: currentDeviceId,
+                        shortcut_path: item.path,
+                        app_name: item.name,
+                        pkg_name: item.pkg // server needs this for the am start command
+                    })
+                });
+            } catch (error) { alert('Failed to send Winlator launch command.'); }
+        }
 
-        document.querySelectorAll('.key-btn').forEach(button => { /* Unchanged */ });
+        // --- Config Tab Logic ---
+        async function loadConfigUI() {
+            configTab.innerHTML = '<p>Loading configuration...</p>';
+            if (!currentDeviceId) { configTab.innerHTML = '<p>Please select a device.</p>'; return; }
 
+            const [profilesRes, encodersRes] = await Promise.all([
+                fetch(`/api/profiles?device_id=${currentDeviceId}`),
+                fetch(`/api/scrcpy/encoders?device_id=${currentDeviceId}`)
+            ]);
+            const profiles = await profilesRes.json();
+            const encoders = await encodersRes.json();
+            videoEncoders = encoders.video_encoders || {};
+            audioEncoders = encoders.audio_encoders || {};
+
+            buildConfigForm();
+
+            const profileSelect = document.getElementById('profile_combo');
+            profileSelect.innerHTML = '<option value="__global__">Global Config</option>';
+            
+            const appProfiles = profiles.apps || [];
+            if (appProfiles.length > 0) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = 'Apps';
+                appProfiles.forEach(app => {
+                    const option = document.createElement('option');
+                    option.value = app.key;
+                    option.textContent = app.name;
+                    optgroup.appendChild(option);
+                });
+                profileSelect.appendChild(optgroup);
+            }
+            
+            const winlatorProfiles = profiles.winlator || [];
+            if (winlatorProfiles.length > 0) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = 'Winlator';
+                winlatorProfiles.forEach(app => {
+                    const option = document.createElement('option');
+                    option.value = app.key;
+                    option.textContent = app.name;
+                    optgroup.appendChild(option);
+                });
+                profileSelect.appendChild(optgroup);
+            }
+
+            profileSelect.onchange = () => loadProfileConfig(profileSelect.value);
+            loadProfileConfig("__global__");
+        }
+
+        // Helper function for robustly encoding a string to Base64, supporting Unicode.
+        function safe_btoa(str) {
+            // See: https://developer.mozilla.org/en-US/docs/Glossary/Base64#the_unicode_problem
+            return btoa(unescape(encodeURIComponent(str)));
+        }
+
+        async function loadProfileConfig(profileKey) {
+            let queryParams = `device_id=${currentDeviceId}`;
+
+            if (profileKey === '__global__') {
+                queryParams += `&profile_key=placeholder`;
+            } else if (profileKey.includes('/')) { // It's a Winlator path, Base64 encode it.
+                queryParams += `&profile_key=${safe_btoa(profileKey)}&b64=true`;
+            } else { // It's a regular app package name.
+                queryParams += `&profile_key=${encodeURIComponent(profileKey)}`;
+            }
+
+            const response = await fetch(`/api/config?${queryParams}`);
+            const config = await response.json();
+            populateConfigForm(config);
+        }
+
+        function populateConfigForm(config) {
+            // Populate all non-dynamic fields first
+            document.querySelectorAll('#config-form [data-config-key]').forEach(el => {
+                const key = el.dataset.configKey;
+                if (key === 'video_encoder' || key === 'audio_encoder' || key === 'video_codec' || key === 'audio_codec') return;
+                
+                const value = config[key];
+                if (el.type === 'checkbox') {
+                    el.checked = !!value;
+                } else if (value !== undefined) {
+                    if (el.tagName === 'SELECT') {
+                        if ([...el.options].some(opt => opt.value === value)) el.value = value;
+                    } else {
+                        el.value = value;
+                    }
+                }
+            });
+
+            // --- Handle codec/encoder chain manually and in order ---
+
+            // 1. Set Video Codec
+            const videoCodecSelect = document.getElementById('video_codec');
+            if (config['video_codec'] && [...videoCodecSelect.options].some(opt => opt.value === config['video_codec'])) {
+                videoCodecSelect.value = config['video_codec'];
+            } else {
+                videoCodecSelect.selectedIndex = 0;
+            }
+            // 2. Manually trigger update of Video Encoder options
+            updateEncoderOptions('video');
+            // 3. Set Video Encoder
+            const videoEncoderSelect = document.getElementById('video_encoder');
+            if (config['video_encoder'] && [...videoEncoderSelect.options].some(opt => opt.value === config['video_encoder'])) {
+                videoEncoderSelect.value = config['video_encoder'];
+            }
+
+            // 4. Set Audio Codec
+            const audioCodecSelect = document.getElementById('audio_codec');
+            if (config['audio_codec'] && [...audioCodecSelect.options].some(opt => opt.value === config['audio_codec'])) {
+                audioCodecSelect.value = config['audio_codec'];
+            } else {
+                audioCodecSelect.selectedIndex = 0;
+            }
+            // 5. Manually trigger update of Audio Encoder options
+            updateEncoderOptions('audio');
+            // 6. Set Audio Encoder
+            const audioEncoderSelect = document.getElementById('audio_encoder');
+            if (config['audio_encoder'] && [...audioEncoderSelect.options].some(opt => opt.value === config['audio_encoder'])) {
+                audioEncoderSelect.value = config['audio_encoder'];
+            }
+        }
+
+
+        async function saveConfig() {
+            const profileKey = document.getElementById('profile_combo').value;
+            if (!profileKey) return;
+            const form = document.getElementById('config-form');
+            const data = {};
+            new FormData(form).forEach((value, key) => {
+                const el = form.querySelector(`[name="${key}"]`);
+                if (el.type === 'checkbox') {
+                    data[key] = el.checked;
+                } else if (el.type === 'number' || el.dataset.isNumber) {
+                    data[key] = Number(value);
+                } else {
+                    data[key] = value;
+                }
+            });
+
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    device_id: currentDeviceId,
+                    pkg_name: profileKey,
+                    config_data: data
+                })
+            });
+        }
+
+        function buildConfigItem(label, key, element) {
+            const div = document.createElement('div');
+            div.className = 'config-item';
+            const labelEl = document.createElement('label');
+            labelEl.textContent = label;
+            labelEl.htmlFor = key;
+            element.id = key;
+            element.name = key;
+            if (key !== 'profile_combo') {
+                element.dataset.configKey = key;
+            }
+            element.onchange = saveConfig;
+            div.appendChild(labelEl);
+            div.appendChild(element);
+            return div;
+        }
+
+        function createSelect(options) {
+            const select = document.createElement('select');
+            options.forEach(opt => {
+                const option = new Option(typeof opt === 'object' ? opt.text : opt, typeof opt === 'object' ? opt.value : opt);
+                select.add(option);
+            });
+            return select;
+        }
+
+        function createTextInput(isNumber = false) {
+             const input = document.createElement('input');
+             if (isNumber) {
+                input.type = 'number';
+                input.dataset.isNumber = true;
+             } else {
+                input.type = 'text';
+             }
+             return input;
+        }
+
+        function updateEncoderOptions(type) {
+            const codecMap = type === 'video' ? videoEncoders : audioEncoders;
+            const codecSelect = document.getElementById(`${type}_codec`);
+            const encoderSelect = document.getElementById(`${type}_encoder`);
+            const selectedCodecText = codecSelect.value;
+
+            const previouslySelectedEncoder = encoderSelect.value;
+            encoderSelect.innerHTML = '<option value="Auto">Auto</option>';
+
+            if (selectedCodecText !== 'Auto' && selectedCodecText.includes(' - ')) {
+                const parts = selectedCodecText.split(' - ');
+                if (parts.length === 2) {
+                    const mode = parts[0].trim();
+                    const codec = parts[1].trim();
+                    if (codecMap[codec]) {
+                        const filteredEncoders = codecMap[codec].filter(e => e[1] === mode.toLowerCase());
+                        const encoderNames = [...new Set(filteredEncoders.map(e => e[0]))].sort();
+
+                        encoderNames.forEach(encName => {
+                            const optionText = `${encName} (${mode.toLowerCase()})`;
+                            const option = new Option(optionText, optionText);
+                            encoderSelect.add(option);
+                        });
+                    }
+                }
+            }
+            
+            if ([...encoderSelect.options].some(opt => opt.value === previouslySelectedEncoder)) {
+                encoderSelect.value = previouslySelectedEncoder;
+            }
+        }
+
+        function buildConfigForm() {
+            configTab.innerHTML = '';
+            const form = document.createElement('form');
+            form.id = 'config-form';
+            form.onsubmit = (e) => {e.preventDefault(); return false;};
+
+            const topSection = document.createElement('div');
+            topSection.className = 'config-group';
+            topSection.innerHTML = '<h3>Configuration Profile</h3>';
+            topSection.appendChild(buildConfigItem('Profile', 'profile_combo', document.createElement('select')));
+            form.appendChild(topSection);
+
+            const settingsContainer = document.createElement('div');
+            settingsContainer.style.cssText = 'display:flex; flex-wrap:wrap; gap:20px; width:100%;';
+
+            const groups = {
+                general: { title: 'General Settings', parent: settingsContainer },
+                video:   { title: 'Video Settings', parent: settingsContainer },
+                audio:   { title: 'Audio Settings', parent: settingsContainer },
+                options: { title: 'Options', parent: settingsContainer }
+            };
+            Object.values(groups).forEach(g => {
+                const el = document.createElement('div');
+                el.className = 'config-group';
+                el.innerHTML = `<h3>${g.title}</h3>`;
+                g.element = el;
+                g.parent.appendChild(el);
+            });
+
+            // General
+            groups.general.element.appendChild(buildConfigItem('Window Mode', 'windowing_mode', createSelect(["Fullscreen", "Freeform"])));
+            groups.general.element.appendChild(buildConfigItem('Mouse Mode', 'mouse_mode', createSelect(["sdk","uhid","aoa"])));
+            groups.general.element.appendChild(buildConfigItem('Gamepad Mode', 'gamepad_mode', createSelect(["disabled","uhid","aoa"])));
+            groups.general.element.appendChild(buildConfigItem('Keyboard Mode', 'keyboard_mode', createSelect(["disabled","sdk","uhid","aoa"])));
+            groups.general.element.appendChild(buildConfigItem('Mouse Bind', 'mouse_bind', createSelect(["bhsn:++++","++++:bhsn"])));
+            groups.general.element.appendChild(buildConfigItem('Max FPS', 'max_fps', createTextInput(true)));
+            groups.general.element.appendChild(buildConfigItem('Virtual Display', 'new_display', createSelect(["Disabled", "640x360/120", "854x480/120", "960x550/120", "1280x720/140", "1366x768/140", "1920x1080/140"])));
+            groups.general.element.appendChild(buildConfigItem('Max Size', 'max_size', createTextInput(true)));
+            groups.general.element.appendChild(buildConfigItem('Extra Args', 'extraargs', createTextInput()));
+
+            // Video
+            const videoCodecOpts = [{ value: 'Auto', text: 'Auto' }];
+            if (videoEncoders) {
+                for (const codec of Object.keys(videoEncoders).sort()) {
+                    const entries = videoEncoders[codec];
+                    const modes = [...new Set(entries.map(e => e[1]))].sort();
+                    for (const mode of modes) {
+                        videoCodecOpts.push({ value: `${mode.toUpperCase()} - ${codec}`, text: `${mode.toUpperCase()} - ${codec}` });
+                    }
+                }
+            }
+            const videoCodecSelect = createSelect(videoCodecOpts);
+            videoCodecSelect.onchange = () => { updateEncoderOptions('video'); saveConfig(); };
+            groups.video.element.appendChild(buildConfigItem('Video Codec', 'video_codec', videoCodecSelect));
+            groups.video.element.appendChild(buildConfigItem('Video Encoder', 'video_encoder', createSelect(['Auto'])));
+            groups.video.element.appendChild(buildConfigItem('Render Driver', 'render_driver', createSelect(["opengles2", "opengles", "opengl", "direct3d", "metal", "software"])));
+            groups.video.element.appendChild(buildConfigItem('Frame Drop', 'allow_frame_drop', createSelect(["Enabled", "Disabled"])));
+            groups.video.element.appendChild(buildConfigItem('Low Latency', 'low_latency', createSelect(["Enabled", "Disabled"])));
+            groups.video.element.appendChild(buildConfigItem('Priority', 'priority_mode', createSelect(["Realtime", "Normal"])));
+            groups.video.element.appendChild(buildConfigItem('Bitrate Mode', 'bitrate_mode', createSelect(["CBR", "VBR"])));
+            groups.video.element.appendChild(buildConfigItem('Video Buffer', 'video_buffer', createTextInput(true)));
+            groups.video.element.appendChild(buildConfigItem('Video Bitrate', 'video_bitrate_slider', createTextInput(true)));
+
+            // Audio
+            const audioCodecOpts = [{ value: 'Auto', text: 'Auto' }];
+            if (audioEncoders) {
+                for (const codec of Object.keys(audioEncoders).sort()) {
+                    const entries = audioEncoders[codec];
+                    const modes = [...new Set(entries.map(e => e[1]))].sort();
+                    for (const mode of modes) {
+                        audioCodecOpts.push({ value: `${mode.toUpperCase()} - ${codec}`, text: `${mode.toUpperCase()} - ${codec}` });
+                    }
+                }
+            }
+            const audioCodecSelect = createSelect(audioCodecOpts);
+            audioCodecSelect.onchange = () => { updateEncoderOptions('audio'); saveConfig(); };
+            groups.audio.element.appendChild(buildConfigItem('Audio Codec', 'audio_codec', audioCodecSelect));
+            groups.audio.element.appendChild(buildConfigItem('Audio Encoder', 'audio_encoder', createSelect(['Auto'])));
+            groups.audio.element.appendChild(buildConfigItem('Audio Buffer', 'audio_buffer', createTextInput(true)));
+
+            // Options
+            const optionsGrid = document.createElement('div');
+            optionsGrid.className = 'config-options-grid';
+            ["fullscreen", "turn_screen_off", "stay_awake", "mipmaps", "no_audio", "no_video", "try_unlock", "alternate_launch_method"]
+            .forEach(key => {
+                 const item = document.createElement('div');
+                 const checkbox = document.createElement('input');
+                 checkbox.type = 'checkbox';
+                 checkbox.id = key;
+                 checkbox.name = key;
+                 checkbox.dataset.configKey = key;
+                 checkbox.onchange = saveConfig;
+                 const label = document.createElement('label');
+                 label.htmlFor = key;
+                 label.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                 item.appendChild(checkbox);
+                 item.appendChild(label);
+                 optionsGrid.appendChild(item);
+            });
+            groups.options.element.appendChild(optionsGrid);
+
+            form.appendChild(settingsContainer);
+            configTab.appendChild(form);
+        }
+
+        // Initial calls
+        document.querySelector('.tablinks.active').click();
         fetchDevices();
     </script>
 </body>
