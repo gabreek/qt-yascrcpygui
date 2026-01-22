@@ -13,14 +13,6 @@ from gui.main_window import MainWindow
 from gui import themes
 import web_server
 
-class WebServerThread(QThread):
-    """
-    Thread to run the FastAPI web server without blocking the main GUI thread.
-    """
-    config_needs_reload = Signal()
-    def run(self):
-        web_server.run_server(self)
-
 def main():
     """
     Função principal que inicia a aplicação.

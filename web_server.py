@@ -423,12 +423,10 @@ app.mount("/", StaticFiles(directory="web", html=True), name="web")
 
 web_thread = None
 
-def run_server(thread=None):
-    """This function is the entry point for the web server thread."""
+def set_thread_instance(thread):
+    """This function is called by the QThread to set the global thread instance."""
     global web_thread
-    if thread:
-        web_thread = thread
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    web_thread = thread
 
 if __name__ == "__main__":
-    run_server()
+    uvicorn.run(app, host="0.0.0.0", port=8000)

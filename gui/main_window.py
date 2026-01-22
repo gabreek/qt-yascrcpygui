@@ -26,26 +26,44 @@ class WebServerThread(QThread):
     config_needs_reload = Signal() # Added for synchronization
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.server_config = None
         self.server = None
         self._loop = None
 
     def run(self):
-        # Create a new event loop for this thread
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
+        try:
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
 
-        # Pass 'self' (the thread instance) to web_server.run_server for signaling
-        web_server.run_server(self)
+            # Set the thread instance in the web_server module
+            web_server.set_thread_instance(self)
+
+            config = uvicorn.Config(web_server.app, host="0.0.0.0", port=8000, log_level="info", loop="asyncio")
+            self.server = uvicorn.Server(config)
+
+            self._loop.run_until_complete(self.server.serve())
+
+        except Exception as e:
+            if "Event loop is closed" not in str(e):
+                 print(f"Web server thread crashed: {e}")
+        finally:
+            if self._loop and self._loop.is_running():
+                self._loop.close()
+            print("Web server event loop finished.")
 
 
     def stop(self):
         """Gracefully signals the uvicorn server to shut down."""
-        if self.server and not self.server.should_exit:
+        if self.server and self.isRunning():
+            print("Requesting web server shutdown...")
             self.server.should_exit = True
-            print("Signal sent to stop web server.")
-            # It's important to wait for the thread to actually finish its loop
-            self.wait()
+            
+            # Give the thread up to 5 seconds to terminate gracefully.
+            if not self.wait(5000):
+                print("Web server thread did not terminate in time. Forcing termination.")
+                self.terminate() # As a last resort.
+                self.wait() # Wait for it to be fully terminated.
+
+            print("Web server thread has been stopped.")
 
 
 class MainWindow(QMainWindow):
