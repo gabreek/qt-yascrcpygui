@@ -431,14 +431,15 @@
             if (!profileKey) return;
             const form = document.getElementById('config-form');
             const data = {};
-            new FormData(form).forEach((value, key) => {
-                const el = form.querySelector(`[name="${key}"]`);
+
+            form.querySelectorAll('[data-config-key]').forEach(el => {
+                const key = el.dataset.configKey; // Use data-config-key as the source of truth
                 if (el.type === 'checkbox') {
                     data[key] = el.checked;
                 } else if (el.type === 'number' || el.dataset.isNumber) {
-                    data[key] = Number(value);
+                    data[key] = el.value === '' ? null : Number(el.value);
                 } else {
-                    data[key] = value;
+                    data[key] = el.value;
                 }
             });
 

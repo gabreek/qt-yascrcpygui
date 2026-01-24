@@ -6,3 +6,6 @@ extract-icon
 pefile
 fastapi
 uvicorn
+PySide6_Addons
+PySide6_Essentials
+shiboken6

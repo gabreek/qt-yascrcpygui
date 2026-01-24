@@ -224,8 +224,30 @@ class AppConfig:
         self._save_json(self.config_data, self.CONFIG_FILE)
 
     def save_app_scrcpy_config(self, pkg_name, config_data):
-        self._ensure_metadata_structure(pkg_name)
-        self.config_data['app_metadata'][pkg_name]['config'] = config_data
+        # This single method will now handle global device settings and app-specific settings.
+        
+        # First, handle pure-global settings which are stored in a separate file
+        pure_global_settings = {k: v for k, v in config_data.items() if k in self.GLOBAL_KEYS}
+        if pure_global_settings:
+            self.global_config_data.update(pure_global_settings)
+            self._save_json(self.global_config_data, self.GLOBAL_CONFIG_FILE)
+
+        # Then, handle device-specific settings
+        device_settings = {k: v for k, v in config_data.items() if k not in self.GLOBAL_KEYS}
+
+        if pkg_name == '__global__':
+            # Save to the 'general_config' for the current device
+            if 'general_config' not in self.config_data:
+                self.config_data['general_config'] = {}
+            self.config_data['general_config'].update(device_settings)
+        else:
+            # Save to a specific app's profile
+            self._ensure_metadata_structure(pkg_name)
+            if 'config' not in self.config_data['app_metadata'][pkg_name]:
+                self.config_data['app_metadata'][pkg_name]['config'] = {}
+            self.config_data['app_metadata'][pkg_name]['config'].update(device_settings)
+        
+        # Save the main device config file
         self._save_json(self.config_data, self.CONFIG_FILE)
 
     def delete_app_scrcpy_config(self, pkg_name):
