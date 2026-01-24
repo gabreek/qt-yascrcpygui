@@ -15,7 +15,7 @@ def _get_startupinfo():
         return startupinfo
     return None
 
-def _run_adb_command(command, device_id=None, print_command=False, ignore_errors=False):
+def _run_adb_command(command, device_id=None, print_command=False, ignore_errors=False, timeout=5):
     """Helper para executar um comando adb, retornando a saída decodificada."""
     base_cmd = ['adb']
     if device_id:
@@ -29,18 +29,19 @@ def _run_adb_command(command, device_id=None, print_command=False, ignore_errors
     startupinfo = _get_startupinfo()
 
     try:
-        result = subprocess.check_output(full_cmd, text=True, stderr=subprocess.PIPE, startupinfo=startupinfo)
+        result = subprocess.check_output(full_cmd, text=True, stderr=subprocess.PIPE, startupinfo=startupinfo, timeout=timeout)
         return result.strip()
     except FileNotFoundError:
         if not ignore_errors:
-            # This is a critical error, so we can leave the print
             print(f"Error: ADB command '{full_cmd[0]}' not found. Please ensure ADB is in your system's PATH.")
         return ""
     except subprocess.CalledProcessError:
-        # These are common and should be handled by the calling function
         return ""
-    except Exception:
-        # General exceptions should also be handled by the caller
+    except subprocess.TimeoutExpired:
+        print(f"Warning: ADB command '{shlex.join(full_cmd)}' timed out after {timeout} seconds.")
+        return ""
+    except Exception as e:
+        print(f"An unexpected error occurred while executing ADB command '{shlex.join(full_cmd)}': {e}")
         return ""
 
 def get_device_info(device_id=None):
@@ -131,7 +132,7 @@ def get_game_executable_info(shortcut_path, device_id=None):
 
     return None
 
-def pull_file(remote_path, local_path, device_id=None):
+def pull_file(remote_path, local_path, device_id=None, timeout=30):
     """Baixa um arquivo do dispositivo para o computador local de forma síncrona."""
     cmd = ['adb']
     if device_id:
@@ -142,12 +143,16 @@ def pull_file(remote_path, local_path, device_id=None):
         startupinfo = _get_startupinfo()
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', startupinfo=startupinfo)
-        stdout, stderr = process.communicate()
+        stdout, stderr = process.communicate(timeout=timeout) # Add timeout here
         if process.returncode != 0:
-            # Error is handled by the caller, no need to print here
             return False
         return True
-    except (subprocess.SubprocessError, FileNotFoundError):
+    except subprocess.TimeoutExpired:
+        print(f"Warning: ADB pull command '{shlex.join(cmd)}' timed out after {timeout} seconds. Terminating process.")
+        process.kill()
+        return False
+    except (subprocess.SubprocessError, FileNotFoundError, Exception) as e:
+        print(f"An error occurred during ADB pull command '{shlex.join(cmd)}': {e}")
         return False
 
 def start_winlator_app(shortcut_path, display_id, package_name, device_id=None, windowing_mode=1):
@@ -199,7 +204,7 @@ def start_app_on_display(package_name, display_id, windowing_mode, device_id=Non
 
 def connect_wifi(address):
     """Connects to a device via Wi-Fi."""
-    return _run_adb_command(['connect', address], print_command=True)
+    return _run_adb_command(['connect', address], print_command=True, timeout=10)
 
 def disconnect_wifi(address):
     """Disconnects from a Wi-Fi device."""

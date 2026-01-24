@@ -59,9 +59,9 @@ class WebServerThread(QThread):
             
             # Give the thread up to 5 seconds to terminate gracefully.
             if not self.wait(5000):
-                print("Web server thread did not terminate in time. Forcing termination.")
-                self.terminate() # As a last resort.
-                self.wait() # Wait for it to be fully terminated.
+                print("Web server thread did not terminate gracefully within 5 seconds.")
+                # We do not call terminate() here as it can lead to resource leaks.
+                # Instead, we rely on the main application to eventually exit.
 
             print("Web server thread has been stopped.")
 
