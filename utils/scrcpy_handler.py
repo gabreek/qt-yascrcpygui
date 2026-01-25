@@ -373,13 +373,13 @@ def list_encoders(device_id=None):
         for line in output.splitlines():
             line = line.strip()
             if "(alias for" in line: continue
-            vm = re.match(r"--video-codec=(\w+)\s+--video-encoder='?([\w.-]+)'?\s+\(hw|sw\)", line)
+            vm = re.match(r"--video-codec=(\w+)\s+--video-encoder='?([\w.-]+)'?\s+\((\w+)\)(?:\s+\[\w+\])?", line)
             if vm:
                 codec, encoder, mode = vm.groups()
                 video_encoders.setdefault(codec, [])
                 if (encoder, mode) not in video_encoders[codec]:
                     video_encoders[codec].append((encoder, mode))
-            am = re.match(r"--audio-codec=(\w+)\s+--audio-encoder='?([\w.-]+)'?\s+\(hw|sw\)", line)
+            am = re.match(r"--audio-codec=(\w+)\s+--audio-encoder='?([\w.-]+)'?\s+\((\w+)\)", line)
             if am:
                 codec, encoder, mode = am.groups()
                 audio_encoders.setdefault(codec, [])
