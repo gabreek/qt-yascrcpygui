@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QPoint, Signal
+from PySide6.QtCore import Qt, QPoint, Signal, QEvent
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QDialog, QProgressBar) # Added QProgressBar
 
@@ -39,8 +39,14 @@ class CustomTitleBar(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.pressing = True
-            self.start_pos = event.globalPosition().toPoint() - self.parent_window.frameGeometry().topLeft()
+            if event.type() == QEvent.Type.MouseButtonDblClick:
+                if self.parent_window.isMaximized():
+                    self.parent_window.showNormal()
+                else:
+                    self.parent_window.showMaximized()
+            else:
+                self.pressing = True
+                self.start_pos = event.globalPosition().toPoint() - self.parent_window.frameGeometry().topLeft()
             event.accept()
 
     def mouseMoveEvent(self, event):

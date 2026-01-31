@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('gui/placeholder.png', 'gui'), ('gui/winlator_placeholder.png', 'gui'), ('gui/icon.png', 'gui'), ('gui/launcher.png', 'gui'), ('web/icon.png', 'web'), ('web/index.html', 'web'), ('web/manifest.json', 'web'), ('web_server.py', '.')],
+    datas=[('gui/placeholder.png', 'gui'), ('gui/winlator_placeholder.png', 'gui'), ('gui/icon.png', 'gui'), ('gui/launcher.png', 'gui'), ('gui/DynamicGridView.qml', 'gui'), ('web/icon.png', 'web'), ('web/index.html', 'web'), ('web/manifest.json', 'web'), ('web_server.py', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

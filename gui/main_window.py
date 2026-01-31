@@ -56,7 +56,7 @@ class WebServerThread(QThread):
         if self.server and self.isRunning():
             print("Requesting web server shutdown...")
             self.server.should_exit = True
-            
+
             # Give the thread up to 5 seconds to terminate gracefully.
             if not self.wait(5000):
                 print("Web server thread did not terminate gracefully within 5 seconds.")
@@ -71,6 +71,8 @@ class MainWindow(QMainWindow):
     device_status_updated = Signal(str)
     web_server_status_changed = Signal(bool)
 
+    RESIZE_BORDER = 5 # Width of the resize border area
+
     def __init__(self, app, app_config):
         super().__init__()
         self.app = app
@@ -79,6 +81,12 @@ class MainWindow(QMainWindow):
         self.active_workers = []
         self.web_server_thread = None
         self.web_config_window = None
+
+        # Resizing related properties
+        self._resizing = False
+        self._resize_start_pos = None
+        self._resize_start_geometry = None
+        self._resize_edges = Qt.Edges()
 
         self.setWindowTitle("yaScrcpy")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "icon.png")))
@@ -142,7 +150,8 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(content_widget)
 
         self.setCentralWidget(main_widget)
-        self.resize(410, 650)
+        self.resize(495, 700)
+        self.setMinimumSize(400, 400) # Set a minimum size for the window
 
         self.scrcpy_session_manager_window = None
         self.adb_wifi_window = None
@@ -159,6 +168,104 @@ class MainWindow(QMainWindow):
 
         if self.app_config.get('start_web_server_on_launch'):
             self.start_web_server()
+
+    def get_resize_edges(self, pos):
+        """Determines which edges are being interacted with for resizing."""
+        edges = Qt.Edges()
+        # Check within a small margin from the window's physical borders
+        on_left = pos.x() < self.RESIZE_BORDER
+        on_right = pos.x() > self.width() - self.RESIZE_BORDER
+        on_top = pos.y() < self.RESIZE_BORDER
+        on_bottom = pos.y() > self.height() - self.RESIZE_BORDER
+
+        if on_left:
+            edges |= Qt.LeftEdge
+        if on_right:
+            edges |= Qt.RightEdge
+        if on_top:
+            edges |= Qt.TopEdge
+        if on_bottom:
+            edges |= Qt.BottomEdge
+        return edges
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._resize_edges = self.get_resize_edges(event.position().toPoint())
+            if self._resize_edges:
+                self._resizing = True
+                self._resize_start_pos = event.globalPosition().toPoint()
+                self._resize_start_geometry = self.geometry()
+            elif self.title_bar.geometry().contains(event.position().toPoint()): # Allow dragging from title bar
+                self._resizing = False # Not resizing, but will be dragging
+                self._resize_start_pos = event.globalPosition().toPoint()
+            else:
+                super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._resizing: # We are in a resizing state
+            global_pos = event.globalPosition().toPoint()
+            delta = global_pos - self._resize_start_pos
+            rect = self._resize_start_geometry # Original geometry when resize started
+
+            temp_x, temp_y, temp_w, temp_h = rect.x(), rect.y(), rect.width(), rect.height()
+
+            # --- Horizontal Resizing ---
+            if self._resize_edges & Qt.LeftEdge:
+                temp_x = rect.x() + delta.x()
+                temp_w = rect.width() - delta.x()
+            if self._resize_edges & Qt.RightEdge:
+                temp_w = rect.width() + delta.x()
+
+            # --- Vertical Resizing ---
+            if self._resize_edges & Qt.TopEdge:
+                temp_y = rect.y() + delta.y()
+                temp_h = rect.height() - delta.y()
+            if self._resize_edges & Qt.BottomEdge:
+                temp_h = rect.height() + delta.y()
+
+            # Apply minimum size constraints for width
+            if temp_w < self.minimumWidth():
+                if self._resize_edges & Qt.LeftEdge:
+                    # If shrinking from left, adjust x to keep width at min (pin right edge)
+                    temp_x = rect.x() + rect.width() - self.minimumWidth()
+                temp_w = self.minimumWidth()
+
+            # Apply minimum size constraints for height
+            if temp_h < self.minimumHeight():
+                if self._resize_edges & Qt.TopEdge:
+                    # If shrinking from top, adjust y to keep height at min (pin bottom edge)
+                    temp_y = rect.y() + rect.height() - self.minimumHeight()
+                temp_h = self.minimumHeight()
+
+            self.setGeometry(temp_x, temp_y, temp_w, temp_h)
+        elif event.buttons() == Qt.MouseButton.LeftButton and self._resize_start_pos: # Dragging
+            diff = event.globalPosition().toPoint() - self._resize_start_pos
+            self.move(self.pos() + diff)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._resizing = False
+            self._resize_edges = Qt.Edges()
+            self._resize_start_pos = None
+            self._resize_start_geometry = None
+            self.unsetCursor() # Reset cursor after resizing
+        super().mouseReleaseEvent(event)
+
+    def resizeEvent(self, event):
+        # Apply rounded corners mask if needed
+        # This part assumes a fixed corner radius for the main_widget
+        # If the main_widget has a border-radius in CSS, this mask might interfere or be redundant.
+        # For now, let's skip explicit mask unless visual issues arise.
+        # If rounded corners are desired via mask:
+        # path = QPainterPath()
+        # path.addRoundedRect(self.rect(), 15, 15) # Assuming 15px radius from CSS
+        # self.setMask(QRegion(path.toFillPolygon().toPolygon()))
+        super().resizeEvent(event)
+
+    def start_web_server(self):
+        if self.is_web_server_running():
+            return
 
     def start_web_server(self):
         if self.is_web_server_running():
@@ -191,7 +298,7 @@ class MainWindow(QMainWindow):
         self.thread_pool.waitForDone()
         self.scrcpy_tab.stop_all_workers()
         event.accept()
-        
+
     # ... (rest of the methods are the same) ...
 
     def pause_device_check(self):
@@ -227,6 +334,10 @@ class MainWindow(QMainWindow):
             self.adb_wifi_window.update_theme()
         if self.scrcpy_session_manager_window and self.scrcpy_session_manager_window.isVisible():
             self.scrcpy_session_manager_window.update_theme()
+
+        # Propagate theme change to tabs with QML content
+        self.apps_tab.update_theme()
+        self.winlator_tab.update_theme()
 
     def minimize(self):
         self.showMinimized()
