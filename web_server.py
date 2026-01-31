@@ -8,8 +8,21 @@ from utils import adb_handler, scrcpy_handler
 from app_config import AppConfig
 import os
 import shlex
+import sys
 
 app = FastAPI()
+
+# --- Path resolution for PyInstaller ---
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    else:
+        # Not running in a bundle
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 # Mount the icon cache directory as a static path
 try:
@@ -22,7 +35,7 @@ except Exception as e:
 
 # Mount the gui directory for placeholder images
 try:
-    gui_assets_dir = os.path.join(os.path.dirname(__file__), 'gui')
+    gui_assets_dir = get_resource_path('gui')
     if os.path.exists(gui_assets_dir):
         app.mount("/gui_assets", StaticFiles(directory=gui_assets_dir), name="gui_assets")
 except Exception as e:
@@ -417,8 +430,24 @@ async def kill_session(pid: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# --- Path resolution for PyInstaller ---
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    else:
+        # Not running in a bundle
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 # Mount the entire web directory for static files (THIS MUST BE LAST)
-app.mount("/", StaticFiles(directory="web", html=True), name="web")
+web_dir = get_resource_path('web')
+if os.path.exists(web_dir):
+    app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
+else:
+    print(f"CRITICAL: Web directory '{web_dir}' not found. The web interface will not be available.")
 
 
 web_thread = None
