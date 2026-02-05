@@ -1,6 +1,6 @@
 from PySide6.QtCore import Qt, QPoint, Signal, QEvent
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QDialog, QProgressBar) # Added QProgressBar
+                               QPushButton, QDialog, QProgressBar, QLineEdit, QSizePolicy) # Added QProgressBar
 
 from . import themes # Assuming themes.py is in the same directory
 
@@ -106,6 +106,55 @@ class CustomThemedDialog(QDialog):
         themes.apply_stylesheet_to_window(self)
         # apply_stylesheet_to_window already calls apply_theme_to_custom_title_bar if a CustomTitleBar is found
 
+
+class CustomThemedInputDialog(CustomThemedDialog):
+    """A frameless, themed input dialog."""
+    def __init__(self, parent=None, title="Input", label_text="", text_input_mode=QLineEdit.Normal, initial_text=""):
+        super().__init__(parent, title=title)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setMinimumSize(400, 150) # Adjust size as needed
+
+        self.input_line_edit = QLineEdit(self)
+        self.input_line_edit.setEchoMode(text_input_mode)
+        self.input_line_edit.setText(initial_text)
+        self.input_line_edit.setFocus() # Set initial focus
+        self.input_line_edit.returnPressed.connect(self.accept) # Connect Enter key to accept
+        
+        # Optionally make the line edit expand horizontally
+        self.input_line_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
+
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+
+        # Content layout for message and input
+        input_content_layout = QVBoxLayout()
+        if label_text:
+            input_content_layout.addWidget(QLabel(label_text, self))
+        input_content_layout.addWidget(self.input_line_edit)
+
+        # Button layout
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(self.ok_button)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addStretch()
+
+        self.add_content_layout(input_content_layout)
+        self.add_content_layout(button_layout) # Add buttons to the content layout
+
+    def textValue(self):
+        return self.input_line_edit.text()
+
+    @staticmethod
+    def getText(parent, title, label, text_input_mode=QLineEdit.Normal, initial_text=""):
+        dialog = CustomThemedInputDialog(parent, title, label, text_input_mode, initial_text)
+        result = dialog.exec()
+        if result == QDialog.Accepted:
+            return dialog.textValue(), True
+        return "", False
 
 class CustomThemedProgressDialog(CustomThemedDialog):
     canceled = Signal()

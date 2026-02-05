@@ -38,15 +38,9 @@ class AdbWifiWindow(QWidget):
         content_layout.setContentsMargins(10, 10, 10, 10)
         content_layout.setSpacing(10)
 
-        self.ip_input = QLineEdit()
-        self.ip_input.setPlaceholderText("Device IP Address")
-        self.port_input = QLineEdit()
-        self.port_input.setPlaceholderText("Port")
-        self.port_input.setFixedWidth(60)
-
-        input_layout = QHBoxLayout()
-        input_layout.addWidget(self.ip_input)
-        input_layout.addWidget(self.port_input)
+        self.address_input = QLineEdit()
+        self.address_input.setPlaceholderText("IP:Port (e.g., 192.168.1.100:5555)")
+        self.address_input.returnPressed.connect(self.handle_connect)
 
         self.connect_button = QPushButton("Connect")
         self.connect_button.clicked.connect(self.handle_connect)
@@ -56,7 +50,7 @@ class AdbWifiWindow(QWidget):
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setObjectName("adb_status_label") # Add objectName
 
-        content_layout.addLayout(input_layout)
+        content_layout.addWidget(self.address_input)
         content_layout.addWidget(self.connect_button)
         content_layout.addWidget(self.status_label)
         content_layout.addStretch()
@@ -72,13 +66,11 @@ class AdbWifiWindow(QWidget):
         self.style().polish(self.status_label) # Repolish to apply stylesheet changes
 
     def handle_connect(self):
-        ip = self.ip_input.text().strip()
-        port = self.port_input.text().strip()
-        if not ip or not port:
-            self.set_status("IP and Port cannot be empty.", is_error=True)
+        address = self.address_input.text().strip()
+        if not address:
+            self.set_status("IP:Port cannot be empty.", is_error=True)
             return
 
-        address = f"{ip}:{port}"
         self.connect_button.setEnabled(False)
         self.connect_button.setText("Connecting...")
         self.set_status(f"Connecting to {address}...")

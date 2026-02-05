@@ -15,7 +15,7 @@ from .workers import DeviceCheckWorker, DeviceConfigLoaderWorker
 from .dialogs import show_message_box
 from .adb_wifi_window import AdbWifiWindow
 from . import themes
-from .common_widgets import CustomTitleBar
+from .common_widgets import CustomTitleBar, CustomThemedInputDialog
 from utils import adb_handler
 import web_server
 
@@ -315,7 +315,12 @@ class MainWindow(QMainWindow):
         if self.app_config.get('try_unlock'):
             lock_state = adb_handler.get_device_lock_state(device_id)
             if lock_state in ['LOCKED_SCREEN_ON', 'LOCKED_SCREEN_OFF']:
-                pin, ok = QInputDialog.getText(self, "Device Locked", "Enter PIN to unlock:", QLineEdit.Password)
+                pin, ok = CustomThemedInputDialog.getText(
+                    self,
+                    "Device Locked",
+                    "Enter PIN to unlock:",
+                    text_input_mode=QLineEdit.Password
+                )
                 if ok and pin:
                     adb_handler.unlock_device(device_id, pin)
                 elif ok and not pin:
@@ -362,6 +367,16 @@ class MainWindow(QMainWindow):
     def open_adb_wifi_manager(self):
         if self.adb_wifi_window is None or not self.adb_wifi_window.isVisible():
             self.adb_wifi_window = AdbWifiWindow(self.app_config, self)
+            
+            # Calculate center position
+            parent_rect = self.geometry()
+            child_width = self.adb_wifi_window.width()
+            child_height = self.adb_wifi_window.height()
+
+            x = parent_rect.x() + (parent_rect.width() - child_width) // 2
+            y = parent_rect.y() + (parent_rect.height() - child_height) // 2
+
+            self.adb_wifi_window.move(x, y) # Move to calculated position
             self.adb_wifi_window.show()
 
     def start_worker(self, worker):

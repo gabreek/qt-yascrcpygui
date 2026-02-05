@@ -5,10 +5,13 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
 from PySide6.QtCore import Qt, Signal, Slot, QTimer, QUrl
 from PySide6.QtGui import QPixmap
 import sys
+import time
+import queue # Added for managing download queue
 
 from .base_grid_tab import BaseGridTab
-from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker
+from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, IconSaveWorker, BatchIconDownloadWorker
 from .dialogs import show_message_box
+from .common_widgets import CustomThemedProgressDialog
 
 
 
@@ -23,6 +26,14 @@ class AppsTab(BaseGridTab):
 
         # This will hold the complete list of app data dictionaries
         self.all_apps_data = []
+
+        # Batch icon download related attributes
+        self.pending_icon_downloads = {} # Stores pkg_name: app_name for icons to download
+        self.download_queue = queue.Queue()
+        self.icon_download_workers = []
+        self.total_icon_tasks = 0
+        self.completed_icon_tasks = 0
+        self.NUM_ICON_WORKERS = 2 # Number of concurrent icon download workers
 
         # Determine the base path for resources
         base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -57,7 +68,7 @@ class AppsTab(BaseGridTab):
         root.settingsRequested.connect(self._on_qml_settings_requested)
         root.deleteConfigRequested.connect(self._on_qml_delete_config_requested)
         root.pinToggled.connect(self.on_pin_toggled)
-        # root.iconDropped.connect(self.on_icon_dropped) # TODO: Implement drop handling
+        root.iconDropped.connect(self.on_icon_dropped)
 
     @Slot(str, str)
     def _on_qml_settings_requested(self, itemKey, itemType):
@@ -205,7 +216,7 @@ class AppsTab(BaseGridTab):
                 
                 # Load icon if not failed before and no custom icon
                 if not metadata.get('has_custom_icon') and not metadata.get('icon_fetch_failed'):
-                    self.load_icon(pkg_name, app_name)
+                    self.pending_icon_downloads[pkg_name] = app_name # Add to pending list
             
             self.all_apps_data.append({
                 'key': pkg_name,
@@ -215,6 +226,9 @@ class AppsTab(BaseGridTab):
                 'icon_path': icon_path_url,
                 'is_pinned': metadata.get('pinned', False)
             })
+
+        if self.pending_icon_downloads:
+            self._start_batch_icon_download()
 
     @Slot(str)
     def on_pin_toggled(self, pkg_name):
@@ -232,6 +246,52 @@ class AppsTab(BaseGridTab):
         # Re-apply filter and sorting
         self.filter_apps()
         self.config_changed.emit(pkg_name) # Notify other components if needed
+
+    @Slot(str, str)
+    def on_icon_dropped(self, pkg_name, file_url):
+        """Handles a dropped image file to set a custom icon asynchronously."""
+        if not file_url:
+            return
+
+        local_path = QUrl(file_url).toLocalFile()
+
+        if not os.path.exists(local_path) or not local_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+            show_message_box(self, "Error", "Invalid file. Please drop a valid image file (PNG, JPG, BMP, GIF).", icon=QMessageBox.Warning)
+            return
+
+        destination_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
+
+        # Create and start the background worker
+        worker = IconSaveWorker(pkg_name, local_path, destination_path)
+        worker.signals.finished.connect(self._on_custom_icon_saved)
+        worker.signals.error.connect(self._on_custom_icon_error)
+        if self.main_window:
+            self.main_window.start_worker(worker)
+
+    @Slot(str, str)
+    def _on_custom_icon_saved(self, pkg_name, destination_path):
+        """Handles the successful save of a custom icon."""
+        self.app_config.save_app_metadata(pkg_name, {'has_custom_icon': True})
+        new_icon_url = QUrl.fromLocalFile(destination_path).toString()
+
+        # Update the model in memory
+        for app_data in self.all_apps_data:
+            if app_data['key'] == pkg_name:
+                app_data['icon_path'] = new_icon_url
+                break
+
+        # Refresh the QML view by re-filtering and rebuilding the model
+        self.filter_apps()
+
+        show_message_box(self, "Success", "Custom icon has been set.", icon=QMessageBox.Information)
+
+    @Slot(str, str)
+    def _on_custom_icon_error(self, pkg_name, error_message):
+        """Handles an error during icon saving."""
+        show_message_box(self, "Error", f"Could not save the icon for {pkg_name}: {error_message}", icon=QMessageBox.Critical)
+        # Optionally, revert to the old icon if you stored it before starting the worker
+        self.filter_apps()
+
 
     @Slot(str)
     def on_delete_config_requested(self, pkg_name):
@@ -349,31 +409,80 @@ class AppsTab(BaseGridTab):
 
         self._update_grid_model(qml_model_data)
 
-    def load_icon(self, pkg_name, app_name):
-        # This check is now implicit in _populate_grid_model
-        # The worker is started if the icon file doesn't exist and hasn't failed before.
-        worker = IconWorker(pkg_name, app_name, self.icon_cache_dir, self.app_config)
-        worker.signals.finished.connect(self._on_icon_loaded)
-        worker.signals.error.connect(self._on_icon_error)
-        if self.main_window:
-            self.main_window.start_worker(worker)
 
-    @Slot(str, QPixmap)
-    def _on_icon_loaded(self, pkg_name, pixmap):
-        if not pixmap.isNull():
-            # Find the app in the model and update its icon path
-            for app_data in self.all_apps_data:
-                if app_data['key'] == pkg_name:
-                    new_icon_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
-                    app_data['icon_path'] = QUrl.fromLocalFile(new_icon_path).toString()
-                    break
-            # Refresh the view
-            self.filter_apps()
 
-    @Slot(str, str)
-    def _on_icon_error(self, pkg_name, error_msg):
-        self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True})
-        # The placeholder is already set, so no visual change is needed here.
+    def _start_batch_icon_download(self):
+        self.total_icon_tasks = len(self.pending_icon_downloads)
+        if not self.total_icon_tasks:
+            return
+
+        self.completed_icon_tasks = 0
+        self.progress_dialog = CustomThemedProgressDialog(
+            "Downloading missing app icons...",
+            cancelButtonText=None, # No cancel button
+            minimum=0,
+            maximum=self.total_icon_tasks,
+            parent=self
+        )
+        self.progress_dialog.setWindowFlags(self.progress_dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.progress_dialog.title_bar.minimize_button.setVisible(False) # Hide minimize button
+        self.progress_dialog.title_bar.close_button.setVisible(False) # Hide close button
+        self.progress_dialog.setValue(0)
+        self.progress_dialog.show()
+
+        # Clear existing queue and workers for a new batch
+        while not self.download_queue.empty():
+            self.download_queue.get()
+            self.download_queue.task_done()
+        self.icon_download_workers.clear()
+
+        # Add tasks to queue
+        for pkg_name, app_name in self.pending_icon_downloads.items():
+            self.download_queue.put((pkg_name, app_name))
+
+        # Start workers
+        for _ in range(self.NUM_ICON_WORKERS):
+            worker = BatchIconDownloadWorker(self.download_queue, self.icon_cache_dir, self.app_config)
+            worker.signals.finished.connect(self._on_icon_batch_finished)
+            worker.signals.error.connect(self._on_icon_batch_error)
+            if self.main_window: self.main_window.start_worker(worker)
+        
+        # Add sentinel values for workers to stop after processing all tasks
+        for _ in range(self.NUM_ICON_WORKERS):
+            self.download_queue.put(None)
+
+    @Slot(str, str) # pkg_name, icon_path_string
+    def _on_icon_batch_finished(self, pkg_name, icon_path_string):
+        self.completed_icon_tasks += 1
+        self.progress_dialog.setValue(self.completed_icon_tasks)
+        self.progress_dialog.setLabelText(f"Downloading missing app icons... ({self.completed_icon_tasks}/{self.total_icon_tasks})")
+
+        # Update the model in memory
+        for app_data in self.all_apps_data:
+            if app_data['key'] == pkg_name:
+                app_data['icon_path'] = QUrl.fromLocalFile(icon_path_string).toString()
+                break
+        
+        if self.completed_icon_tasks >= self.total_icon_tasks:
+            self._on_all_icons_downloaded()
+
+    @Slot(str, str) # pkg_name, error_msg
+    def _on_icon_batch_error(self, pkg_name, error_msg):
+        print(f"Error downloading icon for {pkg_name}: {error_msg}")
+        self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True}) # Mark as failed
+        self.completed_icon_tasks += 1
+        self.progress_dialog.setValue(self.completed_icon_tasks)
+        self.progress_dialog.setLabelText(f"Downloading missing app icons... ({self.completed_icon_tasks}/{self.total_icon_tasks})")
+
+        if self.completed_icon_tasks >= self.total_icon_tasks:
+            self._on_all_icons_downloaded()
+
+    def _on_all_icons_downloaded(self):
+        if self.progress_dialog.isVisible():
+            self.progress_dialog.close()
+        self.icon_download_workers.clear() # Clear worker references
+        self.pending_icon_downloads.clear() # Clear pending tasks
+        self.filter_apps() # Refresh the UI once with all new icons
 
     def _on_display_id_found_for_alt_launch(self, display_id, shortcut_path, package_name):
         app_icon_path = os.path.join(self.icon_cache_dir, f"{package_name}.png")

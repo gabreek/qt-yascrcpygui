@@ -45,7 +45,7 @@ class AppListWorker(QRunnable):
             self.signals.finished.emit()
 
 class IconWorkerSignals(QObject):
-    finished = Signal(str, QPixmap)
+    finished = Signal(str, str) # Changed QPixmap to str
     error = Signal(str, str)
 
 class IconWorker(QRunnable):
@@ -61,7 +61,7 @@ class IconWorker(QRunnable):
         try:
             icon_path = icon_scraper.get_icon(self.app_name, self.pkg_name, self.cache_dir, self.app_config)
             if icon_path:
-                self.signals.finished.emit(self.pkg_name, QPixmap(icon_path))
+                self.signals.finished.emit(self.pkg_name, icon_path) # Emit path string instead of QPixmap
         except Exception as e:
             self.signals.error.emit(self.pkg_name, str(e))
 
@@ -190,7 +190,7 @@ class GameListWorker(BaseRunnableWorker):
             self.signals.finished.emit()
 
 class IconExtractorWorkerSignals(QObject):
-    icon_extracted = Signal(str, bool, QPixmap)
+    icon_extracted = Signal(str, bool, str)
     error = Signal(str, str) # Added error signal
     finished = Signal()
 
@@ -214,7 +214,6 @@ class IconExtractorWorker(BaseRunnableWorker):
 
                 path, save_path = task
                 success = False
-                pixmap = None
                 local_exe_path = None
 
                 try:
@@ -231,8 +230,6 @@ class IconExtractorWorker(BaseRunnableWorker):
                             if not result_queue.empty():
                                 result_success, result_data = result_queue.get()
                                 if result_success:
-                                    img = Image.open(save_path).resize((48, 48), Image.LANCZOS)
-                                    pixmap = QPixmap.fromImage(img.toqimage())
                                     success = True
                 except Exception as e:
                     self.signals.error.emit(path, str(e)) # Emit error signal with path and message
@@ -240,7 +237,7 @@ class IconExtractorWorker(BaseRunnableWorker):
                     if local_exe_path and os.path.exists(local_exe_path):
                         os.remove(local_exe_path)
                     self.app_config.save_app_metadata(path, {'exe_icon_fetch_failed': not success})
-                    self.signals.icon_extracted.emit(path, success, pixmap if pixmap else self.placeholder_icon)
+                    self.signals.icon_extracted.emit(path, success, save_path if success else self.placeholder_icon) # Emit save_path instead of pixmap
                     self.extraction_queue.task_done()
         except Exception as e:
             self.signals.error.emit("worker_startup_error", str(e)) # Catch any unexpected worker-level errors
@@ -296,6 +293,70 @@ class AppLaunchWorker(BaseRunnableWorker):
             self.signals.error.emit(f"Failed to launch app: {e}")
         finally:
             self.signals.finished.emit()
+
+
+class IconSaveWorkerSignals(QObject):
+    finished = Signal(str, str)  # key, destination_path
+    error = Signal(str, str)  # key, error_message
+
+class IconSaveWorker(QRunnable):
+    """Worker to save a custom icon in the background."""
+    def __init__(self, key, source_path, destination_path):
+        super().__init__()
+        self.signals = IconSaveWorkerSignals()
+        self.key = key
+        self.source_path = source_path
+        self.destination_path = destination_path
+
+    def run(self):
+        try:
+            with Image.open(self.source_path) as img:
+                img.thumbnail((128, 128))
+                img.save(self.destination_path, "PNG")
+            self.signals.finished.emit(self.key, self.destination_path)
+        except Exception as e:
+            self.signals.error.emit(self.key, str(e))
+
+class BatchIconDownloadWorkerSignals(QObject):
+    finished = Signal(str, str) # pkg_name, icon_path_string
+    error = Signal(str, str) # pkg_name, error_msg
+    task_done = Signal() # Signal to indicate a single task from queue is done
+
+class BatchIconDownloadWorker(QRunnable):
+    """Worker to download multiple icons from Play Store in batch."""
+    def __init__(self, download_queue, cache_dir, app_config):
+        super().__init__()
+        self.signals = BatchIconDownloadWorkerSignals()
+        self.download_queue = download_queue
+        self.cache_dir = cache_dir
+        self.app_config = app_config
+
+    def run(self):
+        try:
+            while True:
+                task = self.download_queue.get()
+                if task is None: # Sentinel value to stop worker
+                    self.download_queue.task_done()
+                    break
+
+                pkg_name, app_name = task
+                icon_path = None
+                try:
+                    icon_path = icon_scraper.get_icon(app_name, pkg_name, self.cache_dir, self.app_config)
+                    if icon_path:
+                        self.signals.finished.emit(pkg_name, icon_path)
+                    else:
+                        self.signals.error.emit(pkg_name, "Icon not found or could not be downloaded.")
+                except Exception as e:
+                    self.signals.error.emit(pkg_name, str(e))
+                finally:
+                    self.download_queue.task_done() # Mark task as done regardless of success/failure
+        except Exception as e:
+            self.signals.error.emit("worker_startup_error", str(e))
+
+
+# --- Main Window Workers ---
+
 
 
 # --- Main Window Workers ---

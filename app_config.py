@@ -4,6 +4,7 @@
 import os
 import json
 import platform
+import threading
 
 class AppConfig:
     _DEFAULT_VALUES = {
@@ -58,6 +59,7 @@ class AppConfig:
         self.active_profile = 'global'
         self.connection_id = None
         self.device_app_cache = {'installed_apps': set(), 'winlator_shortcuts': set()} # New attribute
+        self._config_lock = threading.Lock() # Initialize the lock
 
         if platform.system() == "Windows":
             self.CONFIG_DIR = os.path.join(os.getenv('APPDATA'), 'ScrcpyLauncher')
@@ -120,11 +122,12 @@ class AppConfig:
         if file_path is None:
             print("Warning: Attempted to save to a None file_path.")
             return
-        try:
-            with open(file_path, "w", encoding='utf-8') as f:
-                json.dump(data, f, indent=4)
-        except IOError as e:
-            print(f"Error saving config to {file_path}: {e}")
+        with self._config_lock: # Acquire the lock
+            try:
+                with open(file_path, "w", encoding='utf-8') as f:
+                    json.dump(data, f, indent=4)
+            except IOError as e:
+                print(f"Error saving config to {file_path}: {e}")
 
     def save_config(self):
         if self.CONFIG_FILE is None:

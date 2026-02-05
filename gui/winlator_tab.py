@@ -7,9 +7,10 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPu
 from PySide6.QtCore import Qt, Signal, Slot, QUrl, QTimer
 from PySide6.QtGui import QPixmap
 import sys
+import time
 
 from utils import scrcpy_handler
-from .workers import GameListWorker, IconExtractorWorker, WinlatorLaunchWorker, ScrcpyLaunchWorker
+from .workers import GameListWorker, IconExtractorWorker, WinlatorLaunchWorker, ScrcpyLaunchWorker, IconSaveWorker
 from .dialogs import show_message_box
 from .base_grid_tab import BaseGridTab
 from .common_widgets import CustomThemedProgressDialog # Import CustomThemedProgressDialog
@@ -59,6 +60,7 @@ class WinlatorTab(BaseGridTab):
         root.launchRequested.connect(self._on_qml_launch_requested)
         root.settingsRequested.connect(self.on_settings_requested)
         root.deleteConfigRequested.connect(self.on_delete_config_requested)
+        root.iconDropped.connect(self.on_icon_dropped)
 
     @Slot(str, str)
     def _on_qml_launch_requested(self, itemKey, itemName):
@@ -179,6 +181,50 @@ class WinlatorTab(BaseGridTab):
         self.config_changed.emit(itemKey)
 
     @Slot(str, str)
+    def on_icon_dropped(self, game_path, file_url):
+        """Handles a dropped image file to set a custom icon asynchronously."""
+        if not file_url:
+            return
+
+        local_path = QUrl(file_url).toLocalFile()
+
+        if not os.path.exists(local_path) or not local_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+            show_message_box(self, "Error", "Invalid file. Please drop a valid image file (PNG, JPG, BMP, GIF).", icon=QMessageBox.Warning)
+            return
+
+        icon_key = os.path.basename(game_path)
+        destination_path = os.path.join(self.app_config.get_icon_cache_dir(), f"{icon_key}.png")
+
+        # Create and start the background worker
+        worker = IconSaveWorker(game_path, local_path, destination_path)
+        worker.signals.finished.connect(self._on_custom_icon_saved)
+        worker.signals.error.connect(self._on_custom_icon_error)
+        if self.main_window:
+            self.main_window.start_worker(worker)
+
+    @Slot(str, str)
+    def _on_custom_icon_saved(self, game_path, destination_path):
+        """Handles the successful save of a custom icon for a Winlator game."""
+        self.app_config.save_app_metadata(game_path, {'custom_icon': True})
+        new_icon_url = QUrl.fromLocalFile(destination_path).toString()
+
+        # Update the model in memory
+        if game_path in self.game_items:
+            self.game_items[game_path]['icon_path'] = new_icon_url
+        
+        # Refresh the entire grid to ensure visual update
+        self.populate_games_grid_model(list(self.game_items.values()))
+        show_message_box(self, "Success", "Custom icon has been set.", icon=QMessageBox.Information)
+
+    @Slot(str, str)
+    def _on_custom_icon_error(self, game_path, error_message):
+        """Handles an error during icon saving."""
+        game_name = self.game_items.get(game_path, {}).get('name', game_path)
+        show_message_box(self, "Error", f"Could not save the icon for {game_name}: {error_message}", icon=QMessageBox.Critical)
+        self.populate_games_grid_model(list(self.game_items.values()))
+
+
+    @Slot(str, str)
     def on_delete_config_requested(self, itemKey, itemType):
         if itemType != 'winlator_game': return
 
@@ -227,7 +273,10 @@ class WinlatorTab(BaseGridTab):
     def start_icon_extraction_flow(self, tasks):
         self.total_tasks = len(tasks)
         self.completed_tasks_count = 0
-        self.progress_dialog = CustomThemedProgressDialog("Extracting Icons", "Cancel", 0, self.total_tasks, self)
+        self.progress_dialog = CustomThemedProgressDialog("Extracting Icons", None, 0, self.total_tasks, self) # Change "Cancel" to None
+        self.progress_dialog.setWindowFlags(self.progress_dialog.windowFlags() | Qt.WindowStaysOnTopHint) # Make it stay on top
+        self.progress_dialog.title_bar.minimize_button.setVisible(False) # Hide minimize button
+        self.progress_dialog.title_bar.close_button.setVisible(False) # Ensure close button is hidden
         self.progress_dialog.setValue(0)
         self.progress_dialog.show()
 

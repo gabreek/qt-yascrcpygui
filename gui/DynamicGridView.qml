@@ -1,7 +1,7 @@
 // gui/DynamicGridView.qml
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
+import QtQuick 6.0
+import QtQuick.Controls 6.0
+import QtQuick.Layouts 6.0
 
 Rectangle {
     id: gridRoot
@@ -23,6 +23,8 @@ Rectangle {
     property int itemFontSize: 9
     property int itemWidth: 80
     property int itemHeight: 105
+
+    property alias qmlInternalModel: internalModel
 
     ListModel {
         id: internalModel
@@ -264,12 +266,9 @@ Rectangle {
                 anchors.fill: parent
                 onDropped: function(drop) {
                     if (itemData && !itemData.isSeparator && drop.hasUrls) {
-                        let url = drop.urls[0]
-                        let localFile = url.toLocalFile()
-                        if (localFile.endsWith(".png") || localFile.endsWith(".jpg") || localFile.endsWith(".jpeg")) {
-                            gridRoot.iconDropped(itemData.key, url)
-                            drop.acceptProposedAction()
-                        }
+                        let url = drop.urls[0] // This is the QUrl object
+                        gridRoot.iconDropped(itemData.key, url.toString()) // Pass the raw URL string to Python
+                        drop.acceptProposedAction()
                     }
                 }
             }

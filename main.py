@@ -22,6 +22,8 @@ def main():
 
     app = QApplication(sys.argv)
 
+
+
     app_config = AppConfig(None)
     
     # Apply the initial theme
