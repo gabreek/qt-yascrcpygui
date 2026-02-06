@@ -67,25 +67,35 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
     if config_values.get('no_video'): cmd.append('--no-video')
 
     video_codec_options = []
-    if config_values.get('allow_frame_drop') == 'enabled':
+    if config_values.get('allow_frame_drop') == 'Enabled':
         video_codec_options.append('allow-frame-drop=1')
-    elif config_values.get('allow_frame_drop') == 'disabled':
+    elif config_values.get('allow_frame_drop') == 'Disabled':
         video_codec_options.append('allow-frame-drop=0')
 
-    if config_values.get('low_latency') == 'enabled':
+    if config_values.get('low_latency') == 'Enabled':
         video_codec_options.append('low-latency:int=1')
-    elif config_values.get('low_latency') == 'disabled':
+    elif config_values.get('low_latency') == 'Disabled':
         video_codec_options.append('low-latency:int=0')
 
-    if config_values.get('priority_mode') == 'realtime':
+    if config_values.get('priority_mode') == 'Realtime':
         video_codec_options.append('priority:int=0')
-    elif config_values.get('priority_mode') == 'normal':
+    elif config_values.get('priority_mode') == 'Normal':
         video_codec_options.append('priority:int=1')
 
-    if config_values.get('bitrate_mode').lower().strip() == 'cbr':
+    bitrate_mode_val = config_values.get('bitrate_mode', '').lower().strip()
+    if bitrate_mode_val in ['constant', 'cbr']:
         video_codec_options.append('bitrate-mode:int=1')
-    elif config_values.get('bitrate_mode').lower().strip() == 'vbr':
+    elif bitrate_mode_val in ['variable', 'vbr']:
         video_codec_options.append('bitrate-mode:int=2')
+
+    if config_values.get('color_range') == 'Full':
+        video_codec_options.append('color-range:int=1')
+    elif config_values.get('color_range') == 'Limited':
+        video_codec_options.append('color-range:int=2')
+
+    iframe_interval = config_values.get('iframe_interval')
+    if iframe_interval is not None and int(iframe_interval) > 0:
+        video_codec_options.append(f'iframe-interval={int(iframe_interval)}')
 
     if video_codec_options:
         cmd.append(f"--video-codec-options={','.join(video_codec_options)}")
@@ -98,6 +108,7 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
         'render_driver': '--render-driver',
         'max_fps': '--max-fps',
         'video_bitrate_slider': '--video-bit-rate',
+        'audio_bitrate_slider': '--audio-bit-rate',
         'audio_buffer': '--audio-buffer',
         'video_buffer': '--video-buffer',
     }

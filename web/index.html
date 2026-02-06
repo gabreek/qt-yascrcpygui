@@ -102,6 +102,8 @@
         let currentDeviceId = null;
         let videoEncoders = {};
         let audioEncoders = {};
+        let cachedApps = {}; // Cache for apps
+        let cachedWinlatorApps = {}; // Cache for Winlator apps
 
         const placeholderIcon = "/gui_assets/placeholder.png";
         const winlatorPlaceholderIcon = "/gui_assets/winlator_placeholder.png";
@@ -258,20 +260,30 @@
 
         async function fetchApps(deviceId) {
             appsGrid.innerHTML = '<p>Loading apps...</p>';
+            if (cachedApps[deviceId]) {
+                renderGrid(appsGrid, cachedApps[deviceId], placeholderIcon, (item) => launchApp(item.pkg_name, item.name));
+                return;
+            }
             try {
                 const response = await fetch(`/api/apps?device_id=${deviceId}&include_system_apps=true`);
                 const apps = await response.json();
                 if (apps.error) throw new Error(apps.error);
+                cachedApps[deviceId] = apps; // Cache the fetched data
                 renderGrid(appsGrid, apps, placeholderIcon, (item) => launchApp(item.pkg_name, item.name));
             } catch (error) { appsGrid.innerHTML = `<p>Error fetching apps: ${error.message}</p>`; }
         }
 
         async function fetchWinlatorApps(deviceId) {
             winlatorGrid.innerHTML = '<p>Loading Winlator games...</p>';
+            if (cachedWinlatorApps[deviceId]) {
+                renderGrid(winlatorGrid, cachedWinlatorApps[deviceId], winlatorPlaceholderIcon, launchWinlatorApp);
+                return;
+            }
             try {
                 const response = await fetch(`/api/winlator/apps?device_id=${deviceId}`);
                 const games = await response.json();
                 if (games.error) throw new Error(games.error);
+                cachedWinlatorApps[deviceId] = games; // Cache the fetched data
                 renderGrid(winlatorGrid, games, winlatorPlaceholderIcon, launchWinlatorApp);
             } catch (error) { winlatorGrid.innerHTML = `<p>Error fetching games: ${error.message}</p>`; }
         }
@@ -579,10 +591,14 @@
             groups.video.element.appendChild(buildConfigItem('Video Codec', 'video_codec', videoCodecSelect));
             groups.video.element.appendChild(buildConfigItem('Video Encoder', 'video_encoder', createSelect(['Auto'])));
             groups.video.element.appendChild(buildConfigItem('Render Driver', 'render_driver', createSelect(["opengles2", "opengles", "opengl", "direct3d", "metal", "software"])));
+            groups.video.element.appendChild(buildConfigItem('Color Range', 'color_range', createSelect(["Auto", "Full", "Limited"])));
             groups.video.element.appendChild(buildConfigItem('Frame Drop', 'allow_frame_drop', createSelect(["Enabled", "Disabled"])));
             groups.video.element.appendChild(buildConfigItem('Low Latency', 'low_latency', createSelect(["Enabled", "Disabled"])));
             groups.video.element.appendChild(buildConfigItem('Priority', 'priority_mode', createSelect(["Realtime", "Normal"])));
-            groups.video.element.appendChild(buildConfigItem('Bitrate Mode', 'bitrate_mode', createSelect(["CBR", "VBR"])));
+            groups.video.element.appendChild(buildConfigItem('Bitrate Mode', 'bitrate_mode', createSelect(["Constant", "Variable"])));
+            const iframeIntervalInput = createTextInput(true);
+            iframeIntervalInput.placeholder = '0 for Auto';
+            groups.video.element.appendChild(buildConfigItem('I-frame Interval', 'iframe_interval', iframeIntervalInput));
             groups.video.element.appendChild(buildConfigItem('Video Buffer', 'video_buffer', createTextInput(true)));
             groups.video.element.appendChild(buildConfigItem('Video Bitrate', 'video_bitrate_slider', createTextInput(true)));
 
@@ -602,6 +618,7 @@
             groups.audio.element.appendChild(buildConfigItem('Audio Codec', 'audio_codec', audioCodecSelect));
             groups.audio.element.appendChild(buildConfigItem('Audio Encoder', 'audio_encoder', createSelect(['Auto'])));
             groups.audio.element.appendChild(buildConfigItem('Audio Buffer', 'audio_buffer', createTextInput(true)));
+            groups.audio.element.appendChild(buildConfigItem('Audio Bitrate', 'audio_bitrate_slider', createTextInput(true)));
 
             // Options
             const optionsGrid = document.createElement('div');

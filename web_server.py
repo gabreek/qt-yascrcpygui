@@ -160,7 +160,9 @@ async def get_config(device_id: str, profile_key: str, b64: bool = False):
             'max_fps', 'new_display', 'max_size', 'extraargs', 'video_codec', 
             'video_encoder', 'render_driver', 'allow_frame_drop', 'low_latency', 
             'priority_mode', 'bitrate_mode', 'video_buffer', 'video_bitrate_slider',
-            'audio_codec', 'audio_encoder', 'audio_buffer', 'fullscreen', 
+            'color_range',
+            'iframe_interval', # ADD THIS
+            'audio_codec', 'audio_encoder', 'audio_buffer', 'audio_bitrate_slider', 'fullscreen', 
             'turn_screen_off', 'stay_awake', 'mipmaps', 'no_audio', 'no_video', 
             'try_unlock', 'alternate_launch_method'
         ]

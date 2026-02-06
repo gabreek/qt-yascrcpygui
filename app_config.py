@@ -31,6 +31,8 @@ class AppConfig:
         'low_latency': 'Enabled',
         'priority_mode': 'Realtime',
         'bitrate_mode': 'VBR',
+        'color_range': 'Auto',       # New
+        'iframe_interval': 0,        # New
         'extraargs': '',
         'stay_awake': False,
         'mipmaps': False,
@@ -41,6 +43,7 @@ class AppConfig:
         'no_video': False,
         'video_bitrate_slider': 3000,
         'audio_buffer': 5,
+        'audio_bitrate_slider': 128, # New
         'video_buffer': 0,
         'try_unlock': False,
         'alternate_launch_method': False,

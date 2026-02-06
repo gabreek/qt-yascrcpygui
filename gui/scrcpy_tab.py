@@ -394,10 +394,12 @@ class ScrcpyTab(QWidget):
         encoder_layout.addWidget(self.v_encoder_combo)
         layout.addLayout(encoder_layout)
         self._add_combo_box_row(layout, "Render Driver", 'render_driver', ["opengles2", "opengles", "opengl", "direct3d", "metal", "software"])
+        self._add_combo_box_row(layout, "Color Range", 'color_range', ["Auto", "Full", "Limited"])
         self._add_combo_box_row(layout, "Frame Drop", 'allow_frame_drop', ["Enabled", "Disabled"])
         self._add_combo_box_row(layout, "Low Latency", 'low_latency', ["Enabled", "Disabled"])
         self._add_combo_box_row(layout, "Priority", 'priority_mode', ["Realtime", "Normal"])
-        self._add_combo_box_row(layout, "Bitrate Mode", 'bitrate_mode', ["CBR", "VBR"])
+        self._add_combo_box_row(layout, "Bitrate Mode", 'bitrate_mode', ["Constant", "Variable"])
+        self._create_iframe_interval_slider(layout, "I-frame Interval", 'iframe_interval', 0, 30, 1, 0) # 0 for Auto, 1-30 seconds
         self._create_slider(layout, "Video Buffer", 'video_buffer', 0, 500, 1, "ms")
         self._create_slider_with_buttons(layout, "Video Bitrate", 'video_bitrate_slider', 10, 8000, 10, "K", [1000, 2000, 4000, 6000, 8000])
 
@@ -424,6 +426,7 @@ class ScrcpyTab(QWidget):
         encoder_layout.addWidget(self.a_encoder_combo)
         layout.addLayout(encoder_layout)
         self._create_slider(layout, "Audio Buffer", 'audio_buffer', 5, 500, 1, "ms")
+        self._create_slider(layout, "Audio Bitrate", 'audio_bitrate_slider', 64, 320, 16, "K")
 
     def _create_options_group(self):
         self.options_group, layout = self._create_group_box("Options", QGridLayout)
@@ -498,6 +501,40 @@ class ScrcpyTab(QWidget):
             button_layout.addWidget(button)
         parent_layout.addLayout(button_layout)
         self.sliders[var_key] = (slider, value_label)
+
+    def _create_iframe_interval_slider(self, parent_layout, label_text, var_key, min_val, max_val, step, default_val):
+        row_layout = QHBoxLayout()
+        label = QLabel(label_text)
+        label.setMinimumWidth(100)
+        row_layout.addWidget(label)
+        slider = NoScrollQSlider(Qt.Horizontal)
+        slider.setRange(min_val, max_val) # min_val will be 0 for "Auto"
+        slider.setSingleStep(step)
+        slider.setPageStep(step * 10)
+        slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        value_label = QLabel()
+        value_label.setMinimumWidth(50)
+        value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        def update_label(value):
+            if value == 0:
+                value_label.setText("Auto")
+            else:
+                value_label.setText(f"{value}s")
+
+        slider.valueChanged.connect(update_label)
+        slider.valueChanged.connect(lambda value: self.app_config.set(var_key, value)) # Store the raw value (0 for auto)
+        
+        # Set initial value and update label
+        current_value = self.app_config.get(var_key, default_val)
+        slider.setValue(int(current_value))
+        update_label(int(current_value)) # Initialize label
+
+        row_layout.addWidget(slider)
+        row_layout.addWidget(value_label)
+        parent_layout.addLayout(row_layout)
+        self.sliders[var_key] = (slider, value_label) # Store for update_all_widgets_from_config
+
 
     def refresh_device_info(self, force_encoder_fetch=False):
         self.update_profile_dropdown()
@@ -612,8 +649,14 @@ class ScrcpyTab(QWidget):
         for var_key, (slider, value_label) in self.sliders.items():
             value = self.app_config.get(var_key, 0)
             slider.setValue(int(value))
-            unit = slider.property('unit')
-            value_label.setText(f"{value}{unit}")
+            if var_key == 'iframe_interval':
+                if value == 0:
+                    value_label.setText("Auto")
+                else:
+                    value_label.setText(f"{value}s")
+            else:
+                unit = slider.property('unit')
+                value_label.setText(f"{value}{unit}")
         self._update_theme_dropdown()
         self.update_profile_dropdown()
         self._populate_encoder_widgets()
