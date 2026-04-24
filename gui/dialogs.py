@@ -33,7 +33,9 @@ def _get_standard_icon_pixmap(icon_type):
 
 
 class CustomMessageBox(CustomThemedDialog):
-    def __init__(self, parent=None, title="Message", text="", icon_type=QMessageBox.NoIcon, buttons=QMessageBox.Ok, app_icon_path=None):
+    def __init__(self, parent=None, title=None, text="", icon_type=QMessageBox.NoIcon, buttons=QMessageBox.Ok, app_icon_path=None):
+        if title is None:
+            title = self.app_config.tr('common', 'info') if self.app_config else "Message"
         super().__init__(parent, title)
 
         # We don't want the dialog itself to be minimized, only its parent window
@@ -100,22 +102,26 @@ class CustomMessageBox(CustomThemedDialog):
         # This part requires mapping QMessageBox standard buttons to QPushButtons
         # and connecting them to set the dialog's result and accept/reject
         if buttons & QMessageBox.Ok:
-            ok_button = QPushButton("OK")
+            text = self.app_config.tr('common', 'ok') if self.app_config else "OK"
+            ok_button = QPushButton(text)
             ok_button.clicked.connect(lambda: self._set_result_and_accept(QMessageBox.Ok))
             layout.addWidget(ok_button)
             self.added_buttons.append(ok_button)
         if buttons & QMessageBox.Cancel:
-            cancel_button = QPushButton("Cancel")
+            text = self.app_config.tr('common', 'cancel') if self.app_config else "Cancel"
+            cancel_button = QPushButton(text)
             cancel_button.clicked.connect(lambda: self._set_result_and_accept(QMessageBox.Cancel))
             layout.addWidget(cancel_button)
             self.added_buttons.append(cancel_button)
         if buttons & QMessageBox.Yes:
-            yes_button = QPushButton("Yes")
+            text = self.app_config.tr('common', 'yes') if self.app_config else "Yes"
+            yes_button = QPushButton(text)
             yes_button.clicked.connect(lambda: self._set_result_and_accept(QMessageBox.Yes))
             layout.addWidget(yes_button)
             self.added_buttons.append(yes_button)
         if buttons & QMessageBox.No:
-            no_button = QPushButton("No")
+            text = self.app_config.tr('common', 'no') if self.app_config else "No"
+            no_button = QPushButton(text)
             no_button.clicked.connect(lambda: self._set_result_and_accept(QMessageBox.No))
             layout.addWidget(no_button)
             self.added_buttons.append(no_button)

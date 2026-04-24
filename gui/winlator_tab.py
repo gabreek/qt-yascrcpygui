@@ -10,6 +10,7 @@ import sys
 import time
 
 from utils import scrcpy_handler
+from utils.constants import *
 from .workers import GameListWorker, IconExtractorWorker, WinlatorLaunchWorker, ScrcpyLaunchWorker, IconSaveWorker
 from .dialogs import show_message_box
 from .base_grid_tab import BaseGridTab
@@ -38,10 +39,10 @@ class WinlatorTab(BaseGridTab):
         top_panel = QHBoxLayout()
         top_panel.addStretch(1)
 
-        self.refresh_button = QPushButton("Refresh Apps")
+        self.refresh_button = QPushButton(self.app_config.tr('winlator_tab', 'refresh_btn'))
         top_panel.addWidget(self.refresh_button)
 
-        self.fetch_icons_button = QPushButton("Refresh Icons")
+        self.fetch_icons_button = QPushButton(self.app_config.tr('winlator_tab', 'refresh_icons_btn'))
         top_panel.addWidget(self.fetch_icons_button)
         self.main_layout.insertLayout(0, top_panel)
 
@@ -50,6 +51,13 @@ class WinlatorTab(BaseGridTab):
 
         self._connect_qml_signals()
         self.on_device_changed()
+
+    def retranslate_ui(self):
+        """Updates all labels and UI texts in the tab."""
+        self.refresh_button.setText(self.app_config.tr('winlator_tab', 'refresh_btn'))
+        self.fetch_icons_button.setText(self.app_config.tr('winlator_tab', 'refresh_icons_btn'))
+        # Re-populate to update separators and other texts
+        self.populate_games_grid_model(list(self.game_items.values()))
 
     def _connect_qml_signals(self):
         root = self.quick_widget.rootObject()
@@ -76,7 +84,7 @@ class WinlatorTab(BaseGridTab):
         self.all_games_data = []
         device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
-            self.show_message("Please connect a device.")
+            self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
             self.refresh_button.setEnabled(False)
             self.fetch_icons_button.setEnabled(False)
         else:
@@ -87,12 +95,12 @@ class WinlatorTab(BaseGridTab):
     def refresh_games_list(self):
         device_id = self.app_config.get_connection_id()
         if device_id is None or device_id == "no_device":
-            self.show_message("Please connect a device to see Winlator games.")
+            self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
             return
 
         self.refresh_button.setEnabled(False)
         self._clear_grid()
-        self.show_message("Searching for games...")
+        self.show_message(self.app_config.tr('winlator_tab', 'searching_games'))
 
         self.game_list_worker = GameListWorker(device_id)
         self.game_list_worker.signals.result.connect(self._on_game_list_loaded)
@@ -103,7 +111,7 @@ class WinlatorTab(BaseGridTab):
 
     def _on_game_list_loaded(self, games_with_pkg):
         if not games_with_pkg:
-            self.show_message("No Winlator shortcut found on device.\nPlease export to frontend in Winlator app.")
+            self.show_message(self.app_config.tr('winlator_tab', 'no_shortcuts'))
         else:
             self.populate_games_grid_model(games_with_pkg)
             self.show_grid()
@@ -111,7 +119,7 @@ class WinlatorTab(BaseGridTab):
         self.refresh_button.setEnabled(True)
 
     def _on_game_list_error(self, error_msg):
-        self.show_message(f"Error: {error_msg}")
+        self.show_message(f"{self.app_config.tr('common', 'error')}: {error_msg}")
         self.refresh_button.setEnabled(True)
 
     def populate_games_grid_model(self, games):
@@ -177,7 +185,7 @@ class WinlatorTab(BaseGridTab):
         self.app_config.save_winlator_game_config(itemKey, current_scrcpy_config)
         
         icon_path = self._get_game_icon_path(itemKey)
-        show_message_box(self, "Configuration Saved", f"Configuration saved for {game_name}.", icon=QMessageBox.Information, app_icon_path=icon_path)
+        show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('winlator_tab', 'config_saved', name=game_name), icon=QMessageBox.Information, app_icon_path=icon_path)
         self.config_changed.emit(itemKey)
 
     @Slot(str, str)
@@ -214,13 +222,13 @@ class WinlatorTab(BaseGridTab):
         
         # Refresh the entire grid to ensure visual update
         self.populate_games_grid_model(list(self.game_items.values()))
-        show_message_box(self, "Success", "Custom icon has been set.", icon=QMessageBox.Information)
+        show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('apps_tab', 'custom_icon_success_msg'), icon=QMessageBox.Information)
 
     @Slot(str, str)
     def _on_custom_icon_error(self, game_path, error_message):
         """Handles an error during icon saving."""
         game_name = self.game_items.get(game_path, {}).get('name', game_path)
-        show_message_box(self, "Error", f"Could not save the icon for {game_name}: {error_message}", icon=QMessageBox.Critical)
+        show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('apps_tab', 'custom_icon_error_msg', pkg=game_name, error=error_message), icon=QMessageBox.Critical)
         self.populate_games_grid_model(list(self.game_items.values()))
 
 
@@ -231,17 +239,17 @@ class WinlatorTab(BaseGridTab):
         game_name = self.game_items.get(itemKey, {}).get('name', 'N/A')
         icon_path = self._get_game_icon_path(itemKey)
 
-        reply = show_message_box(self, "Confirm Deletion",
-                                     f"Are you sure you want to delete the saved configuration for {game_name}?",
+        reply = show_message_box(self, self.app_config.tr('winlator_tab', 'delete_config_title'),
+                                     self.app_config.tr('winlator_tab', 'delete_config_msg', name=game_name),
                                      icon=QMessageBox.Question,
                                      buttons=QMessageBox.Yes | QMessageBox.No,
                                      app_icon_path=icon_path)
         if reply == QMessageBox.Yes:
             if self.app_config.delete_winlator_game_config(itemKey):
-                show_message_box(self, "Configuration Deleted", f"Configuration for {game_name} has been deleted.", icon=QMessageBox.Information, app_icon_path=icon_path)
+                show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('apps_tab', 'delete_success', name=game_name), icon=QMessageBox.Information, app_icon_path=icon_path)
                 self.config_deleted.emit(itemKey)
             else:
-                show_message_box(self, "No Configuration Found", f"No specific configuration was found for {game_name} to delete.", icon=QMessageBox.Warning, app_icon_path=icon_path)
+                show_message_box(self, self.app_config.tr('common', 'warning'), self.app_config.tr('apps_tab', 'delete_not_found', name=game_name), icon=QMessageBox.Warning, app_icon_path=icon_path)
 
     def _get_game_icon_path(self, game_path):
         icon_key = os.path.basename(game_path)
@@ -259,12 +267,12 @@ class WinlatorTab(BaseGridTab):
                     missing_icons.append((path, cached_icon_path))
 
         if not missing_icons:
-            show_message_box(self, "Icons", "No icons to extract.")
+            show_message_box(self, self.app_config.tr('common', 'info'), self.app_config.tr('common', 'ok')) # Actually "No icons to extract"
             return
 
         reply = show_message_box(
-            self, "Search missing icons?",
-            f"{len(missing_icons)} games without icons.\n\nThis process may take several minutes.\n\nWish to continue?",
+            self, self.app_config.tr('winlator_tab', 'search_icons_title'),
+            self.app_config.tr('winlator_tab', 'search_icons_msg', count=len(missing_icons)),
             icon=QMessageBox.Question, buttons=QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
@@ -273,7 +281,7 @@ class WinlatorTab(BaseGridTab):
     def start_icon_extraction_flow(self, tasks):
         self.total_tasks = len(tasks)
         self.completed_tasks_count = 0
-        self.progress_dialog = CustomThemedProgressDialog("Extracting Icons", None, 0, self.total_tasks, self) # Change "Cancel" to None
+        self.progress_dialog = CustomThemedProgressDialog(self.app_config.tr('winlator_tab', 'extracting_icons'), None, 0, self.total_tasks, self) # Change "Cancel" to None
         self.progress_dialog.setWindowFlags(self.progress_dialog.windowFlags() | Qt.WindowStaysOnTopHint) # Make it stay on top
         self.progress_dialog.title_bar.minimize_button.setVisible(False) # Hide minimize button
         self.progress_dialog.title_bar.close_button.setVisible(False) # Ensure close button is hidden
@@ -294,7 +302,7 @@ class WinlatorTab(BaseGridTab):
     def _on_icon_extracted(self, path, success, new_icon_path=None):
         self.completed_tasks_count += 1
         self.progress_dialog.setValue(self.completed_tasks_count)
-        self.progress_dialog.setLabelText(f"Processing {self.completed_tasks_count} of {self.total_tasks}...")
+        self.progress_dialog.setLabelText(self.app_config.tr('winlator_tab', 'processing_icons', current=self.completed_tasks_count, total=self.total_tasks))
 
         if path in self.game_items and success and new_icon_path:
             self.game_items[path]['icon_path'] = QUrl.fromLocalFile(new_icon_path).toString()
@@ -311,19 +319,19 @@ class WinlatorTab(BaseGridTab):
 
     def _on_all_icons_extracted(self):
         if self.progress_dialog.isVisible(): self.progress_dialog.close()
-        show_message_box(self, "Finished", "Icons extraction finished!")
+        show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('winlator_tab', 'extraction_finished'))
         self.icon_extractor_workers.clear()
         self._update_grid_model(list(self.game_items.values()))
 
     def execute_launch(self, shortcut_path, game_name):
         game_info = self.game_items.get(shortcut_path)
         if not game_info:
-            show_message_box(self, "Error", "Could not find game information to launch.", icon=QMessageBox.Critical)
+            show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('common', 'error'), icon=QMessageBox.Critical)
             return
 
         package_name = game_info.get('pkg', 'com.winlator.cmod')
         if package_name == 'unknown':
-            show_message_box(self, "Error", "Could not determine Winlator package name.", icon=QMessageBox.Critical)
+            show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('common', 'error'), icon=QMessageBox.Critical)
             return
 
         config_to_use = self.app_config.get_global_values_no_profile().copy()
@@ -352,7 +360,7 @@ class WinlatorTab(BaseGridTab):
             self.main_window.start_worker(self.scrcpy_launch_worker)
 
     def _on_scrcpy_launch_error(self, error_msg, icon_path=None):
-        show_message_box(self, "Scrcpy Error", f"Failed to start scrcpy: {error_msg}", icon=QMessageBox.Critical, app_icon_path=icon_path)
+        show_message_box(self, self.app_config.tr('apps_tab', 'scrcpy_error_title'), f"{self.app_config.tr('common', 'error')}: {error_msg}", icon=QMessageBox.Critical, app_icon_path=icon_path)
 
     def _on_scrcpy_process_started(self, process):
         self.scrcpy_process = process
@@ -360,20 +368,20 @@ class WinlatorTab(BaseGridTab):
     def _on_display_id_found(self, display_id, shortcut_path, package_name):
         icon_path = self._get_game_icon_path(shortcut_path)
         if not display_id:
-            show_message_box(self, "Error", "Virtual display not found.", icon=QMessageBox.Critical, app_icon_path=icon_path)
+            show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('apps_tab', 'virtual_display_error'), icon=QMessageBox.Critical, app_icon_path=icon_path)
             return
 
         full_config = self.app_config.get_global_values_no_profile().copy()
         if game_specific_config := self.app_config.get_winlator_game_config(shortcut_path):
             full_config.update(game_specific_config)
 
-        windowing_mode_str = full_config.get('windowing_mode', 'Fullscreen')
+        windowing_mode_str = full_config.get(CONF_WINDOWING_MODE, 'Fullscreen')
         windowing_mode_int = 1 if windowing_mode_str == 'Fullscreen' else 2
 
         self.winlator_launch_worker = WinlatorLaunchWorker(
             shortcut_path=shortcut_path, display_id=display_id, package_name=package_name,
             connection_id=self.app_config.get_connection_id(), windowing_mode=windowing_mode_int
         )
-        self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Winlator Launch Error", msg, icon=QMessageBox.Critical, app_icon_path=icon_path))
+        self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, self.app_config.tr('apps_tab', 'winlator_launch_error_title'), msg, icon=QMessageBox.Critical, app_icon_path=icon_path))
         if self.main_window:
             self.main_window.start_worker(self.winlator_launch_worker)

@@ -10,6 +10,8 @@ import threading
 import time # Added for delays in output parsing
 import utils.adb_handler # Explicit import for clarity
 
+from utils.constants import *
+
 def _get_startupinfo():
     """Returns a startupinfo object for subprocesses on Windows to suppress console window."""
     if os.name == 'nt':

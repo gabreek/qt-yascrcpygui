@@ -12,6 +12,7 @@ from .base_grid_tab import BaseGridTab
 from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, IconSaveWorker, BatchIconDownloadWorker
 from .dialogs import show_message_box
 from .common_widgets import CustomThemedProgressDialog
+from utils.constants import *
 
 
 
@@ -44,9 +45,9 @@ class AppsTab(BaseGridTab):
 
         top_panel = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search apps...")
+        self.search_input.setPlaceholderText(self.app_config.tr('apps_tab', 'search_placeholder'))
 
-        self.refresh_button = QPushButton("Refresh Apps")
+        self.refresh_button = QPushButton(self.app_config.tr('apps_tab', 'refresh_btn'))
 
         top_panel.addWidget(self.search_input)
         top_panel.addWidget(self.refresh_button)
@@ -57,6 +58,13 @@ class AppsTab(BaseGridTab):
 
         self._connect_qml_signals()
         self.on_device_changed()
+
+    def retranslate_ui(self):
+        """Updates all labels and UI texts in the tab."""
+        self.search_input.setPlaceholderText(self.app_config.tr('apps_tab', 'search_placeholder'))
+        self.refresh_button.setText(self.app_config.tr('apps_tab', 'refresh_btn'))
+        # Refresh the grid display to update separators
+        self.filter_apps()
 
     def _connect_qml_signals(self):
         root = self.quick_widget.rootObject()
@@ -90,7 +98,7 @@ class AppsTab(BaseGridTab):
         self.all_apps_data = []
         device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
-            self.show_message("Please connect a device.")
+            self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
             self.refresh_button.setEnabled(False)
         else:
             self.refresh_button.setEnabled(True)
@@ -104,10 +112,10 @@ class AppsTab(BaseGridTab):
         if self.main_window and hasattr(self.main_window, 'pause_device_check'):
             self.main_window.pause_device_check()
 
-        self.show_message("Loading apps from device...")
+        self.show_message(self.app_config.tr('apps_tab', 'loading_from_device'))
         self.refresh_button.setEnabled(False)
         current_device_id = self.app_config.get_connection_id()
-        show_system_apps_setting = self.app_config.get('show_system_apps', False)
+        show_system_apps_setting = self.app_config.get(CONF_SHOW_SYSTEM_APPS, False)
 
         worker = AppListWorker(current_device_id, show_system_apps_setting)
         worker.signals.result.connect(self._on_app_list_loaded)
@@ -123,7 +131,7 @@ class AppsTab(BaseGridTab):
         if cached_data and cached_data.get('user_apps'):
                self._update_display()
         else:
-            self.show_message("App list is empty. Click 'Refresh Apps' to load from device.")
+            self.show_message(self.app_config.tr('apps_tab', 'empty_list'))
 
     def _on_app_list_loaded(self, result_tuple):
         user_apps, system_apps = result_tuple
@@ -144,7 +152,7 @@ class AppsTab(BaseGridTab):
     def _update_display(self):
         cached_data = self.app_config.get_app_list_cache()
         if not cached_data:
-            self.show_message("App list is empty. Click 'Refresh Apps'.")
+            self.show_message(self.app_config.tr('apps_tab', 'empty_list'))
             return
 
         user_apps = cached_data.get('user_apps', [])
@@ -156,7 +164,7 @@ class AppsTab(BaseGridTab):
             apps_to_process.extend(system_apps)
 
         if not apps_to_process:
-            self.show_message("No applications to display.")
+            self.show_message(self.app_config.tr('apps_tab', 'no_apps'))
             return
         
         self.show_grid()
@@ -164,13 +172,13 @@ class AppsTab(BaseGridTab):
         self.filter_apps() # This will apply the current filter and update the QML model
 
     def _on_app_list_error(self, error_msg):
-        self.show_message(f"Error: {error_msg}")
+        self.show_message(f"{self.app_config.tr('common', 'error')}: {error_msg}")
         self.refresh_button.setEnabled(True)
 
     def _populate_grid_model(self, apps_from_cache):
         self.all_apps_data = [] # Reset
         
-        launcher_pkg = self.app_config.get('default_launcher')
+        launcher_pkg = self.app_config.get(CONF_DEFAULT_LAUNCHER)
         launcher_name = 'Launcher'
 
         # Add launcher info first if it exists
@@ -256,7 +264,7 @@ class AppsTab(BaseGridTab):
         local_path = QUrl(file_url).toLocalFile()
 
         if not os.path.exists(local_path) or not local_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
-            show_message_box(self, "Error", "Invalid file. Please drop a valid image file (PNG, JPG, BMP, GIF).", icon=QMessageBox.Warning)
+            show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('apps_tab', 'invalid_image_error'), icon=QMessageBox.Warning)
             return
 
         destination_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
@@ -283,12 +291,12 @@ class AppsTab(BaseGridTab):
         # Refresh the QML view by re-filtering and rebuilding the model
         self.filter_apps()
 
-        show_message_box(self, "Success", "Custom icon has been set.", icon=QMessageBox.Information)
+        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_success_title'), self.app_config.tr('apps_tab', 'custom_icon_success_msg'), icon=QMessageBox.Information)
 
     @Slot(str, str)
     def _on_custom_icon_error(self, pkg_name, error_message):
         """Handles an error during icon saving."""
-        show_message_box(self, "Error", f"Could not save the icon for {pkg_name}: {error_message}", icon=QMessageBox.Critical)
+        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_error_title'), self.app_config.tr('apps_tab', 'custom_icon_error_msg', pkg=pkg_name, error=error_message), icon=QMessageBox.Critical)
         # Optionally, revert to the old icon if you stored it before starting the worker
         self.filter_apps()
 
@@ -303,8 +311,8 @@ class AppsTab(BaseGridTab):
 
         reply = show_message_box(
             self,
-            'Delete Configuration',
-            f"Are you sure you want to delete the specific configuration for<br><b>{app_name}</b>?",
+            self.app_config.tr('apps_tab', 'delete_config_title'),
+            self.app_config.tr('apps_tab', 'delete_config_msg', name=app_name),
             icon=QMessageBox.Question,
             buttons=QMessageBox.Yes | QMessageBox.No,
             default_button=QMessageBox.No,
@@ -313,10 +321,10 @@ class AppsTab(BaseGridTab):
 
         if reply == QMessageBox.Yes:
             if self.app_config.delete_app_scrcpy_config(pkg_name):
-                show_message_box(self, "Success", f"Specific configuration for {app_name} has been deleted.", icon=QMessageBox.Information, app_icon_path=icon_path)
+                show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('apps_tab', 'delete_success', name=app_name), icon=QMessageBox.Information, app_icon_path=icon_path)
                 self.config_deleted.emit(pkg_name)
             else:
-                show_message_box(self, "Not Found", f"No specific configuration was found for {app_name}.", icon=QMessageBox.Warning, app_icon_path=icon_path)
+                show_message_box(self, self.app_config.tr('apps_tab', 'delete_config_title'), self.app_config.tr('apps_tab', 'delete_not_found', name=app_name), icon=QMessageBox.Warning, app_icon_path=icon_path)
 
     @Slot(str)
     def on_settings_requested(self, pkg_name):
@@ -338,32 +346,29 @@ class AppsTab(BaseGridTab):
 
         if is_launcher and global_is_virtual:
             reply = show_message_box(
-                self, 'Virtual Display Incompatibility',
-                "Saving a specific configuration for the Launcher while a global virtual display is active is not recommended.\n\n"
-                "Would you like to save a specific configuration for the Launcher with 'Max Size' set to 0 (native resolution) instead?",
+                self, self.app_config.tr('apps_tab', 'virtual_display_warn_title'),
+                self.app_config.tr('apps_tab', 'virtual_display_warn_msg'),
                 icon=QMessageBox.Warning, buttons=QMessageBox.Yes | QMessageBox.No, default_button=QMessageBox.Yes, app_icon_path=icon_path
             )
             if reply == QMessageBox.Yes:
                 config_to_save = global_config.copy()
-                config_to_save['new_display'] = 'Disabled'
-                config_to_save['max_size'] = '0'
+                config_to_save[CONF_NEW_DISPLAY] = 'Disabled'
+                config_to_save[CONF_MAX_SIZE] = '0'
             else:
                 show_message_box(
-                    self, 'Action Cancelled',
-                    "No specific configuration was saved for the Launcher.\n\n"
-                    "To use the Launcher without a virtual display, please go to the 'Scrcpy' tab, "
-                    "set 'Virtual Display' to 'Disabled', and select a desired 'Max Size'.",
+                    self, self.app_config.tr('apps_tab', 'action_cancelled_title'),
+                    self.app_config.tr('apps_tab', 'action_cancelled_msg'),
                     icon=QMessageBox.Information, app_icon_path=icon_path
                 )
                 return
         else:
             config_to_save = global_config.copy()
 
-        keys_to_exclude = {'device_id', 'theme', 'device_commercial_name', 'show_system_apps', 'default_launcher'}
+        keys_to_exclude = {CONF_DEVICE_ID, CONF_THEME, CONF_LANGUAGE, CONF_DEVICE_COMMERCIAL_NAME, CONF_SHOW_SYSTEM_APPS, CONF_DEFAULT_LAUNCHER}
         app_specific_config = {k: v for k, v in config_to_save.items() if k not in keys_to_exclude}
 
         self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)
-        show_message_box(self, "Success", f"Current settings have been saved as a specific configuration for <b>{app_name}</b>.", icon=QMessageBox.Information, app_icon_path=icon_path)
+        show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('apps_tab', 'settings_saved', name=app_name), icon=QMessageBox.Information, app_icon_path=icon_path)
         self.config_changed.emit(pkg_name)
 
     def filter_apps(self):
@@ -400,11 +405,11 @@ class AppsTab(BaseGridTab):
         qml_model_data = []
 
         if pinned_apps:
-            qml_model_data.append({'isSeparator': True, 'text': 'Pinned Apps'})
+            qml_model_data.append({'isSeparator': True, 'text': self.app_config.tr('apps_tab', 'pinned_section')})
             qml_model_data.extend(pinned_apps)
 
         if unpinned_apps:
-            qml_model_data.append({'isSeparator': True, 'text': 'All Apps'})
+            qml_model_data.append({'isSeparator': True, 'text': self.app_config.tr('apps_tab', 'all_section')})
             qml_model_data.extend(unpinned_apps)
 
         self._update_grid_model(qml_model_data)
@@ -418,7 +423,7 @@ class AppsTab(BaseGridTab):
 
         self.completed_icon_tasks = 0
         self.progress_dialog = CustomThemedProgressDialog(
-            "Downloading missing app icons...",
+            self.app_config.tr('apps_tab', 'downloading_icons'),
             cancelButtonText=None, # No cancel button
             minimum=0,
             maximum=self.total_icon_tasks,
@@ -455,7 +460,7 @@ class AppsTab(BaseGridTab):
     def _on_icon_batch_finished(self, pkg_name, icon_path_string):
         self.completed_icon_tasks += 1
         self.progress_dialog.setValue(self.completed_icon_tasks)
-        self.progress_dialog.setLabelText(f"Downloading missing app icons... ({self.completed_icon_tasks}/{self.total_icon_tasks})")
+        self.progress_dialog.setLabelText(f"{self.app_config.tr('apps_tab', 'downloading_icons')} ({self.completed_icon_tasks}/{self.total_icon_tasks})")
 
         # Update the model in memory
         for app_data in self.all_apps_data:
@@ -472,7 +477,7 @@ class AppsTab(BaseGridTab):
         self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True}) # Mark as failed
         self.completed_icon_tasks += 1
         self.progress_dialog.setValue(self.completed_icon_tasks)
-        self.progress_dialog.setLabelText(f"Downloading missing app icons... ({self.completed_icon_tasks}/{self.total_icon_tasks})")
+        self.progress_dialog.setLabelText(f"{self.app_config.tr('apps_tab', 'downloading_icons')} ({self.completed_icon_tasks}/{self.total_icon_tasks})")
 
         if self.completed_icon_tasks >= self.total_icon_tasks:
             self._on_all_icons_downloaded()
@@ -489,7 +494,7 @@ class AppsTab(BaseGridTab):
         if not os.path.exists(app_icon_path):
             app_icon_path = None
         if not display_id:
-            show_message_box(self, "Error", "Virtual display not found for alternate launch.", icon=QMessageBox.Critical, app_icon_path=app_icon_path)
+            show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('apps_tab', 'virtual_display_error'), icon=QMessageBox.Critical, app_icon_path=app_icon_path)
             return
 
         full_config = self.app_config.get_global_values_no_profile().copy()
@@ -503,7 +508,7 @@ class AppsTab(BaseGridTab):
             package_name=package_name, display_id=display_id,
             windowing_mode=windowing_mode_int, connection_id=self.app_config.get_connection_id()
         )
-        app_launch_worker.signals.error.connect(lambda msg: show_message_box(self, "App Launch Error", msg, icon=QMessageBox.Critical, app_icon_path=app_icon_path))
+        app_launch_worker.signals.error.connect(lambda msg: show_message_box(self, self.app_config.tr('apps_tab', 'app_launch_error_title'), msg, icon=QMessageBox.Critical, app_icon_path=app_icon_path))
         if self.main_window:
             self.main_window.start_worker(app_launch_worker)
 
@@ -514,7 +519,7 @@ class AppsTab(BaseGridTab):
         if 'config' in app_metadata and app_metadata['config']:
             config_to_use.update(app_metadata['config'])
 
-        use_alt_launch = config_to_use.get('alternate_launch_method', False)
+        use_alt_launch = config_to_use.get(ALTERNATE_LAUNCH_METHOD, False)
         is_launcher = (package_name == self.app_config.get('default_launcher'))
         
         session_type = 'app'
@@ -535,7 +540,7 @@ class AppsTab(BaseGridTab):
             icon_path = None
 
         launch_worker = ScrcpyLaunchWorker(config_to_use, app_name, self.app_config.get_connection_id(), icon_path, session_type)
-        launch_worker.signals.error.connect(lambda msg: show_message_box(self, "Scrcpy Error", msg, icon=QMessageBox.Critical, app_icon_path=icon_path))
+        launch_worker.signals.error.connect(lambda msg: show_message_box(self, self.app_config.tr('apps_tab', 'scrcpy_error_title'), msg, icon=QMessageBox.Critical, app_icon_path=icon_path))
         
         if use_alt_launch and not is_launcher:
             launch_worker.signals.display_id_found.connect(self._on_display_id_found_for_alt_launch)

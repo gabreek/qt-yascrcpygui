@@ -63,6 +63,7 @@ class CustomThemedDialog(QDialog):
     """A frameless, themed QDialog with a custom title bar."""
     def __init__(self, parent=None, title="Dialog"):
         super().__init__(parent)
+        self.app_config = getattr(parent, 'app_config', None) if parent else None
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -123,8 +124,11 @@ class CustomThemedInputDialog(CustomThemedDialog):
         # Optionally make the line edit expand horizontally
         self.input_line_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        self.ok_button = QPushButton("OK")
-        self.cancel_button = QPushButton("Cancel")
+        ok_text = self.app_config.tr('common', 'ok') if self.app_config else "OK"
+        cancel_text = self.app_config.tr('common', 'cancel') if self.app_config else "Cancel"
+
+        self.ok_button = QPushButton(ok_text)
+        self.cancel_button = QPushButton(cancel_text)
 
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
@@ -160,7 +164,13 @@ class CustomThemedProgressDialog(CustomThemedDialog):
     canceled = Signal()
 
     def __init__(self, labelText, cancelButtonText=None, minimum=0, maximum=100, parent=None):
-        super().__init__(parent, title="Progress")
+        title_text = "Progress"
+        if parent and hasattr(parent, 'app_config'):
+             title_text = parent.app_config.tr('common', 'loading')
+        elif hasattr(self, 'app_config') and self.app_config: # Added in base class
+             title_text = self.app_config.tr('common', 'loading')
+
+        super().__init__(parent, title=title_text)
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setMinimumSize(350, 150)
 

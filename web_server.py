@@ -5,12 +5,21 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List
 from utils import adb_handler, scrcpy_handler
+from utils.constants import *
 from app_config import AppConfig
 import os
 import shlex
 import sys
+import base64
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
+web_thread = None
+_config_cache: Dict[str, AppConfig] = {}
 
 # --- Path resolution for PyInstaller ---
 def get_resource_path(relative_path):
@@ -84,14 +93,19 @@ KEY_COMMAND_MAP = {
 }
 
 def get_config_for_device(device_id: str):
-    """Initializes AppConfig and loads the configuration for a specific device."""
-    app_config = AppConfig(None)
+    """Initializes AppConfig and loads the configuration for a specific device, using a cache."""
     configuration_id = device_id
     if ':' in device_id:  # It's a Wi-Fi device
         serial_no = adb_handler.get_serial_from_wifi_device(device_id)
         if serial_no:
             configuration_id = serial_no
-    app_config.load_config_for_device(configuration_id)
+    
+    if configuration_id not in _config_cache:
+        app_config = AppConfig(None)
+        app_config.load_config_for_device(configuration_id)
+        _config_cache[configuration_id] = app_config
+    
+    app_config = _config_cache[configuration_id]
     app_config.connection_id = device_id  # Ensure connection_id is set for subsequent operations
     return app_config
 
@@ -104,8 +118,13 @@ async def adb_connect(request: AdbConnectRequest):
             return {"status": "success", "message": result}
         else:
             raise HTTPException(status_code=400, detail=result or "Failed to connect.")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in adb_connect")
+        # We don't have a device_id here yet, so we use a generic AppConfig(None) for translation
+        tmp_config = AppConfig(None)
+        raise HTTPException(status_code=500, detail=tmp_config.tr('api', 'error_adb_connect'))
 
 @app.post("/api/app/pin", summary="Pin or unpin an application")
 async def pin_app(request: PinRequest):
@@ -113,18 +132,24 @@ async def pin_app(request: PinRequest):
     try:
         app_config = get_config_for_device(request.device_id)
         app_config.save_app_metadata(request.pkg_name, {'pinned': request.pinned})
-        return {"status": "success", "message": f"App '{request.pkg_name}' {'pinned' if request.pinned else 'unpinned'}."}
+        msg_key = 'app_pinned' if request.pinned else 'app_unpinned'
+        return {"status": "success", "message": app_config.tr('api', msg_key, pkg=request.pkg_name)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in pin_app")
+        app_config = get_config_for_device(request.device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_pin'))
 
 @app.post("/api/input/text")
 async def text_input(request: TextInputRequest):
     """Types the given text on the device."""
     try:
         adb_handler._run_adb_command(['shell', 'input', 'text', shlex.quote(request.text)], request.device_id)
-        return {"status": "success", "message": "Text input command sent."}
+        app_config = get_config_for_device(request.device_id)
+        return {"status": "success", "message": app_config.tr('api', 'text_input_sent')}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in text_input")
+        app_config = get_config_for_device(request.device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_text_input'))
 
 @app.post("/api/input/keyevent")
 async def key_event(request: KeyEventRequest):
@@ -135,11 +160,14 @@ async def key_event(request: KeyEventRequest):
             raise HTTPException(status_code=400, detail="Invalid key command.")
 
         adb_handler._run_adb_command(['shell', 'input', 'keyevent', keycode], request.device_id)
-        return {"status": "success", "message": f"Key command '{request.key_command}' sent."}
+        app_config = get_config_for_device(request.device_id)
+        return {"status": "success", "message": app_config.tr('api', 'key_event_sent', key=request.key_command)}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-import base64
+        logger.exception("Error in key_event")
+        app_config = get_config_for_device(request.device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_key_event'))
 
 @app.get("/api/config")
 async def get_config(device_id: str, profile_key: str, b64: bool = False):
@@ -154,18 +182,8 @@ async def get_config(device_id: str, profile_key: str, b64: bool = False):
         # Use the AppConfig's internal profile loading mechanism, which is known to work
         app_config.load_profile(decoded_key)
 
-        # Define all keys that the frontend form uses
-        config_keys = [
-            'windowing_mode', 'mouse_mode', 'gamepad_mode', 'keyboard_mode', 'mouse_bind', 
-            'max_fps', 'new_display', 'max_size', 'extraargs', 'video_codec', 
-            'video_encoder', 'render_driver', 'allow_frame_drop', 'low_latency', 
-            'priority_mode', 'bitrate_mode', 'video_buffer', 'video_bitrate_slider',
-            'color_range',
-            'iframe_interval', # ADD THIS
-            'audio_codec', 'audio_encoder', 'audio_buffer', 'audio_bitrate_slider', 'fullscreen', 
-            'turn_screen_off', 'stay_awake', 'mipmaps', 'no_audio', 'no_video', 
-            'try_unlock', 'alternate_launch_method'
-        ]
+        # Get all keys dynamically from AppConfig
+        config_keys = AppConfig.all_known_keys()
         
         config_to_use = {}
         for key in config_keys:
@@ -177,20 +195,34 @@ async def get_config(device_id: str, profile_key: str, b64: bool = False):
             
         return config_to_use
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in get_config")
+        app_config = get_config_for_device(device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_get_config'))
 
 
 @app.post("/api/config")
 async def set_config(request: ConfigRequest):
     """Saves the configuration for a specific app on a device."""
     try:
+        configuration_id = request.device_id
+        if ':' in request.device_id:
+            serial_no = adb_handler.get_serial_from_wifi_device(request.device_id)
+            if serial_no:
+                configuration_id = serial_no
+        
+        # Invalidate cache
+        if configuration_id in _config_cache:
+            del _config_cache[configuration_id]
+
         app_config = get_config_for_device(request.device_id)
         app_config.save_app_scrcpy_config(request.pkg_name, request.config_data)
         if web_thread:
             web_thread.config_needs_reload.emit()
-        return {"status": "success", "message": "Configuration saved."}
+        return {"status": "success", "message": app_config.tr('api', 'config_saved')}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in set_config")
+        app_config = get_config_for_device(request.device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_set_config'))
 
 @app.get("/api/devices")
 async def list_devices():
@@ -214,7 +246,9 @@ async def list_devices():
                         })
         return devices
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in list_devices")
+        tmp_config = AppConfig(None)
+        raise HTTPException(status_code=500, detail=tmp_config.tr('api', 'error_list_devices'))
 
 
 @app.get("/api/devices/{device_id}/info", summary="Get detailed device information")
@@ -227,8 +261,12 @@ async def get_device_details(device_id: str):
         launcher = adb_handler.get_default_launcher(device_id)
         info['default_launcher'] = launcher
         return info
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get device details: {e}")
+        logger.exception("Error in get_device_details")
+        app_config = get_config_for_device(device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_device_details'))
 
 
 @app.get("/api/profiles", summary="List profiles with existing configurations for a device")
@@ -265,7 +303,8 @@ async def list_profiles(device_id: str):
             "apps": sorted(filtered_app_configs, key=lambda x: x['name'].lower()),
             "winlator": sorted(filtered_winlator_configs, key=lambda x: x['name'].lower())
         }
-    except Exception:
+    except Exception as e:
+        logger.exception("Error in list_profiles")
         # Gracefully fail if device disconnects or other ADB errors occur during fetch
         return {"apps": [], "winlator": []}
 
@@ -289,10 +328,10 @@ async def list_apps(device_id: str, include_system_apps: bool = False):
 
         all_apps.sort(key=lambda x: x['name'].lower())
         return all_apps
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        logger.exception("Error in list_apps")
+        app_config = get_config_for_device(device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_list_apps'))
 
 
 @app.get("/api/winlator/apps", summary="List Winlator shortcuts/games")
@@ -311,7 +350,9 @@ async def list_winlator_apps(device_id: str):
 
         return sorted(games, key=lambda x: x['name'].lower())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in list_winlator_apps")
+        app_config = get_config_for_device(device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_list_winlator'))
 
 
 @app.post("/api/launch", summary="Launch a standard Android application")
@@ -325,9 +366,10 @@ async def launch_app(request: LaunchRequest):
             config_to_use.update(app_specific_config)
 
         config_to_use['start_app'] = request.pkg_name
-        perform_alt_launch = config_to_use.get('alternate_launch_method', False)
+        perform_alt_launch = config_to_use.get(ALTERNATE_LAUNCH_METHOD, False)
 
-        icon_path = os.path.join(app_config.get_icon_cache_dir(), f"{request.pkg_name}.png")
+        icon_cache_dir = app_config.get_icon_cache_dir()
+        icon_path = os.path.join(icon_cache_dir, f"{request.pkg_name}.png")
 
         process = scrcpy_handler.launch_scrcpy(
             config_values=config_to_use,
@@ -345,9 +387,11 @@ async def launch_app(request: LaunchRequest):
             icon_path=icon_path,
             session_type='app'
         )
-        return {"status": "success", "message": f"Launch command sent for {request.app_name}.", "pid": process.pid}
+        return {"status": "success", "message": app_config.tr('api', 'launch_sent', name=request.app_name), "pid": process.pid}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in launch_app")
+        app_config = get_config_for_device(request.device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_launch'))
 
 @app.post("/api/winlator/launch", summary="Launch a Winlator application")
 async def launch_winlator_app(request: WinlatorLaunchRequest):
@@ -365,7 +409,8 @@ async def launch_winlator_app(request: WinlatorLaunchRequest):
         config_to_use['package_name_for_alt_launch'] = request.pkg_name
         config_to_use['shortcut_path'] = request.shortcut_path
         
-        icon_path = os.path.join(app_config.get_icon_cache_dir(), f"{os.path.basename(request.shortcut_path)}.png")
+        icon_cache_dir = app_config.get_icon_cache_dir()
+        icon_path = os.path.join(icon_cache_dir, f"{os.path.basename(request.shortcut_path)}.png")
 
         process = scrcpy_handler.launch_scrcpy(
             config_values=config_to_use,
@@ -383,9 +428,11 @@ async def launch_winlator_app(request: WinlatorLaunchRequest):
             icon_path=icon_path,
             session_type='winlator'
         )
-        return {"status": "success", "message": f"Launch command sent for {request.app_name}.", "pid": process.pid}
+        return {"status": "success", "message": app_config.tr('api', 'launch_sent', name=request.app_name), "pid": process.pid}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in launch_winlator_app")
+        app_config = get_config_for_device(request.device_id)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_launch_winlator'))
 
 @app.get("/api/scrcpy/encoders", summary="List available scrcpy encoders")
 async def list_encoders(device_id: str = None):
@@ -409,7 +456,7 @@ async def list_encoders(device_id: str = None):
         return {"video_encoders": video_encoders, "audio_encoders": audio_encoders}
 
     except Exception as e:
-        print(f"Error fetching/loading encoders: {e}")
+        logger.exception("Error in list_encoders")
         return {"video_encoders": {}, "audio_encoders": {}}
 
 @app.get("/api/scrcpy/sessions", summary="List active scrcpy sessions")
@@ -418,31 +465,28 @@ async def get_active_sessions():
     try:
         return scrcpy_handler.get_active_scrcpy_sessions()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in get_active_sessions")
+        raise HTTPException(status_code=500, detail="Internal error while listing scrcpy sessions.")
 
 @app.delete("/api/scrcpy/sessions/{pid}", summary="Kill a scrcpy session by PID")
-async def kill_session(pid: int):
+async def kill_session(pid: int, device_id: str = None):
     """Terminates a scrcpy session by its Process ID (PID)."""
     try:
+        app_config = get_config_for_device(device_id) if device_id else AppConfig(None)
         if scrcpy_handler.kill_scrcpy_session(pid):
-            return {"status": "success", "message": f"Session with PID {pid} terminated."}
+            return {"status": "success", "message": app_config.tr('api', 'session_killed', pid=pid)}
         else:
-            raise HTTPException(status_code=404, detail=f"Session with PID {pid} not found or could not be terminated.")
+            raise HTTPException(status_code=404, detail=app_config.tr('api', 'session_not_found', pid=pid))
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in kill_session")
+        app_config = get_config_for_device(device_id) if device_id else AppConfig(None)
+        raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_kill_session'))
 
 
 # --- Path resolution for PyInstaller ---
-def get_resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    else:
-        # Not running in a bundle
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
+# (Removed duplicate get_resource_path definition)
 
 # Mount the entire web directory for static files (THIS MUST BE LAST)
 web_dir = get_resource_path('web')
@@ -451,8 +495,6 @@ if os.path.exists(web_dir):
 else:
     print(f"CRITICAL: Web directory '{web_dir}' not found. The web interface will not be available.")
 
-
-web_thread = None
 
 def set_thread_instance(thread):
     """This function is called by the QThread to set the global thread instance."""

@@ -14,7 +14,7 @@ class AdbWifiWindow(QWidget):
         self.app_config = app_config
         self.thread_pool = QThreadPool.globalInstance()
 
-        self.setWindowTitle("ADB over Wifi")
+        self.setWindowTitle(self.app_config.tr('adb_wifi', 'title'))
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
@@ -30,7 +30,7 @@ class AdbWifiWindow(QWidget):
         container_vbox_layout.setContentsMargins(0, 0, 0, 0)
         container_vbox_layout.setSpacing(0)
 
-        self.title_bar = CustomTitleBar(parent_window=self, title="ADB over Wifi")
+        self.title_bar = CustomTitleBar(parent_window=self, title=self.app_config.tr('adb_wifi', 'title'))
         container_vbox_layout.addWidget(self.title_bar)
 
         content_widget = QWidget()
@@ -39,13 +39,13 @@ class AdbWifiWindow(QWidget):
         content_layout.setSpacing(10)
 
         self.address_input = QLineEdit()
-        self.address_input.setPlaceholderText("IP:Port (e.g., 192.168.1.100:5555)")
+        self.address_input.setPlaceholderText(self.app_config.tr('adb_wifi', 'placeholder'))
         self.address_input.returnPressed.connect(self.handle_connect)
 
-        self.connect_button = QPushButton("Connect")
+        self.connect_button = QPushButton(self.app_config.tr('adb_wifi', 'connect_btn'))
         self.connect_button.clicked.connect(self.handle_connect)
 
-        self.status_label = QLabel("Enter the device IP and port.")
+        self.status_label = QLabel(self.app_config.tr('adb_wifi', 'initial_msg'))
         self.status_label.setWordWrap(True)
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setObjectName("adb_status_label") # Add objectName
@@ -65,15 +65,25 @@ class AdbWifiWindow(QWidget):
         self.status_label.setProperty("error", is_error) # Set a dynamic property
         self.style().polish(self.status_label) # Repolish to apply stylesheet changes
 
+    def retranslate_ui(self):
+        """Updates all labels and UI texts in the window."""
+        self.setWindowTitle(self.app_config.tr('adb_wifi', 'title'))
+        self.title_bar.title_label.setText(self.app_config.tr('adb_wifi', 'title'))
+        self.address_input.setPlaceholderText(self.app_config.tr('adb_wifi', 'placeholder'))
+        self.connect_button.setText(self.app_config.tr('adb_wifi', 'connect_btn'))
+        # If it's not connecting, update initial msg
+        if self.connect_button.isEnabled():
+            self.status_label.setText(self.app_config.tr('adb_wifi', 'initial_msg'))
+
     def handle_connect(self):
         address = self.address_input.text().strip()
         if not address:
-            self.set_status("IP:Port cannot be empty.", is_error=True)
+            self.set_status(self.app_config.tr('adb_wifi', 'empty_error'), is_error=True)
             return
 
         self.connect_button.setEnabled(False)
-        self.connect_button.setText("Connecting...")
-        self.set_status(f"Connecting to {address}...")
+        self.connect_button.setText(self.app_config.tr('common', 'loading'))
+        self.set_status(self.app_config.tr('adb_wifi', 'connecting', address=address))
 
         worker = AdbConnectWorker(address)
         worker.signals.result.connect(self._on_connect_success)
@@ -83,13 +93,13 @@ class AdbWifiWindow(QWidget):
     def _on_connect_success(self, message):
         self.set_status(message)
         self.connect_button.setEnabled(True)
-        self.connect_button.setText("Connect")
+        self.connect_button.setText(self.app_config.tr('adb_wifi', 'connect_btn'))
         self.close()
 
     def _on_connect_error(self, error_message):
         self.set_status(error_message, is_error=True)
         self.connect_button.setEnabled(True)
-        self.connect_button.setText("Connect")
+        self.connect_button.setText(self.app_config.tr('adb_wifi', 'connect_btn'))
 
     def showMinimized(self):
         self.setWindowState(Qt.WindowMinimized)

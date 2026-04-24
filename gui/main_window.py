@@ -16,6 +16,7 @@ from .dialogs import show_message_box
 from .adb_wifi_window import AdbWifiWindow
 from . import themes
 from .common_widgets import CustomTitleBar, CustomThemedInputDialog
+from utils.constants import *
 from utils import adb_handler
 import web_server
 
@@ -99,7 +100,7 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        self.title_bar = CustomTitleBar(self, title="yaScrcpy")
+        self.title_bar = CustomTitleBar(self, title=self.app_config.tr('main', 'title'))
 
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
@@ -109,9 +110,9 @@ class MainWindow(QMainWindow):
         self.scrcpy_tab = ScrcpyTab(self.app_config, self)
         self.apps_tab = AppsTab(self.app_config, self)
         self.winlator_tab = WinlatorTab(self.app_config, self)
-        self.tabs.addTab(self.apps_tab, "Apps")
-        self.tabs.addTab(self.winlator_tab, "Winlator")
-        self.tabs.addTab(self.scrcpy_tab, "Config")
+        self.tabs.addTab(self.apps_tab, self.app_config.tr('main', 'tabs', key='apps'))
+        self.tabs.addTab(self.winlator_tab, self.app_config.tr('main', 'tabs', key='winlator'))
+        self.tabs.addTab(self.scrcpy_tab, self.app_config.tr('main', 'tabs', key='config'))
 
         self.apps_tab.launch_requested.connect(
             lambda pkg, name: self._handle_launch_request(pkg, name, 'app')
@@ -130,12 +131,13 @@ class MainWindow(QMainWindow):
         self.wifi_button = QPushButton("🛜")
         self.wifi_button.setObjectName("wifi_button")
         self.wifi_button.setFixedSize(25, 25)
-        self.wifi_button.setToolTip("ADB over WiFi")
+        self.wifi_button.setToolTip(self.app_config.tr('main', 'wifi_btn_tooltip'))
         self.wifi_button.clicked.connect(self.open_adb_wifi_manager)
 
         self.session_manager_button = QPushButton(">")
         self.session_manager_button.setObjectName("session_manager_button")
         self.session_manager_button.setFixedSize(25, 25)
+        self.session_manager_button.setToolTip(self.app_config.tr('main', 'session_manager_tooltip'))
         self.session_manager_button.clicked.connect(self.toggle_scrcpy_session_manager)
 
         button_container = QWidget()
@@ -168,6 +170,27 @@ class MainWindow(QMainWindow):
 
         if self.app_config.get('start_web_server_on_launch'):
             self.start_web_server()
+
+    def retranslate_ui(self):
+        """Updates all UI texts based on the current language."""
+        self.title_bar.title_label.setText(self.app_config.tr('main', 'title'))
+        self.tabs.setTabText(0, self.app_config.tr('main', 'tabs', key='apps'))
+        self.tabs.setTabText(1, self.app_config.tr('main', 'tabs', key='winlator'))
+        self.tabs.setTabText(2, self.app_config.tr('main', 'tabs', key='config'))
+        self.wifi_button.setToolTip(self.app_config.tr('main', 'wifi_btn_tooltip'))
+        self.session_manager_button.setToolTip(self.app_config.tr('main', 'session_manager_tooltip'))
+
+        # Retranslate tabs content
+        self.apps_tab.retranslate_ui()
+        self.winlator_tab.retranslate_ui()
+        self.scrcpy_tab.retranslate_ui()
+
+        if self.adb_wifi_window:
+            self.adb_wifi_window.retranslate_ui()
+        if self.scrcpy_session_manager_window:
+            self.scrcpy_session_manager_window.retranslate_ui()
+        if self.web_config_window:
+            self.web_config_window.retranslate_ui()
 
     def get_resize_edges(self, pos):
         """Determines which edges are being interacted with for resizing."""
@@ -310,23 +333,23 @@ class MainWindow(QMainWindow):
     def _handle_launch_request(self, item_key, item_name, launch_type):
         device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
-            show_message_box(self, "Device Error", "No device connected.", icon=QMessageBox.Critical)
+            show_message_box(self, self.app_config.tr('main', 'device_error_title'), self.app_config.tr('main', 'no_device_msg'), icon=QMessageBox.Critical)
             return
         if self.app_config.get('try_unlock'):
             lock_state = adb_handler.get_device_lock_state(device_id)
             if lock_state in ['LOCKED_SCREEN_ON', 'LOCKED_SCREEN_OFF']:
                 pin, ok = CustomThemedInputDialog.getText(
                     self,
-                    "Device Locked",
-                    "Enter PIN to unlock:",
+                    self.app_config.tr('main', 'device_locked'),
+                    self.app_config.tr('main', 'enter_pin'),
                     text_input_mode=QLineEdit.Password
                 )
                 if ok and pin:
                     adb_handler.unlock_device(device_id, pin)
                 elif ok and not pin:
-                    show_message_box(self, "Unlock Skipped", "No PIN entered. Attempting to launch on locked device.", icon=QMessageBox.Warning)
+                    show_message_box(self, self.app_config.tr('common', 'warning'), self.app_config.tr('main', 'unlock_skipped'), icon=QMessageBox.Warning)
                 else:
-                    show_message_box(self, "Launch Cancelled", "Unlock process was cancelled by the user.", icon=QMessageBox.Information)
+                    show_message_box(self, self.app_config.tr('common', 'info'), self.app_config.tr('main', 'launch_cancelled'), icon=QMessageBox.Information)
                     return
         if launch_type == 'app':
             self.apps_tab.execute_launch(item_key, item_name)
@@ -413,7 +436,7 @@ class MainWindow(QMainWindow):
         if current_device_id != self.last_known_device_id:
             self.last_known_device_id = current_device_id
             if current_device_id:
-                self._update_all_tabs_status("Please wait, loading...")
+                self._update_all_tabs_status(self.app_config.tr('main', 'loading_msg'))
                 self.pause_device_check()
                 config_loader_worker = DeviceConfigLoaderWorker(current_device_id, self.app_config)
                 config_loader_worker.signals.result.connect(self._on_device_config_loaded)

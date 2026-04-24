@@ -4,21 +4,23 @@
 
 import shutil
 from PySide6.QtWidgets import QMessageBox
+from app_config import AppConfig
 
 def check_dependencies():
+    app_config = AppConfig(None)
 
     if not shutil.which("adb"):
         QMessageBox.critical(
             None,
-            "Dependency Missing",
-            "Command 'adb' not found. Please install Android Platform Tools and add it to your system's PATH."
+            app_config.tr('common', 'error'),
+            app_config.tr('common', 'adb_missing')
         )
         return False
     if not shutil.which("scrcpy"):
         QMessageBox.critical(
             None,
-            "Dependency Missing",
-            "Command 'scrcpy' not found. Please install scrcpy and ensure it is in your system's PATH."
+            app_config.tr('common', 'error'),
+            app_config.tr('common', 'scrcpy_missing')
         )
         return False
     return True

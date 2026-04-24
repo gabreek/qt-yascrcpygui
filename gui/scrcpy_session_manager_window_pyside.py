@@ -26,7 +26,7 @@ class ScrcpySessionManagerWindow(QWidget):
         self.session_data_map = {}
         self.parent_widget = parent_widget
         self.close_callback = close_callback
-        self.setWindowTitle("Active Scrcpy Sessions")
+        self.setWindowTitle(self.app_config.tr('session_manager', 'title'))
         self.setMinimumSize(300, 400)
 
         # Set window flags for frameless window
@@ -44,7 +44,7 @@ class ScrcpySessionManagerWindow(QWidget):
         dialog_layout.setContentsMargins(0, 0, 0, 0)
         dialog_layout.addWidget(self.container_widget)
 
-        self.title_bar = CustomTitleBar(parent_window=self, title="Active Scrcpy Sessions")
+        self.title_bar = CustomTitleBar(parent_window=self, title=self.app_config.tr('session_manager', 'title'))
         main_layout.addWidget(self.title_bar)
 
         # Content widget to hold the tree and buttons, with proper margins
@@ -63,11 +63,11 @@ class ScrcpySessionManagerWindow(QWidget):
 
         # Bottom command buttons
         command_layout = QHBoxLayout()
-        self.terminate_button = QPushButton("Kill")
+        self.terminate_button = QPushButton(self.app_config.tr('session_manager', 'kill_btn'))
         self.terminate_button.setEnabled(False)
         self.terminate_button.setFixedSize(100, 30) # Fixed size for consistency
 
-        self.command_button = QPushButton("Check Command")
+        self.command_button = QPushButton(self.app_config.tr('session_manager', 'check_command_btn'))
         self.command_button.setEnabled(False)
         self.command_button.setFixedSize(120, 30) # Fixed size for consistency
 
@@ -102,6 +102,15 @@ class ScrcpySessionManagerWindow(QWidget):
         if self.parent_widget:
             self.setPalette(self.parent_widget.palette())
         themes.apply_stylesheet_to_window(self)
+
+    def retranslate_ui(self):
+        """Updates all labels and UI texts in the window."""
+        self.setWindowTitle(self.app_config.tr('session_manager', 'title'))
+        self.title_bar.title_label.setText(self.app_config.tr('session_manager', 'title'))
+        self.terminate_button.setText(self.app_config.tr('session_manager', 'kill_btn'))
+        self.command_button.setText(self.app_config.tr('session_manager', 'check_command_btn'))
+        # Refresh the list to update "No active Scrcpy sessions" message if necessary
+        self.populate_sessions()
 
 
     def _load_icon(self, relative_path):
@@ -182,7 +191,7 @@ class ScrcpySessionManagerWindow(QWidget):
 
         if not sessions:
             item = QTreeWidgetItem(self.tree)
-            item.setText(0, "No active Scrcpy sessions.")
+            item.setText(0, self.app_config.tr('session_manager', 'no_sessions'))
             self.tree.addTopLevelItem(item)
             self.tree.clearSelection()
             self._on_tree_select() # Update button states
@@ -232,15 +241,15 @@ class ScrcpySessionManagerWindow(QWidget):
 
         app_name = session_data['app_name']
 
-        reply = QMessageBox.question(self.parent_widget, "Confirm Termination",
-                                     f"Are you sure you want to terminate {app_name} (PID: {pid})?",
+        reply = QMessageBox.question(self.parent_widget, self.app_config.tr('session_manager', 'confirm_kill_title'),
+                                     self.app_config.tr('session_manager', 'confirm_kill_msg', name=app_name, pid=pid),
                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
         if reply == QMessageBox.Yes:
             if scrcpy_handler.kill_scrcpy_session(pid):
-                QMessageBox.information(self.parent_widget, "Success", f"Scrcpy session for {app_name} terminated.")
+                QMessageBox.information(self.parent_widget, self.app_config.tr('common', 'success'), self.app_config.tr('session_manager', 'kill_success', name=app_name))
             else:
-                QMessageBox.critical(self.parent_widget, "Error", f"Could not terminate Scrcpy session for {app_name} (PID: {pid}).")
+                QMessageBox.critical(self.parent_widget, self.app_config.tr('common', 'error'), self.app_config.tr('session_manager', 'kill_error', name=app_name, pid=pid))
             self.populate_sessions() # Refresh the list after terminating
 
     def _show_command_for_selected_session(self):
@@ -255,7 +264,7 @@ class ScrcpySessionManagerWindow(QWidget):
         command_args = session_data.get('command_args', ["N/A"])
         command_str = shlex.join(command_args)
 
-        command_dialog = CustomThemedDialog(self, title=f"Command for {session_data['app_name']}")
+        command_dialog = CustomThemedDialog(self, title=self.app_config.tr('session_manager', 'command_title', name=session_data['app_name']))
         command_dialog.setFixedSize(600, 200)
         command_dialog.setWindowModality(Qt.ApplicationModal) # Make it modal
 
@@ -264,7 +273,7 @@ class ScrcpySessionManagerWindow(QWidget):
         text_edit.setReadOnly(True)
         command_dialog.add_content_widget(text_edit)
 
-        close_button = QPushButton("Close")
+        close_button = QPushButton(self.app_config.tr('common', 'close'))
         close_button.clicked.connect(command_dialog.accept)
         command_dialog.add_content_widget(close_button)
 

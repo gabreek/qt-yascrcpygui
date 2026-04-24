@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCombo
 from .workers import DeviceInfoWorker, EncoderListWorker, DeviceConfigLoaderWorker
 from . import themes
 from utils import scrcpy_handler, adb_handler
+from utils.constants import *
 from .web_server_config_window import WebServerConfigWindow
 
 
@@ -81,6 +82,7 @@ class ScrcpyTab(QWidget):
         self.audio_encoders = {}
         self.last_device_info = {}
         self.general_editors = {}
+        self.general_labels = {} # Store labels for retranslation
         self.option_checkboxes = {}
         self.sliders = {}
         self.thread_pool = QThreadPool.globalInstance()
@@ -173,24 +175,108 @@ class ScrcpyTab(QWidget):
         return group, layout
 
     def _create_yascrcpy_group(self):
-        self.yascrcpy_group, layout = self._create_group_box("yaScrcpy")
-        row_layout = QHBoxLayout()
-        label = QLabel("Theme")
-        label.setMinimumWidth(100)
-        row_layout.addWidget(label)
+        self.yascrcpy_group, layout = self._create_group_box(self.app_config.tr('scrcpy_tab', 'groups', key='yascrcpy'))
+        
+        # Theme
+        row_theme = QHBoxLayout()
+        label_theme = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='theme'))
+        label_theme.setMinimumWidth(100)
+        row_theme.addWidget(label_theme)
         self.theme_combo = NoScrollQComboBox()
         self.theme_combo.currentIndexChanged.connect(self._on_theme_selected)
-        row_layout.addWidget(self.theme_combo)
-        layout.addLayout(row_layout)
-        self.show_system_apps_checkbox = QCheckBox("Show System Apps")
-        self.show_system_apps_checkbox.setChecked(self.app_config.get('show_system_apps', False))
+        row_theme.addWidget(self.theme_combo)
+        layout.addLayout(row_theme)
+
+        # Language
+        row_lang = QHBoxLayout()
+        label_lang = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='language'))
+        label_lang.setMinimumWidth(100)
+        row_lang.addWidget(label_lang)
+        self.lang_combo = NoScrollQComboBox()
+        self.lang_combo.addItem("English", "en")
+        self.lang_combo.addItem("Português", "pt")
+        current_lang = self.app_config.get(CONF_LANGUAGE, 'en')
+        index = self.lang_combo.findData(current_lang)
+        if index != -1:
+            self.lang_combo.setCurrentIndex(index)
+        self.lang_combo.currentIndexChanged.connect(self._on_language_selected)
+        row_lang.addWidget(self.lang_combo)
+        layout.addLayout(row_lang)
+
+        self.show_system_apps_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'labels', key='show_system_apps'))
+        self.show_system_apps_checkbox.setChecked(self.app_config.get(CONF_SHOW_SYSTEM_APPS, False))
         self.show_system_apps_checkbox.stateChanged.connect(self._on_show_system_apps_changed)
         layout.addWidget(self.show_system_apps_checkbox)
         
         # Add Configure Web Server button
-        self.web_server_config_button = QPushButton("Web Server")
+        self.web_server_config_button = QPushButton(self.app_config.tr('scrcpy_tab', 'labels', key='web_server'))
         self.web_server_config_button.clicked.connect(self._open_web_server_config)
         layout.addWidget(self.web_server_config_button)
+
+    def retranslate_ui(self):
+        """Updates all labels and group titles in the tab."""
+        self.yascrcpy_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='yascrcpy'))
+        self.device_info_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='device_status'))
+        self.profile_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='profile'))
+        self.general_settings_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='general'))
+        self.video_settings_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='video'))
+        self.audio_settings_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='audio'))
+        self.options_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='options'))
+
+        self.show_system_apps_checkbox.setText(self.app_config.tr('scrcpy_tab', 'labels', key='show_system_apps'))
+        self.web_server_config_button.setText(self.app_config.tr('scrcpy_tab', 'labels', key='web_server'))
+
+        # Update general fields labels
+        translations = {
+            CONF_WINDOWING_MODE: 'window_mode',
+            CONF_MOUSE_MODE: 'mouse_mode',
+            CONF_GAMEPAD_MODE: 'gamepad_mode',
+            CONF_KEYBOARD_MODE: 'keyboard_mode',
+            CONF_MOUSE_BIND: 'mouse_bind',
+            CONF_MAX_FPS: 'max_fps',
+            CONF_NEW_DISPLAY: 'virtual_display',
+            CONF_MAX_SIZE: 'max_size',
+            CONF_EXTRAARGS: 'extra_args',
+            CONF_IFRAME_INTERVAL: 'iframe_interval',
+            CONF_VIDEO_BUFFER: 'video_buffer',
+            CONF_VIDEO_BITRATE_SLIDER: 'video_bitrate',
+            CONF_AUDIO_BUFFER: 'audio_buffer',
+            CONF_AUDIO_BITRATE_SLIDER: 'audio_bitrate',
+        }
+        for var_key, label_key in translations.items():
+            if var_key in self.general_labels:
+                self.general_labels[var_key].setText(self.app_config.tr('scrcpy_tab', 'labels', key=label_key))
+
+        # Video/Audio specific labels
+        self.v_codec_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='codec'))
+        self.v_encoder_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='encoder'))
+        self.a_codec_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='codec'))
+        self.a_encoder_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='encoder'))
+
+        # Options checkboxes
+        opt_trans = {
+            CONF_FULLSCREEN: 'fullscreen',
+            CONF_TURN_SCREEN_OFF: 'turn_screen_off',
+            CONF_STAY_AWAKE: 'stay_awake',
+            CONF_MIPMAPS: 'disable_mipmaps',
+            CONF_NO_AUDIO: 'no_audio',
+            CONF_NO_VIDEO: 'no_video',
+            CONF_TRY_UNLOCK: 'unlock_device',
+            ALTERNATE_LAUNCH_METHOD: 'alternate_launch',
+        }
+        for var_key, label_key in opt_trans.items():
+            if var_key in self.option_checkboxes:
+                self.option_checkboxes[var_key].setText(self.app_config.tr('scrcpy_tab', 'options', key=label_key))
+
+        self._update_all_widgets_from_config() # This already blocks signals
+        self.refresh_device_info() # Updates device status label
+
+    def _on_language_selected(self, index):
+        if index == -1: return
+        lang_code = self.lang_combo.itemData(index)
+        self.app_config.set(CONF_LANGUAGE, lang_code)
+        if self.main_window:
+            self.main_window.retranslate_ui()
 
     def _open_web_server_config(self):
         if not self.main_window:
@@ -209,7 +295,7 @@ class ScrcpyTab(QWidget):
         self.main_window.web_config_window.update_status(self.main_window.is_web_server_running())
 
     def _on_show_system_apps_changed(self, state):
-        self.app_config.set('show_system_apps', bool(state))
+        self.app_config.set(CONF_SHOW_SYSTEM_APPS, bool(state))
         self.config_updated_on_worker.emit()
 
     def _update_theme_dropdown(self):
@@ -217,7 +303,7 @@ class ScrcpyTab(QWidget):
         self.theme_combo.clear()
         available_themes = themes.get_available_themes()
         self.theme_combo.addItems(available_themes)
-        current_theme = self.app_config.get('theme', 'System')
+        current_theme = self.app_config.get(CONF_THEME, 'System')
         index = self.theme_combo.findText(current_theme)
         if index != -1:
             self.theme_combo.setCurrentIndex(index)
@@ -226,17 +312,17 @@ class ScrcpyTab(QWidget):
     def _on_theme_selected(self, index):
         if index == -1: return
         theme_name = self.theme_combo.itemText(index)
-        self.app_config.set('theme', theme_name)
+        self.app_config.set(CONF_THEME, theme_name)
         self.theme_changed.emit(theme_name)
 
     def _create_device_status_group(self):
-        self.device_info_group, layout = self._create_group_box("Device Status")
-        self.device_info_label = QLabel("Checking device status...")
+        self.device_info_group, layout = self._create_group_box(self.app_config.tr('scrcpy_tab', 'groups', key='device_status'))
+        self.device_info_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='checking_status'))
         self.device_info_label.setWordWrap(True)
         layout.addWidget(self.device_info_label)
 
     def _create_profile_group(self):
-        self.profile_group, layout = self._create_group_box("Configuration Profile")
+        self.profile_group, layout = self._create_group_box(self.app_config.tr('scrcpy_tab', 'groups', key='profile'))
         self.profile_combo = NoScrollQComboBox()
         self.profile_combo.currentIndexChanged.connect(self._on_profile_selected)
         layout.addWidget(self.profile_combo)
@@ -244,7 +330,7 @@ class ScrcpyTab(QWidget):
     def update_profile_dropdown(self):
         self.profile_combo.blockSignals(True)
         self.profile_combo.clear()
-        self.profile_combo.addItem("Global Config", userData="global")
+        self.profile_combo.addItem(self.app_config.tr('scrcpy_tab', 'labels', key='global_config'), userData="global")
         device_id = self.app_config.get_connection_id()
         if device_id == DEVICE_NOT_FOUND or device_id is None:
             active_profile = self.app_config.active_profile
@@ -310,23 +396,24 @@ class ScrcpyTab(QWidget):
         self.general_editors[var_key] = editor
 
     def _create_general_settings_group(self):
-        self.general_settings_group, layout = self._create_group_box("General Settings")
+        self.general_settings_group, layout = self._create_group_box(self.app_config.tr('scrcpy_tab', 'groups', key='general'))
         fields = [
-            ("Window Mode", 'windowing_mode', ["Fullscreen", "Freeform"]),
-            ("Mouse Mode", 'mouse_mode', ["sdk","uhid","aoa"]),
-            ("Gamepad Mode", 'gamepad_mode', ["disabled","uhid","aoa"]),
-            ("Keyboard Mode", 'keyboard_mode', ["disabled","sdk","uhid","aoa"]),
-            ("Mouse Bind", 'mouse_bind', ["bhsn:++++","++++:bhsn"]),
-            ("Max FPS", 'max_fps', ["20","25","30", "45", "60"]),
-            ("Virtual Display", 'new_display', ["Disabled", "640x360/120", "854x480/120", "960x550/120", "1280x720/140", "1366x768/140", "1920x1080/140"]),
-            ("Max Size", 'max_size', ["0", "640", "854", "960","1280","1366","1080"]),
-            ("Extra Args", 'extraargs', None),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='window_mode'), CONF_WINDOWING_MODE, ["Fullscreen", "Freeform"]),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='mouse_mode'), CONF_MOUSE_MODE, ["sdk","uhid","aoa"]),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='gamepad_mode'), CONF_GAMEPAD_MODE, ["disabled","uhid","aoa"]),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='keyboard_mode'), CONF_KEYBOARD_MODE, ["disabled","sdk","uhid","aoa"]),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='mouse_bind'), CONF_MOUSE_BIND, ["bhsn:++++","++++:bhsn"]),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='max_fps'), CONF_MAX_FPS, ["20","25","30", "45", "60"]),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='virtual_display'), CONF_NEW_DISPLAY, ["Disabled", "640x360/120", "854x480/120", "960x550/120", "1280x720/140", "1366x768/140", "1920x1080/140"]),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='max_size'), CONF_MAX_SIZE, ["0", "640", "854", "960","1280","1366","1080"]),
+            (self.app_config.tr('scrcpy_tab', 'labels', key='extra_args'), CONF_EXTRAARGS, None),
         ]
         self.resolution_combo = None
         for label_text, var_key, opts in fields:
             row_layout = QHBoxLayout()
             label = QLabel(label_text)
             label.setMinimumWidth(100)
+            self.general_labels[var_key] = label # Store reference
             row_layout.addWidget(label)
             value = self.app_config.get(var_key, "")
             if opts is None:
@@ -358,7 +445,7 @@ class ScrcpyTab(QWidget):
     def _update_launch_control_widgets_state(self):
         if not hasattr(self, 'option_checkboxes') or not hasattr(self, 'windowing_mode_combo') or not hasattr(self, 'general_editors'):
             return
-        alt_launch_checkbox = self.option_checkboxes.get('alternate_launch_method')
+        alt_launch_checkbox = self.option_checkboxes.get(ALTERNATE_LAUNCH_METHOD)
         virtual_display_combo = self.general_editors.get('new_display')
         if not alt_launch_checkbox or not virtual_display_combo:
             return
@@ -372,76 +459,79 @@ class ScrcpyTab(QWidget):
         self.windowing_mode_combo.setEnabled((is_winlator_profile or alt_launch_enabled) and is_virtual_display_active)
 
     def _create_video_settings_group(self):
-        self.video_settings_group, layout = self._create_group_box("Video Settings")
+        self.video_settings_group, layout = self._create_group_box(self.app_config.tr('scrcpy_tab', 'groups', key='video'))
         self.v_codec_combo = NoScrollQComboBox()
         self.v_codec_combo.currentTextChanged.connect(self._on_video_codec_changed)
         self.v_encoder_combo = NoScrollQComboBox()
-        self.v_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set('video_encoder', text))
+        self.v_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set(CONF_VIDEO_ENCODER, text))
         codec_layout = QHBoxLayout()
-        codec_label = QLabel("Codec")
-        codec_label.setMinimumWidth(100)
-        codec_layout.addWidget(codec_label)
+        self.v_codec_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='codec'))
+        self.v_codec_label.setMinimumWidth(100)
+        codec_layout.addWidget(self.v_codec_label)
         self.v_codec_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.v_codec_combo.setMaximumWidth(300)
         codec_layout.addWidget(self.v_codec_combo)
         layout.addLayout(codec_layout)
         encoder_layout = QHBoxLayout()
-        encoder_label = QLabel("Encoder")
-        encoder_label.setMinimumWidth(100)
-        encoder_layout.addWidget(encoder_label)
+        self.v_encoder_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='encoder'))
+        self.v_encoder_label.setMinimumWidth(100)
+        encoder_layout.addWidget(self.v_encoder_label)
         self.v_encoder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.v_encoder_combo.setMaximumWidth(300)
         encoder_layout.addWidget(self.v_encoder_combo)
         layout.addLayout(encoder_layout)
-        self._add_combo_box_row(layout, "Render Driver", 'render_driver', ["opengles2", "opengles", "opengl", "direct3d", "metal", "software"])
-        self._add_combo_box_row(layout, "Color Range", 'color_range', ["Auto", "Full", "Limited"])
-        self._add_combo_box_row(layout, "Frame Drop", 'allow_frame_drop', ["Enabled", "Disabled"])
-        self._add_combo_box_row(layout, "Low Latency", 'low_latency', ["Enabled", "Disabled"])
-        self._add_combo_box_row(layout, "Priority", 'priority_mode', ["Realtime", "Normal"])
-        self._add_combo_box_row(layout, "Bitrate Mode", 'bitrate_mode', ["Constant", "Variable"])
-        self._create_iframe_interval_slider(layout, "I-frame Interval", 'iframe_interval', 0, 30, 1, 0) # 0 for Auto, 1-30 seconds
-        self._create_slider(layout, "Video Buffer", 'video_buffer', 0, 500, 1, "ms")
-        self._create_slider_with_buttons(layout, "Video Bitrate", 'video_bitrate_slider', 10, 8000, 10, "K", [1000, 2000, 4000, 6000, 8000])
+        self._add_combo_box_row(layout, self.app_config.tr('scrcpy_tab', 'labels', key='render_driver'), CONF_RENDER_DRIVER, ["opengles2", "opengles", "opengl", "direct3d", "metal", "software"])
+        self._add_combo_box_row(layout, self.app_config.tr('scrcpy_tab', 'labels', key='color_range'), CONF_COLOR_RANGE, ["Auto", "Full", "Limited"])
+        self._add_combo_box_row(layout, self.app_config.tr('scrcpy_tab', 'labels', key='frame_drop'), CONF_ALLOW_FRAME_DROP, ["Enabled", "Disabled"])
+        self._add_combo_box_row(layout, self.app_config.tr('scrcpy_tab', 'labels', key='low_latency'), CONF_LOW_LATENCY, ["Enabled", "Disabled"])
+        self._add_combo_box_row(layout, self.app_config.tr('scrcpy_tab', 'labels', key='priority'), CONF_PRIORITY_MODE, ["Realtime", "Normal"])
+        self._add_combo_box_row(layout, self.app_config.tr('scrcpy_tab', 'labels', key='bitrate_mode'), CONF_BITRATE_MODE, ["Constant", "Variable"])
+        self._create_iframe_interval_slider(layout, self.app_config.tr('scrcpy_tab', 'labels', key='iframe_interval'), CONF_IFRAME_INTERVAL, 0, 30, 1, 0) # 0 for Auto, 1-30 seconds
+        self._create_slider(layout, self.app_config.tr('scrcpy_tab', 'labels', key='video_buffer'), CONF_VIDEO_BUFFER, 0, 500, 1, "ms")
+        self._create_slider_with_buttons(layout, self.app_config.tr('scrcpy_tab', 'labels', key='video_bitrate'), CONF_VIDEO_BITRATE_SLIDER, 10, 8000, 10, "K", [1000, 2000, 4000, 6000, 8000])
 
     def _create_audio_settings_group(self):
-        self.audio_settings_group, layout = self._create_group_box("Audio Settings")
+        self.audio_settings_group, layout = self._create_group_box(self.app_config.tr('scrcpy_tab', 'groups', key='audio'))
         self.a_codec_combo = NoScrollQComboBox()
         self.a_codec_combo.currentTextChanged.connect(self._on_audio_codec_changed)
         self.a_encoder_combo = NoScrollQComboBox()
-        self.a_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set('audio_encoder', text))
+        self.a_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set(CONF_AUDIO_ENCODER, text))
         codec_layout = QHBoxLayout()
-        codec_label = QLabel("Codec")
-        codec_label.setMinimumWidth(100)
-        codec_layout.addWidget(codec_label)
+        self.a_codec_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='codec'))
+        self.a_codec_label.setMinimumWidth(100)
+        codec_layout.addWidget(self.a_codec_label)
         self.a_codec_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.a_codec_combo.setMaximumWidth(300)
         codec_layout.addWidget(self.a_codec_combo)
         layout.addLayout(codec_layout)
         encoder_layout = QHBoxLayout()
-        encoder_label = QLabel("Encoder")
-        encoder_label.setMinimumWidth(100)
-        encoder_layout.addWidget(encoder_label)
+        self.a_encoder_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='encoder'))
+        self.a_encoder_label.setMinimumWidth(100)
+        encoder_layout.addWidget(self.a_encoder_label)
         self.a_encoder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.a_encoder_combo.setMaximumWidth(300)
         encoder_layout.addWidget(self.a_encoder_combo)
         layout.addLayout(encoder_layout)
-        self._create_slider(layout, "Audio Buffer", 'audio_buffer', 5, 500, 1, "ms")
-        self._create_slider(layout, "Audio Bitrate", 'audio_bitrate_slider', 64, 320, 16, "K")
+        self._create_slider(layout, self.app_config.tr('scrcpy_tab', 'labels', key='audio_buffer'), CONF_AUDIO_BUFFER, 5, 500, 1, "ms")
+        self._create_slider(layout, self.app_config.tr('scrcpy_tab', 'labels', key='audio_bitrate'), CONF_AUDIO_BITRATE_SLIDER, 64, 320, 16, "K")
 
     def _create_options_group(self):
-        self.options_group, layout = self._create_group_box("Options", QGridLayout)
+        self.options_group, layout = self._create_group_box(self.app_config.tr('scrcpy_tab', 'groups', key='options'), QGridLayout)
         config_checkboxes = [
-            ("Fullscreen", 'fullscreen'), ("Turn screen off", 'turn_screen_off'),
-            ("Stay Awake", 'stay_awake'), ("Disable mipmaps", 'mipmaps'),
-            ("No Audio", 'no_audio'), ("No Video", 'no_video'),
-            ("Unlock device", 'try_unlock'),
-            ("Alternate Launch Method", 'alternate_launch_method'),
+            (self.app_config.tr('scrcpy_tab', 'options', key='fullscreen'), CONF_FULLSCREEN),
+            (self.app_config.tr('scrcpy_tab', 'options', key='turn_screen_off'), CONF_TURN_SCREEN_OFF),
+            (self.app_config.tr('scrcpy_tab', 'options', key='stay_awake'), CONF_STAY_AWAKE),
+            (self.app_config.tr('scrcpy_tab', 'options', key='disable_mipmaps'), CONF_MIPMAPS),
+            (self.app_config.tr('scrcpy_tab', 'options', key='no_audio'), CONF_NO_AUDIO),
+            (self.app_config.tr('scrcpy_tab', 'options', key='no_video'), CONF_NO_VIDEO),
+            (self.app_config.tr('scrcpy_tab', 'options', key='unlock_device'), CONF_TRY_UNLOCK),
+            (self.app_config.tr('scrcpy_tab', 'options', key='alternate_launch'), ALTERNATE_LAUNCH_METHOD),
         ]
         for i, (text, var_key) in enumerate(config_checkboxes):
             checkbox = QCheckBox(text)
             checkbox.setChecked(self.app_config.get(var_key, False))
             checkbox.stateChanged.connect(lambda state, vk=var_key: self.app_config.set(vk, bool(state)))
-            if var_key == 'alternate_launch_method':
+            if var_key == ALTERNATE_LAUNCH_METHOD:
                 checkbox.stateChanged.connect(self._update_launch_control_widgets_state)
             layout.addWidget(checkbox, i // 2, i % 2)
             self.option_checkboxes[var_key] = checkbox
@@ -458,6 +548,7 @@ class ScrcpyTab(QWidget):
         row_layout = QHBoxLayout()
         label = QLabel(label_text)
         label.setMinimumWidth(100)
+        self.general_labels[var_key] = label # Store reference
         row_layout.addWidget(label)
         slider = NoScrollQSlider(Qt.Horizontal)
         slider.setRange(min_val, max_val)
@@ -478,6 +569,7 @@ class ScrcpyTab(QWidget):
         row_layout = QHBoxLayout()
         label = QLabel(label_text)
         label.setMinimumWidth(100)
+        self.general_labels[var_key] = label # Store reference
         row_layout.addWidget(label)
         slider = NoScrollQSlider(Qt.Horizontal)
         slider.setRange(min_val, max_val)
@@ -506,6 +598,7 @@ class ScrcpyTab(QWidget):
         row_layout = QHBoxLayout()
         label = QLabel(label_text)
         label.setMinimumWidth(100)
+        self.general_labels[var_key] = label # Store reference
         row_layout.addWidget(label)
         slider = NoScrollQSlider(Qt.Horizontal)
         slider.setRange(min_val, max_val) # min_val will be 0 for "Auto"
@@ -540,13 +633,13 @@ class ScrcpyTab(QWidget):
         self.update_profile_dropdown()
         device_id = self.app_config.get_connection_id()
         if device_id == DEVICE_NOT_FOUND or device_id is None:
-            self.device_info_label.setText("Please connect a device.")
+            self.device_info_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
             self._load_encoders_from_cache()
             self._set_all_widgets_enabled(False)
             return
         self._set_all_widgets_enabled(True)
-        commercial_name = self.app_config.get('device_commercial_name', "Unknown Device")
-        self.device_info_label.setText(f"Connected to {commercial_name} (Battery: ?%)" if commercial_name != 'Unknown Device' else "Fetching device info...")
+        commercial_name = self.app_config.get(CONF_DEVICE_COMMERCIAL_NAME, "Unknown Device")
+        self.device_info_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='connected_to', name=commercial_name, battery='?') if commercial_name != 'Unknown Device' else self.app_config.tr('scrcpy_tab', 'labels', key='fetching_info'))
         worker = DeviceInfoWorker(device_id)
         worker.signals.result.connect(lambda info: self.on_device_info_ready(info, force_encoder_fetch))
         worker.signals.error.connect(self.on_device_info_error)
@@ -555,12 +648,12 @@ class ScrcpyTab(QWidget):
     def on_device_info_ready(self, info, force_encoder_fetch):
         self.last_device_info = info
         commercial_name = info.get("commercial_name", "Unknown Device")
-        if self.app_config.values.get('device_commercial_name') == 'Unknown Device':
-            self.app_config.values['device_commercial_name'] = commercial_name
+        if self.app_config.values.get(CONF_DEVICE_COMMERCIAL_NAME) == 'Unknown Device':
+            self.app_config.values[CONF_DEVICE_COMMERCIAL_NAME] = commercial_name
             self.app_config.save_config()
         if default_launcher := info.get('default_launcher'):
-            self.app_config.set('default_launcher', default_launcher)
-        self.device_info_label.setText(f"Connected to {commercial_name} (Battery: {info.get('battery', '?')}%)")
+            self.app_config.set(CONF_DEFAULT_LAUNCHER, default_launcher)
+        self.device_info_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='connected_to', name=commercial_name, battery=info.get('battery', '?')))
         if force_encoder_fetch or not self.app_config.has_encoder_cache():
             self._fetch_and_update_encoders()
         else:
@@ -573,10 +666,10 @@ class ScrcpyTab(QWidget):
 
     def _fetch_and_update_encoders(self):
         if self.app_config.get_connection_id() == DEVICE_NOT_FOUND: return
-        self.device_info_label.setText("Fetching encoders...")
+        self.device_info_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='fetching_encoders'))
         worker = EncoderListWorker()
         worker.signals.result.connect(self._on_encoders_ready)
-        worker.signals.error.connect(lambda err: QMessageBox.critical(self, "Error", f"Could not fetch encoders: {err}"))
+        worker.signals.error.connect(lambda err: show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('scrcpy_tab', 'labels', key='fetch_encoders_error', error=err), icon=QMessageBox.Critical))
         self._start_worker(worker)
 
     def _on_encoders_ready(self, result):
@@ -585,7 +678,8 @@ class ScrcpyTab(QWidget):
         self._populate_encoder_widgets()
         if self.last_device_info:
             commercial_name = self.last_device_info.get("commercial_name", "Unknown Device")
-            self.device_info_label.setText(f"Connected to {commercial_name} (Battery: {self.last_device_info.get('battery', '?')}%)")
+            battery = self.last_device_info.get('battery', '?')
+            self.device_info_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='connected_to', name=commercial_name, battery=battery))
 
     def _load_encoders_from_cache(self):
         cached_data = self.app_config.get_encoder_cache()
@@ -609,12 +703,12 @@ class ScrcpyTab(QWidget):
         return opts
 
     def _on_video_codec_changed(self, text):
-        self.app_config.set('video_codec', text)
-        self._update_encoder_options(self.v_codec_combo, self.v_encoder_combo, self.video_encoders, 'video_encoder')
+        self.app_config.set(CONF_VIDEO_CODEC, text)
+        self._update_encoder_options(self.v_codec_combo, self.v_encoder_combo, self.video_encoders, CONF_VIDEO_ENCODER)
 
     def _on_audio_codec_changed(self, text):
-        self.app_config.set('audio_codec', text)
-        self._update_encoder_options(self.a_codec_combo, self.a_encoder_combo, self.audio_encoders, 'audio_encoder')
+        self.app_config.set(CONF_AUDIO_CODEC, text)
+        self._update_encoder_options(self.a_codec_combo, self.a_encoder_combo, self.audio_encoders, CONF_AUDIO_ENCODER)
 
     def _update_encoder_options(self, codec_combo, encoder_combo, encoder_map, config_key):
         selected_codec = codec_combo.currentText()

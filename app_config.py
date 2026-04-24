@@ -5,55 +5,89 @@ import os
 import json
 import platform
 import threading
+from utils.constants import *
 
 class AppConfig:
     _DEFAULT_VALUES = {
-        'device_id': None,
-        'theme': 'System',
-        'device_commercial_name': 'Unknown Device',
-        'start_app': '',
-        'start_app_name': 'None',
-        'default_launcher': None,
-        'mouse_mode': 'sdk',
-        'gamepad_mode': 'disabled',
-        'keyboard_mode': 'sdk',
-        'mouse_bind': '++++:bhsn',
-        'render_driver': 'opengl',
-        'max_fps': '60',
-        'max_size': '0',
-        'display': 'Auto',
-        'new_display': 'Disabled',
-        'video_codec': 'Auto',
-        'video_encoder': 'Auto',
-        'audio_codec': 'Auto',
-        'audio_encoder': 'Auto',
-        'allow_frame_drop': 'Enabled',
-        'low_latency': 'Enabled',
-        'priority_mode': 'Realtime',
-        'bitrate_mode': 'VBR',
-        'color_range': 'Auto',       # New
-        'iframe_interval': 0,        # New
-        'extraargs': '',
-        'stay_awake': False,
-        'mipmaps': False,
-        'turn_screen_off': False,
-        'fullscreen': False,
-        'use_ludashi_pkg': False,
-        'no_audio': False,
-        'no_video': False,
-        'video_bitrate_slider': 3000,
-        'audio_buffer': 5,
-        'audio_bitrate_slider': 128, # New
-        'video_buffer': 0,
-        'try_unlock': False,
-        'alternate_launch_method': False,
-        'windowing_mode': 'Fullscreen',
-        'show_system_apps': True,
-        'start_web_server_on_launch': False,
+        CONF_DEVICE_ID: None,
+        CONF_THEME: 'System',
+        CONF_LANGUAGE: 'en',
+        CONF_DEVICE_COMMERCIAL_NAME: 'Unknown Device',
+        CONF_START_APP: '',
+        CONF_START_APP_NAME: 'None',
+        CONF_DEFAULT_LAUNCHER: None,
+        CONF_MOUSE_MODE: 'sdk',
+        CONF_GAMEPAD_MODE: 'disabled',
+        CONF_KEYBOARD_MODE: 'sdk',
+        CONF_MOUSE_BIND: '++++:bhsn',
+        CONF_RENDER_DRIVER: 'opengl',
+        CONF_MAX_FPS: '60',
+        CONF_MAX_SIZE: '0',
+        CONF_DISPLAY: 'Auto',
+        CONF_NEW_DISPLAY: 'Disabled',
+        CONF_VIDEO_CODEC: 'Auto',
+        CONF_VIDEO_ENCODER: 'Auto',
+        CONF_AUDIO_CODEC: 'Auto',
+        CONF_AUDIO_ENCODER: 'Auto',
+        CONF_ALLOW_FRAME_DROP: 'Enabled',
+        CONF_LOW_LATENCY: 'Enabled',
+        CONF_PRIORITY_MODE: 'Realtime',
+        CONF_BITRATE_MODE: 'VBR',
+        CONF_COLOR_RANGE: 'Auto',
+        CONF_IFRAME_INTERVAL: 0,
+        CONF_EXTRAARGS: '',
+        CONF_STAY_AWAKE: False,
+        CONF_MIPMAPS: False,
+        CONF_TURN_SCREEN_OFF: False,
+        CONF_FULLSCREEN: False,
+        CONF_USE_LUDASHI_PKG: False,
+        CONF_NO_AUDIO: False,
+        CONF_NO_VIDEO: False,
+        CONF_VIDEO_BITRATE_SLIDER: 3000,
+        CONF_AUDIO_BUFFER: 5,
+        CONF_AUDIO_BITRATE_SLIDER: 128,
+        CONF_VIDEO_BUFFER: 0,
+        CONF_TRY_UNLOCK: False,
+        ALTERNATE_LAUNCH_METHOD: False,
+        CONF_WINDOWING_MODE: 'Fullscreen',
+        CONF_SHOW_SYSTEM_APPS: True,
+        CONF_START_WEB_SERVER_ON_LAUNCH: False,
     }
-    GLOBAL_KEYS = {'theme', 'show_system_apps', 'start_web_server_on_launch'}
-    PROFILE_TYPES = {'app': 'app_metadata', 'winlator': 'winlator_game_configs'}
+    GLOBAL_KEYS = {CONF_THEME, CONF_LANGUAGE, CONF_SHOW_SYSTEM_APPS, CONF_START_WEB_SERVER_ON_LAUNCH}
+    PROFILE_TYPES = {'app': CONF_APP_METADATA, 'winlator': CONF_WINLATOR_GAME_CONFIGS}
 
+
+    @classmethod
+    def all_known_keys(cls):
+        return list(cls._DEFAULT_VALUES.keys())
+
+    def tr(self, section, item, **kwargs):
+        """Returns the translated string for the given section and item."""
+        lang = self.get(CONF_LANGUAGE, 'en')
+        try:
+            # Handle nested translations if 'key' is provided in kwargs
+            sub_key = kwargs.pop('key', None)
+            if sub_key:
+                text = TRANSLATIONS[lang][section][item][sub_key]
+            else:
+                text = TRANSLATIONS[lang][section][item]
+            
+            if kwargs:
+                return text.format(**kwargs)
+            return text
+        except (KeyError, AttributeError):
+            # Fallback to English if key is missing in the current language or language is invalid
+            try:
+                if sub_key:
+                    text = TRANSLATIONS['en'][section][item][sub_key]
+                else:
+                    text = TRANSLATIONS['en'][section][item]
+                
+                if kwargs:
+                    return text.format(**kwargs)
+                return text
+            except KeyError:
+                return f"[{section}.{item}{'.' + sub_key if sub_key else ''}]"
 
     def __init__(self, device_id):
         self.config_data = {}
@@ -84,7 +118,7 @@ class AppConfig:
         return self.values.get(key, default)
 
     def get_connection_id(self):
-        return self.connection_id or self.get('device_id')
+        return self.connection_id or self.get(CONF_DEVICE_ID)
 
     def get_global_values_no_profile(self):
         """
@@ -99,7 +133,7 @@ class AppConfig:
 
         # Load device-specific general settings if a device is connected
         if self.CONFIG_FILE:
-            values.update(self.config_data.get('general_config', {}))
+            values.update(self.config_data.get(CONF_GENERAL_CONFIG, {}))
 
         return values
 
@@ -148,7 +182,7 @@ class AppConfig:
 
         # Save device-specific settings to the correct profile
         if self.active_profile == 'global':
-            self.config_data['general_config'] = device_settings
+            self.config_data[CONF_GENERAL_CONFIG] = device_settings
         elif self.active_profile in self.get_app_config_keys(include_name=False):
             self.save_app_scrcpy_config(self.active_profile, device_settings)
         elif self.active_profile in self.get_winlator_config_keys(include_name=False):
@@ -160,7 +194,7 @@ class AppConfig:
     def get_app_config_keys(self, include_name=True):
         if not self.config_data: return []
         keys = []
-        app_metadata = self.config_data.get('app_metadata', {})
+        app_metadata = self.config_data.get(CONF_APP_METADATA, {})
         for pkg_name, data in app_metadata.items():
             if 'config' in data:
                 if include_name:
@@ -175,7 +209,7 @@ class AppConfig:
     def get_winlator_config_keys(self, include_name=True):
         if not self.config_data: return []
         keys = []
-        winlator_configs = self.config_data.get('winlator_game_configs', {})
+        winlator_configs = self.config_data.get(CONF_WINLATOR_GAME_CONFIGS, {})
         for path, config in winlator_configs.items():
             if config: # Ensure there's actually a config
                 if include_name:
@@ -188,7 +222,7 @@ class AppConfig:
 
     def load_profile(self, profile_key):
         # Start with the base global config
-        base_config = self.config_data.get('general_config', {}).copy()
+        base_config = self.config_data.get(CONF_GENERAL_CONFIG, {}).copy()
 
         # Determine profile type and load specific config
         if profile_key == 'global':
@@ -216,17 +250,17 @@ class AppConfig:
 
 
     def _ensure_metadata_structure(self, key):
-        if 'app_metadata' not in self.config_data:
-            self.config_data['app_metadata'] = {}
-        if key not in self.config_data['app_metadata']:
-            self.config_data['app_metadata'][key] = {}
+        if CONF_APP_METADATA not in self.config_data:
+            self.config_data[CONF_APP_METADATA] = {}
+        if key not in self.config_data[CONF_APP_METADATA]:
+            self.config_data[CONF_APP_METADATA][key] = {}
 
     def get_app_metadata(self, key):
-        return self.config_data.get('app_metadata', {}).get(key, {})
+        return self.config_data.get(CONF_APP_METADATA, {}).get(key, {})
 
     def save_app_metadata(self, key, data):
         self._ensure_metadata_structure(key)
-        self.config_data['app_metadata'][key].update(data)
+        self.config_data[CONF_APP_METADATA][key].update(data)
         self._save_json(self.config_data, self.CONFIG_FILE)
 
     def save_app_scrcpy_config(self, pkg_name, config_data):
@@ -242,25 +276,25 @@ class AppConfig:
         device_settings = {k: v for k, v in config_data.items() if k not in self.GLOBAL_KEYS}
 
         if pkg_name == '__global__':
-            # Save to the 'general_config' for the current device
-            if 'general_config' not in self.config_data:
-                self.config_data['general_config'] = {}
-            self.config_data['general_config'].update(device_settings)
+            # Save to the CONF_GENERAL_CONFIG for the current device
+            if CONF_GENERAL_CONFIG not in self.config_data:
+                self.config_data[CONF_GENERAL_CONFIG] = {}
+            self.config_data[CONF_GENERAL_CONFIG].update(device_settings)
         else:
             # Save to a specific app's profile
             self._ensure_metadata_structure(pkg_name)
-            if 'config' not in self.config_data['app_metadata'][pkg_name]:
-                self.config_data['app_metadata'][pkg_name]['config'] = {}
-            self.config_data['app_metadata'][pkg_name]['config'].update(device_settings)
+            if 'config' not in self.config_data[CONF_APP_METADATA][pkg_name]:
+                self.config_data[CONF_APP_METADATA][pkg_name]['config'] = {}
+            self.config_data[CONF_APP_METADATA][pkg_name]['config'].update(device_settings)
         
         # Save the main device config file
         self._save_json(self.config_data, self.CONFIG_FILE)
 
     def delete_app_scrcpy_config(self, pkg_name):
-        if 'app_metadata' in self.config_data and pkg_name in self.config_data['app_metadata'] and 'config' in self.config_data['app_metadata'][pkg_name]:
-            del self.config_data['app_metadata'][pkg_name]['config']
-            if not self.config_data['app_metadata'][pkg_name]: # cleanup if empty
-                 del self.config_data['app_metadata'][pkg_name]
+        if CONF_APP_METADATA in self.config_data and pkg_name in self.config_data[CONF_APP_METADATA] and 'config' in self.config_data[CONF_APP_METADATA][pkg_name]:
+            del self.config_data[CONF_APP_METADATA][pkg_name]['config']
+            if not self.config_data[CONF_APP_METADATA][pkg_name]: # cleanup if empty
+                 del self.config_data[CONF_APP_METADATA][pkg_name]
             if self.active_profile == pkg_name:
                 self.load_profile('global')
             self._save_json(self.config_data, self.CONFIG_FILE)
@@ -268,25 +302,25 @@ class AppConfig:
         return False
 
     def get_app_list_cache(self):
-        return self.config_data.get('app_list_cache', {})
+        return self.config_data.get(CONF_APP_LIST_CACHE, {})
 
     def save_app_list_cache(self, apps):
-        self.config_data['app_list_cache'] = apps
+        self.config_data[CONF_APP_LIST_CACHE] = apps
         self._save_json(self.config_data, self.CONFIG_FILE)
 
     def get_winlator_game_config(self, game_path):
-        return self.config_data.get('winlator_game_configs', {}).get(game_path, {})
+        return self.config_data.get(CONF_WINLATOR_GAME_CONFIGS, {}).get(game_path, {})
 
     def save_winlator_game_config(self, game_path, config):
         config_to_save = {k: v for k, v in config.items() if k not in self.GLOBAL_KEYS}
-        if 'winlator_game_configs' not in self.config_data:
-            self.config_data['winlator_game_configs'] = {}
-        self.config_data['winlator_game_configs'][game_path] = config_to_save
+        if CONF_WINLATOR_GAME_CONFIGS not in self.config_data:
+            self.config_data[CONF_WINLATOR_GAME_CONFIGS] = {}
+        self.config_data[CONF_WINLATOR_GAME_CONFIGS][game_path] = config_to_save
         self._save_json(self.config_data, self.CONFIG_FILE)
 
     def delete_winlator_game_config(self, game_path):
-        if 'winlator_game_configs' in self.config_data and game_path in self.config_data['winlator_game_configs']:
-            del self.config_data['winlator_game_configs'][game_path]
+        if CONF_WINLATOR_GAME_CONFIGS in self.config_data and game_path in self.config_data[CONF_WINLATOR_GAME_CONFIGS]:
+            del self.config_data[CONF_WINLATOR_GAME_CONFIGS][game_path]
             if self.active_profile == game_path:
                 self.load_profile('global')
             self._save_json(self.config_data, self.CONFIG_FILE)
@@ -297,10 +331,10 @@ class AppConfig:
         return self.ICON_CACHE_DIR
 
     def get_encoder_cache(self):
-        return self.config_data.get('encoder_cache', {})
+        return self.config_data.get(CONF_ENCODER_CACHE, {})
 
     def save_encoder_cache(self, video_encoders, audio_encoders):
-        self.config_data['encoder_cache'] = {'video': video_encoders, 'audio': audio_encoders}
+        self.config_data[CONF_ENCODER_CACHE] = {'video': video_encoders, 'audio': audio_encoders}
         self._save_json(self.config_data, self.CONFIG_FILE)
 
     def has_encoder_cache(self):
@@ -327,16 +361,16 @@ class AppConfig:
         sanitized_id = device_id.replace(':', '_').replace('\\', '_').replace('/', '_')
         self.CONFIG_FILE = os.path.join(self.CONFIG_DIR, f'config_{sanitized_id}.json')
         self.config_data = self._load_json(self.CONFIG_FILE)
-        self.config_data.setdefault('general_config', {})
+        self.config_data.setdefault(CONF_GENERAL_CONFIG, {})
         # Ensure general_config has all default keys, using defaults if not present in file
         for key, default_value in self._DEFAULT_VALUES.items():
-            if key not in self.GLOBAL_KEYS and key not in self.config_data['general_config']:
-                self.config_data['general_config'][key] = default_value
+            if key not in self.GLOBAL_KEYS and key not in self.config_data[CONF_GENERAL_CONFIG]:
+                self.config_data[CONF_GENERAL_CONFIG][key] = default_value
 
-        self.config_data.setdefault('app_metadata', {})
-        self.config_data.setdefault('app_list_cache', {})
-        self.config_data.setdefault('winlator_game_configs', {})
-        self.config_data.setdefault('encoder_cache', {})
+        self.config_data.setdefault(CONF_APP_METADATA, {})
+        self.config_data.setdefault(CONF_APP_LIST_CACHE, {})
+        self.config_data.setdefault(CONF_WINLATOR_GAME_CONFIGS, {})
+        self.config_data.setdefault(CONF_ENCODER_CACHE, {})
 
         # Load the global profile for the device by default
         self.load_profile('global')
