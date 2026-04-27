@@ -262,6 +262,7 @@ class ScrcpyTab(QWidget):
             CONF_NO_AUDIO: 'no_audio',
             CONF_NO_VIDEO: 'no_video',
             CONF_TRY_UNLOCK: 'unlock_device',
+            CONF_FORCE_ADB_FORWARD: 'force_adb_forward',
             ALTERNATE_LAUNCH_METHOD: 'alternate_launch',
         }
         for var_key, label_key in opt_trans.items():
@@ -330,7 +331,7 @@ class ScrcpyTab(QWidget):
     def update_profile_dropdown(self):
         self.profile_combo.blockSignals(True)
         self.profile_combo.clear()
-        self.profile_combo.addItem(self.app_config.tr('scrcpy_tab', 'labels', key='global_config'), userData="global")
+        self.profile_combo.addItem(self.app_config.tr('scrcpy_tab', 'labels', key='global_config'), "global")
         device_id = self.app_config.get_connection_id()
         if device_id == DEVICE_NOT_FOUND or device_id is None:
             active_profile = self.app_config.active_profile
@@ -349,7 +350,7 @@ class ScrcpyTab(QWidget):
         if filtered_app_configs:
             self.profile_combo.insertSeparator(self.profile_combo.count())
             for key, name in sorted(filtered_app_configs, key=lambda x: x[1].lower()):
-                self.profile_combo.addItem(f"{name} (App)", userData=key)
+                self.profile_combo.addItem(f"{name} (App)", key)
         filtered_winlator_configs = []
         winlator_configs_from_settings = self.app_config.get_winlator_config_keys()
         for key, name in winlator_configs_from_settings:
@@ -358,7 +359,7 @@ class ScrcpyTab(QWidget):
         if filtered_winlator_configs:
             self.profile_combo.insertSeparator(self.profile_combo.count())
             for key, name in sorted(filtered_winlator_configs, key=lambda x: x[1].lower()):
-                self.profile_combo.addItem(f"{name} (Winlator)", userData=key)
+                self.profile_combo.addItem(f"{name} (Winlator)", key)
         active_profile = self.app_config.active_profile
         index = self.profile_combo.findData(active_profile)
         if index != -1:
@@ -525,6 +526,7 @@ class ScrcpyTab(QWidget):
             (self.app_config.tr('scrcpy_tab', 'options', key='no_audio'), CONF_NO_AUDIO),
             (self.app_config.tr('scrcpy_tab', 'options', key='no_video'), CONF_NO_VIDEO),
             (self.app_config.tr('scrcpy_tab', 'options', key='unlock_device'), CONF_TRY_UNLOCK),
+            (self.app_config.tr('scrcpy_tab', 'options', key='force_adb_forward'), CONF_FORCE_ADB_FORWARD),
             (self.app_config.tr('scrcpy_tab', 'options', key='alternate_launch'), ALTERNATE_LAUNCH_METHOD),
         ]
         for i, (text, var_key) in enumerate(config_checkboxes):

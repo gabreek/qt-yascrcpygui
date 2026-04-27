@@ -115,6 +115,9 @@ class WinlatorTab(BaseGridTab):
         else:
             self.populate_games_grid_model(games_with_pkg)
             self.show_grid()
+        
+        # Synchronize memory cache for ScrcpyTab profile filtering
+        self.app_config.device_app_cache['winlator_shortcuts'] = {g['path'] for g in games_with_pkg}
 
         self.refresh_button.setEnabled(True)
 

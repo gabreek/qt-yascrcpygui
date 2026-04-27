@@ -52,6 +52,8 @@ class AppConfig:
         CONF_WINDOWING_MODE: 'Fullscreen',
         CONF_SHOW_SYSTEM_APPS: True,
         CONF_START_WEB_SERVER_ON_LAUNCH: False,
+        CONF_FORCE_ADB_FORWARD: False,
+
     }
     GLOBAL_KEYS = {CONF_THEME, CONF_LANGUAGE, CONF_SHOW_SYSTEM_APPS, CONF_START_WEB_SERVER_ON_LAUNCH}
     PROFILE_TYPES = {'app': CONF_APP_METADATA, 'winlator': CONF_WINLATOR_GAME_CONFIGS}
@@ -71,7 +73,7 @@ class AppConfig:
                 text = TRANSLATIONS[lang][section][item][sub_key]
             else:
                 text = TRANSLATIONS[lang][section][item]
-            
+
             if kwargs:
                 return text.format(**kwargs)
             return text
@@ -82,7 +84,7 @@ class AppConfig:
                     text = TRANSLATIONS['en'][section][item][sub_key]
                 else:
                     text = TRANSLATIONS['en'][section][item]
-                
+
                 if kwargs:
                     return text.format(**kwargs)
                 return text
@@ -265,7 +267,7 @@ class AppConfig:
 
     def save_app_scrcpy_config(self, pkg_name, config_data):
         # This single method will now handle global device settings and app-specific settings.
-        
+
         # First, handle pure-global settings which are stored in a separate file
         pure_global_settings = {k: v for k, v in config_data.items() if k in self.GLOBAL_KEYS}
         if pure_global_settings:
@@ -286,7 +288,7 @@ class AppConfig:
             if 'config' not in self.config_data[CONF_APP_METADATA][pkg_name]:
                 self.config_data[CONF_APP_METADATA][pkg_name]['config'] = {}
             self.config_data[CONF_APP_METADATA][pkg_name]['config'].update(device_settings)
-        
+
         # Save the main device config file
         self._save_json(self.config_data, self.CONFIG_FILE)
 
@@ -371,6 +373,15 @@ class AppConfig:
         self.config_data.setdefault(CONF_APP_LIST_CACHE, {})
         self.config_data.setdefault(CONF_WINLATOR_GAME_CONFIGS, {})
         self.config_data.setdefault(CONF_ENCODER_CACHE, {})
+
+        # Populate memory cache from file cache as a fallback
+        cached_apps = self.config_data.get(CONF_APP_LIST_CACHE, {})
+        user_pkgs = {app.get('key') or app.get('pkg_name') for app in cached_apps.get('user_apps', [])}
+        sys_pkgs = {app.get('key') or app.get('pkg_name') for app in cached_apps.get('system_apps', [])}
+        self.device_app_cache['installed_apps'] = {p for p in (user_pkgs | sys_pkgs) if p}
+        
+        cached_winlator = self.config_data.get(CONF_WINLATOR_GAME_CONFIGS, {})
+        self.device_app_cache['winlator_shortcuts'] = set(cached_winlator.keys())
 
         # Load the global profile for the device by default
         self.load_profile('global')

@@ -67,6 +67,7 @@ def _build_command(config_values, extra_scrcpy_args=None, window_title=None, dev
     if config_values.get('stay_awake'): cmd.append('--stay-awake')
     if config_values.get('no_audio'): cmd.append('--no-audio')
     if config_values.get('no_video'): cmd.append('--no-video')
+    if config_values.get(CONF_FORCE_ADB_FORWARD): cmd.append('--force-adb-forward')
 
     video_codec_options = []
     if config_values.get('allow_frame_drop') == 'Enabled':

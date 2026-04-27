@@ -145,6 +145,9 @@ class AppsTab(BaseGridTab):
             'system_apps': system_app_list,
         }
         self.app_config.save_app_list_cache(new_cache)
+        
+        # Synchronize memory cache for ScrcpyTab profile filtering
+        self.app_config.device_app_cache['installed_apps'] = set(user_apps.values()) | set(system_apps.values())
 
         self._update_display()
         self.refresh_button.setEnabled(True)

@@ -41,6 +41,7 @@ CONF_AUDIO_BUFFER = 'audio_buffer'
 CONF_AUDIO_BITRATE_SLIDER = 'audio_bitrate_slider'
 CONF_VIDEO_BUFFER = 'video_buffer'
 CONF_TRY_UNLOCK = 'try_unlock'
+CONF_FORCE_ADB_FORWARD = 'force_adb_forward'
 ALTERNATE_LAUNCH_METHOD = 'alternate_launch_method'
 CONF_WINDOWING_MODE = 'windowing_mode'
 CONF_SHOW_SYSTEM_APPS = 'show_system_apps'
@@ -130,6 +131,7 @@ TRANSLATIONS = {
                 'no_audio': 'No Audio',
                 'no_video': 'No Video',
                 'unlock_device': 'Unlock device',
+                'force_adb_forward': 'Force ADB forward',
                 'alternate_launch': 'Alternate Launch Method',
             }
         },
@@ -304,6 +306,7 @@ TRANSLATIONS = {
                 'no_audio': 'Sem Áudio',
                 'no_video': 'Sem Vídeo',
                 'unlock_device': 'Desbloquear dispositivo',
+                'force_adb_forward': 'Forçar ADB forward',
                 'alternate_launch': 'Método de Lançamento Alternativo',
             }
         },
