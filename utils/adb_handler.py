@@ -93,41 +93,78 @@ def get_package_name_from_shortcut(shortcut_path, device_id=None):
     return "unknown"
 
 def get_game_executable_info(shortcut_path, device_id=None):
-    """Lê o arquivo .desktop para encontrar o caminho do .exe no /sdcard."""
+    """Lê o .desktop e processa os caminhos na memória de forma flexível."""
+    # Usamos o 'cat' para pegar o conteúdo bruto. O arquivo original no celular NÃO é modificado.
     content = _run_adb_command(['shell', 'cat', shlex.quote(shortcut_path)], device_id)
     if not content:
         return None
 
-    game_dir_part = None
-    exe_name = None
-    exec_path = None
+    path_val = None
+    exec_val = None
+    wm_class = None
 
     for line in content.splitlines():
         line = line.strip()
-        if line.lower().startswith('path='):
-            match = re.search(r'dosdevices/d:([^"\\]+)', line, re.IGNORECASE)
-            if match:
-                game_dir_part = match.group(1).strip()
-        elif line.lower().startswith('startupwmclass='):
-            exe_name = line.split('=', 1)[1].strip()
-        elif line.lower().startswith('exec='):
-            # Capture anything inside wine "..."
-            match = re.search(r'wine\s+"([^"]+)"', line, re.IGNORECASE)
-            if match:
-                exec_path = match.group(1).strip()
+        lower_line = line.lower()
+        if lower_line.startswith('path='):
+            path_val = line[5:].strip()
+        elif lower_line.startswith('exec='):
+            exec_val = line[5:].strip()
+        elif lower_line.startswith('startupwmclass='):
+            wm_class = line[15:].strip()
 
-    # Prioritize Path and StartupWMClass
-    if game_dir_part and exe_name:
-        full_path_on_sdcard = f"/storage/emulated/0/Download{game_dir_part}/{exe_name}"
-        return full_path_on_sdcard.replace('\\', '/')
-    elif exec_path:
-        # Handle the /home/xuser/.wine/dosdevices/d: case
-        if exec_path.lower().startswith('/home/xuser/.wine/dosdevices/d:'):
-            full_path_on_sdcard = exec_path.replace('/home/xuser/.wine/dosdevices/d:', '/storage/emulated/0/Download')
-            return full_path_on_sdcard.replace('\\', '/')
-        # Handle other potential paths if necessary, or return as is if it's a direct path
-        # For now, assume it's a direct path if not the specific wine path
-        return exec_path.replace('\\', '/')
+    # 1. Tenta pegar o nome do executável da linha Exec= (mais chance de preservar o Case correto)
+    exe_name = None
+    if exec_val:
+        # Busca o último componente que termina em .exe
+        # Ex: wine D:\\Games\\Assassins Creed III\\AC3SP.exe -> AC3SP.exe
+        exe_match = re.findall(r'([^"\'/\\]+\.exe)', exec_val, re.IGNORECASE)
+        if exe_match:
+            exe_name = exe_match[-1] # Pega o último encontrado
+
+    # Se não achou no Exec, tenta no StartupWMClass como fallback
+    if not exe_name and wm_class:
+        exe_name = os.path.basename(wm_class.replace('\\', '/'))
+        if not exe_name.lower().endswith('.exe'):
+            exe_name += ".exe"
+
+    # 2. Determina o diretório base
+    base_dir = None
+    if path_val:
+        if path_val.startswith('/'):
+            # Caminho Android absoluto direto no .desktop (prioridade)
+            base_dir = path_val
+        else:
+            # Tenta mapear caminho Wine (dosdevices)
+            match = re.search(r'dosdevices[/\\]([a-z]):(.*)', path_val, re.IGNORECASE)
+            if match:
+                drive = match.group(1).lower()
+                rel_path = match.group(2).strip().replace('\\', '/')
+                
+                # Mapeamento de drives padrão do Winlator
+                drive_root = "/storage/emulated/0/Download"
+                if drive == 'e': drive_root = "/storage/emulated/0"
+                # C: é ignorado pois fica em área protegida do app e raramente tem jogos
+                
+                base_dir = f"{drive_root}/{rel_path}"
+
+    # 3. Fallback: Se o Path= falhou, tenta o caminho completo do Exec=
+    if (not base_dir or not exe_name) and exec_val:
+        match = re.search(r'([a-z]):[/\\]+(.*\.exe)', exec_val, re.IGNORECASE)
+        if match:
+            drive = match.group(1).lower()
+            full_wine_path = match.group(2).strip().replace('\\', '/')
+            
+            drive_root = "/storage/emulated/0/Download"
+            if drive == 'e': drive_root = "/storage/emulated/0"
+            
+            final_path = re.sub(r'/+', '/', f"{drive_root}/{full_wine_path}")
+            return final_path
+
+    # 4. Combina diretório e nome se ambos encontrados
+    if base_dir and exe_name:
+        final_path = re.sub(r'/+', '/', f"{base_dir}/{exe_name}")
+        return final_path
 
     return None
 
@@ -152,16 +189,27 @@ def pull_file(remote_path, local_path, device_id=None):
 
 def start_winlator_app(shortcut_path, display_id, package_name, device_id=None, windowing_mode=1):
     """Inicia um aplicativo Winlator em um display virtual específico."""
+
     quoted_path = shlex.quote(shortcut_path)
-    activity_name = ".XServerDisplayActivity"
-    component = f"{package_name}/{activity_name}"
+
+    # Se o package_name já vier com a barra (enviado pelo worker), usa ele integralmente.
+    # Caso contrário, assume que é o Winlator padrão e adiciona a activity comum.
+    if "/" in package_name:
+        component = package_name
+    else:
+        component = f"{package_name}/.XServerDisplayActivity"
+
     remote_command_str = (
         f"am start --display {display_id} "
         f"-n {component} "
         f"--es shortcut_path {quoted_path} "
-        f"--activity-clear-task --activity-clear-top --activity-no-history --windowingMode {windowing_mode}"
+        f"--activity-clear-task --activity-clear-top --activity-no-history "
+        f"--windowingMode {windowing_mode}"
     )
+
     command = ['shell', remote_command_str]
+
+    # O print_command=True vai te ajudar a ver se o Worker mandou o CMod certinho
     _run_adb_command(command, device_id, print_command=True)
 
 def _get_launcher_activity(package_name, device_id=None):
@@ -200,6 +248,29 @@ def start_app_on_display(package_name, display_id, windowing_mode, device_id=Non
 def connect_wifi(address):
     """Connects to a device via Wi-Fi."""
     return _run_adb_command(['connect', address], print_command=True)
+
+def pair_wifi(address, pairing_code):
+    """Pairs with a device via Wi-Fi."""
+    cmd = ['adb', 'pair', address]
+    startupinfo = _get_startupinfo()
+    print(f"Executing ADB Command: {' '.join(cmd)}")
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            startupinfo=startupinfo
+        )
+        # We send the pairing code and wait for the process to finish
+        stdout, stderr = process.communicate(input=pairing_code + '\n', timeout=30)
+        return (stdout + stderr).strip()
+    except subprocess.TimeoutExpired:
+        process.kill()
+        return "Pairing timed out."
+    except Exception as e:
+        return str(e)
 
 def disconnect_wifi(address):
     """Disconnects from a Wi-Fi device."""

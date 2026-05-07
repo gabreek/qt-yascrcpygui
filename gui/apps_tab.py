@@ -34,7 +34,7 @@ class AppsTab(BaseGridTab):
         self.icon_download_workers = []
         self.total_icon_tasks = 0
         self.completed_icon_tasks = 0
-        self.NUM_ICON_WORKERS = 2 # Number of concurrent icon download workers
+        self.NUM_ICON_WORKERS = 5 # Number of concurrent icon download workers
 
         # Determine the base path for resources
         base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -58,6 +58,9 @@ class AppsTab(BaseGridTab):
 
         self._connect_qml_signals()
         self.on_device_changed()
+
+    def closeEvent(self, event):
+        super().closeEvent(event)
 
     def retranslate_ui(self):
         """Updates all labels and UI texts in the tab."""
@@ -477,13 +480,18 @@ class AppsTab(BaseGridTab):
     @Slot(str, str) # pkg_name, error_msg
     def _on_icon_batch_error(self, pkg_name, error_msg):
         print(f"Error downloading icon for {pkg_name}: {error_msg}")
-        self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True}) # Mark as failed
+        self._save_metadata_async(pkg_name, {'icon_fetch_failed': True}) # Mark as failed
         self.completed_icon_tasks += 1
         self.progress_dialog.setValue(self.completed_icon_tasks)
         self.progress_dialog.setLabelText(f"{self.app_config.tr('apps_tab', 'downloading_icons')} ({self.completed_icon_tasks}/{self.total_icon_tasks})")
 
         if self.completed_icon_tasks >= self.total_icon_tasks:
             self._on_all_icons_downloaded()
+
+    def _save_metadata_async(self, pkg_name, data):
+        worker = BatchSaveWorker(pkg_name, data, self.app_config)
+        if self.main_window:
+            self.main_window.start_worker(worker)
 
     def _on_all_icons_downloaded(self):
         if self.progress_dialog.isVisible():

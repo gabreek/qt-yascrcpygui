@@ -98,7 +98,7 @@ class AppConfig:
         self.active_profile = 'global'
         self.connection_id = None
         self.device_app_cache = {'installed_apps': set(), 'winlator_shortcuts': set()} # New attribute
-        self._config_lock = threading.Lock() # Initialize the lock
+        self._config_lock = threading.RLock() # Initialize as RLock for reentrancy
 
         if platform.system() == "Windows":
             self.CONFIG_DIR = os.path.join(os.getenv('APPDATA'), 'ScrcpyLauncher')
@@ -169,28 +169,29 @@ class AppConfig:
                 print(f"Error saving config to {file_path}: {e}")
 
     def save_config(self):
-        if self.CONFIG_FILE is None:
-            # Save global settings even if no device is connected
+        with self._config_lock:
+            if self.CONFIG_FILE is None:
+                # Save global settings even if no device is connected
+                global_settings = {key: self.values[key] for key in self.GLOBAL_KEYS if key in self.values}
+                self._save_json(global_settings, self.GLOBAL_CONFIG_FILE)
+                return
+
+            # Separate global from device-specific settings
             global_settings = {key: self.values[key] for key in self.GLOBAL_KEYS if key in self.values}
+            device_settings = {k: v for k, v in self.values.items() if k not in self.GLOBAL_KEYS}
+
+            # Save global settings
             self._save_json(global_settings, self.GLOBAL_CONFIG_FILE)
-            return
 
-        # Separate global from device-specific settings
-        global_settings = {key: self.values[key] for key in self.GLOBAL_KEYS if key in self.values}
-        device_settings = {k: v for k, v in self.values.items() if k not in self.GLOBAL_KEYS}
+            # Save device-specific settings to the correct profile
+            if self.active_profile == 'global':
+                self.config_data[CONF_GENERAL_CONFIG] = device_settings
+            elif self.active_profile in self.get_app_config_keys(include_name=False):
+                self._save_app_scrcpy_config_internal(self.active_profile, device_settings)
+            elif self.active_profile in self.get_winlator_config_keys(include_name=False):
+                self._save_winlator_game_config_internal(self.active_profile, device_settings)
 
-        # Save global settings
-        self._save_json(global_settings, self.GLOBAL_CONFIG_FILE)
-
-        # Save device-specific settings to the correct profile
-        if self.active_profile == 'global':
-            self.config_data[CONF_GENERAL_CONFIG] = device_settings
-        elif self.active_profile in self.get_app_config_keys(include_name=False):
-            self.save_app_scrcpy_config(self.active_profile, device_settings)
-        elif self.active_profile in self.get_winlator_config_keys(include_name=False):
-            self.save_winlator_game_config(self.active_profile, device_settings)
-
-        self._save_json(self.config_data, self.CONFIG_FILE)
+            self._save_json(self.config_data, self.CONFIG_FILE)
 
 
     def get_app_config_keys(self, include_name=True):
@@ -261,13 +262,17 @@ class AppConfig:
         return self.config_data.get(CONF_APP_METADATA, {}).get(key, {})
 
     def save_app_metadata(self, key, data):
-        self._ensure_metadata_structure(key)
-        self.config_data[CONF_APP_METADATA][key].update(data)
-        self._save_json(self.config_data, self.CONFIG_FILE)
+        with self._config_lock:
+            self._ensure_metadata_structure(key)
+            self.config_data[CONF_APP_METADATA][key].update(data)
+            self._save_json(self.config_data, self.CONFIG_FILE)
 
     def save_app_scrcpy_config(self, pkg_name, config_data):
-        # This single method will now handle global device settings and app-specific settings.
+        with self._config_lock:
+            self._save_app_scrcpy_config_internal(pkg_name, config_data)
+            self._save_json(self.config_data, self.CONFIG_FILE)
 
+    def _save_app_scrcpy_config_internal(self, pkg_name, config_data):
         # First, handle pure-global settings which are stored in a separate file
         pure_global_settings = {k: v for k, v in config_data.items() if k in self.GLOBAL_KEYS}
         if pure_global_settings:
@@ -289,45 +294,49 @@ class AppConfig:
                 self.config_data[CONF_APP_METADATA][pkg_name]['config'] = {}
             self.config_data[CONF_APP_METADATA][pkg_name]['config'].update(device_settings)
 
-        # Save the main device config file
-        self._save_json(self.config_data, self.CONFIG_FILE)
-
     def delete_app_scrcpy_config(self, pkg_name):
-        if CONF_APP_METADATA in self.config_data and pkg_name in self.config_data[CONF_APP_METADATA] and 'config' in self.config_data[CONF_APP_METADATA][pkg_name]:
-            del self.config_data[CONF_APP_METADATA][pkg_name]['config']
-            if not self.config_data[CONF_APP_METADATA][pkg_name]: # cleanup if empty
-                 del self.config_data[CONF_APP_METADATA][pkg_name]
-            if self.active_profile == pkg_name:
-                self.load_profile('global')
-            self._save_json(self.config_data, self.CONFIG_FILE)
-            return True
-        return False
+        with self._config_lock:
+            if CONF_APP_METADATA in self.config_data and pkg_name in self.config_data[CONF_APP_METADATA] and 'config' in self.config_data[CONF_APP_METADATA][pkg_name]:
+                del self.config_data[CONF_APP_METADATA][pkg_name]['config']
+                if not self.config_data[CONF_APP_METADATA][pkg_name]: # cleanup if empty
+                     del self.config_data[CONF_APP_METADATA][pkg_name]
+                if self.active_profile == pkg_name:
+                    self.load_profile(self.active_profile) # Re-load current profile
+                self._save_json(self.config_data, self.CONFIG_FILE)
+                return True
+            return False
 
     def get_app_list_cache(self):
         return self.config_data.get(CONF_APP_LIST_CACHE, {})
 
     def save_app_list_cache(self, apps):
-        self.config_data[CONF_APP_LIST_CACHE] = apps
-        self._save_json(self.config_data, self.CONFIG_FILE)
+        with self._config_lock:
+            self.config_data[CONF_APP_LIST_CACHE] = apps
+            self._save_json(self.config_data, self.CONFIG_FILE)
 
     def get_winlator_game_config(self, game_path):
         return self.config_data.get(CONF_WINLATOR_GAME_CONFIGS, {}).get(game_path, {})
 
     def save_winlator_game_config(self, game_path, config):
+        with self._config_lock:
+            self._save_winlator_game_config_internal(game_path, config)
+            self._save_json(self.config_data, self.CONFIG_FILE)
+
+    def _save_winlator_game_config_internal(self, game_path, config):
         config_to_save = {k: v for k, v in config.items() if k not in self.GLOBAL_KEYS}
         if CONF_WINLATOR_GAME_CONFIGS not in self.config_data:
             self.config_data[CONF_WINLATOR_GAME_CONFIGS] = {}
         self.config_data[CONF_WINLATOR_GAME_CONFIGS][game_path] = config_to_save
-        self._save_json(self.config_data, self.CONFIG_FILE)
 
     def delete_winlator_game_config(self, game_path):
-        if CONF_WINLATOR_GAME_CONFIGS in self.config_data and game_path in self.config_data[CONF_WINLATOR_GAME_CONFIGS]:
-            del self.config_data[CONF_WINLATOR_GAME_CONFIGS][game_path]
-            if self.active_profile == game_path:
-                self.load_profile('global')
-            self._save_json(self.config_data, self.CONFIG_FILE)
-            return True
-        return False
+        with self._config_lock:
+            if CONF_WINLATOR_GAME_CONFIGS in self.config_data and game_path in self.config_data[CONF_WINLATOR_GAME_CONFIGS]:
+                del self.config_data[CONF_WINLATOR_GAME_CONFIGS][game_path]
+                if self.active_profile == game_path:
+                    self.load_profile(self.active_profile)
+                self._save_json(self.config_data, self.CONFIG_FILE)
+                return True
+            return False
 
     def get_icon_cache_dir(self):
         return self.ICON_CACHE_DIR
@@ -336,8 +345,9 @@ class AppConfig:
         return self.config_data.get(CONF_ENCODER_CACHE, {})
 
     def save_encoder_cache(self, video_encoders, audio_encoders):
-        self.config_data[CONF_ENCODER_CACHE] = {'video': video_encoders, 'audio': audio_encoders}
-        self._save_json(self.config_data, self.CONFIG_FILE)
+        with self._config_lock:
+            self.config_data[CONF_ENCODER_CACHE] = {'video': video_encoders, 'audio': audio_encoders}
+            self._save_json(self.config_data, self.CONFIG_FILE)
 
     def has_encoder_cache(self):
         if self.CONFIG_FILE is None: return False
@@ -379,7 +389,7 @@ class AppConfig:
         user_pkgs = {app.get('key') or app.get('pkg_name') for app in cached_apps.get('user_apps', [])}
         sys_pkgs = {app.get('key') or app.get('pkg_name') for app in cached_apps.get('system_apps', [])}
         self.device_app_cache['installed_apps'] = {p for p in (user_pkgs | sys_pkgs) if p}
-        
+
         cached_winlator = self.config_data.get(CONF_WINLATOR_GAME_CONFIGS, {})
         self.device_app_cache['winlator_shortcuts'] = set(cached_winlator.keys())
 

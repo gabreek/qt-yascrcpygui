@@ -146,10 +146,10 @@ class WinlatorTab(BaseGridTab):
             games_in_pkg = sorted(grouped_games[pkg], key=lambda x: x.get('name', '').lower())
             
             # Add a separator for each Winlator version
-            # Assuming pkg 'com.winlator.cmod' refers to "Winlator CMOD"
-            # And other pkgs might have version numbers in their name or we can default
             display_name = pkg.replace('com.winlator.', '').replace('cmod', 'CMOD ').replace('custom', 'Custom ')
-            if display_name == 'CMOD': # Catch for base CMOD package
+            if pkg == 'com.ludashi.benchmark':
+                display_name = 'Winlator CMOD Ludashi'
+            elif display_name == 'CMOD': # Catch for base CMOD package
                 display_name = 'Winlator CMOD'
             else: # If there's a version suffix, format it nicely
                 display_name = f"Winlator {display_name}"
@@ -270,7 +270,7 @@ class WinlatorTab(BaseGridTab):
                     missing_icons.append((path, cached_icon_path))
 
         if not missing_icons:
-            show_message_box(self, self.app_config.tr('common', 'info'), self.app_config.tr('common', 'ok')) # Actually "No icons to extract"
+            show_message_box(self, self.app_config.tr('common', 'info'), self.app_config.tr('winlator_tab', 'no_icons_to_extract'), icon=QMessageBox.Information)
             return
 
         reply = show_message_box(

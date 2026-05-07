@@ -4,6 +4,9 @@ from utils import scrcpy_handler, icon_scraper, adb_handler
 import re
 import os
 import time
+import subprocess
+import shlex
+import queue
 from utils.isolated_extractor import extract_icon_in_process
 from multiprocessing import Process, Queue
 from PIL import Image
@@ -214,30 +217,26 @@ class IconExtractorWorker(BaseRunnableWorker):
 
                 path, save_path = task
                 success = False
-                local_exe_path = None
 
                 try:
                     remote_exe_path = adb_handler.get_game_executable_info(path, self.connection_id)
                     if remote_exe_path:
-                        local_exe_path = os.path.join(self.temp_dir, f"{os.path.basename(remote_exe_path)}_{int(time.time()*1000)}")
-                        adb_handler.pull_file(remote_exe_path, local_exe_path, self.connection_id)
-                        if os.path.exists(local_exe_path):
-                            result_queue = Queue()
-                            process = Process(target=extract_icon_in_process, args=(local_exe_path, save_path, result_queue))
-                            process.start()
-                            process.join()
+                        result_queue = Queue()
+                        # Passamos o caminho remoto DIRETAMENTE para o processo isolado.
+                        # O isolated_extractor agora sabe fazer o pull parcial (10MB) via exec-out.
+                        process = Process(target=extract_icon_in_process, args=(remote_exe_path, save_path, result_queue, self.connection_id))
+                        process.start()
+                        process.join()
 
-                            if not result_queue.empty():
-                                result_success, result_data = result_queue.get()
-                                if result_success:
-                                    success = True
+                        if not result_queue.empty():
+                            result_success, result_data = result_queue.get()
+                            if result_success:
+                                success = True
                 except Exception as e:
-                    self.signals.error.emit(path, str(e)) # Emit error signal with path and message
+                    self.signals.error.emit(path, str(e))
                 finally:
-                    if local_exe_path and os.path.exists(local_exe_path):
-                        os.remove(local_exe_path)
                     self.app_config.save_app_metadata(path, {'exe_icon_fetch_failed': not success})
-                    self.signals.icon_extracted.emit(path, success, save_path if success else self.placeholder_icon) # Emit save_path instead of pixmap
+                    self.signals.icon_extracted.emit(path, success, save_path if success else self.placeholder_icon)
                     self.extraction_queue.task_done()
         except Exception as e:
             self.signals.error.emit("worker_startup_error", str(e)) # Catch any unexpected worker-level errors
@@ -260,15 +259,43 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
 
     def run(self):
         try:
+            target_package = self.package_name
+            original_content = None
+            is_ludashi = "com.ludashi.benchmark" in target_package
+
+            # 1. BACKUP (Somente se for Ludashi)
+            if is_ludashi:
+                # Mudamos para o caminho do CMod
+                target_package = "com.ludashi.benchmark/com.winlator.cmod.XServerDisplayActivity"
+
+                # Lemos o conteúdo do .desktop para a memória
+                cat_cmd = ['adb', '-s', self.connection_id, 'shell', f'cat "{self.shortcut_path}"']
+                backup_process = subprocess.run(cat_cmd, capture_output=True, text=True)
+                if backup_process.returncode == 0:
+                    original_content = backup_process.stdout
+                    print(f"[DEBUG] Backup realizado: {self.shortcut_path}")
+
+            # 2. LANÇAMENTO
             adb_handler.start_winlator_app(
                 shortcut_path=self.shortcut_path,
                 display_id=self.display_id,
-                package_name=self.package_name,
+                package_name=target_package,
                 device_id=self.connection_id,
                 windowing_mode=self.windowing_mode
             )
+
+            # 3. RESTAURAÇÃO (Somente se for Ludashi e o backup existir)
+            if is_ludashi and original_content:
+                # Usamos shlex.quote para garantir que o conteúdo do arquivo não quebre o shell
+                # e enviamos de volta para o Android
+                time.sleep(3)
+                with open("temp_shortcut.desktop", "w") as f:
+                    f.write(original_content)
+                subprocess.run(['adb', '-s', self.connection_id, 'push', 'temp_shortcut.desktop', self.shortcut_path])
+                print(f"[DEBUG] Arquivo restaurado para contornar bug do Ludashi.")
+
         except Exception as e:
-            self.signals.error.emit(f"Failed to launch Winlator app: {e}")
+            self.signals.error.emit(f"Failed to launch Winlator: {e}")
         finally:
             self.signals.finished.emit()
 
@@ -344,10 +371,13 @@ class BatchIconDownloadWorker(QRunnable):
                 try:
                     icon_path = icon_scraper.get_icon(app_name, pkg_name, self.cache_dir, self.app_config)
                     if icon_path:
+                        self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': False})
                         self.signals.finished.emit(pkg_name, icon_path)
                     else:
+                        self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True})
                         self.signals.error.emit(pkg_name, "Icon not found or could not be downloaded.")
                 except Exception as e:
+                    self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': True})
                     self.signals.error.emit(pkg_name, str(e))
                 finally:
                     self.download_queue.task_done() # Mark task as done regardless of success/failure
@@ -403,9 +433,9 @@ class DeviceConfigLoaderWorker(QRunnable):
                     configuration_id = serial_no
 
             self.app_config.load_config_for_device(configuration_id)
-            
+
             self.app_config.connection_id = connection_id
-            
+
             device_info = adb_handler.get_device_info(connection_id)
 
             # --- New: Fetch installed apps and Winlator shortcuts ---
@@ -422,7 +452,7 @@ class DeviceConfigLoaderWorker(QRunnable):
             except Exception as e:
                 self.signals.error.emit(f"Error listing Winlator shortcuts during config load: {e}")
             # --- End New ---
-            
+
             output = {
                 "device_id": connection_id,
                 "device_info": device_info,
@@ -450,6 +480,26 @@ class AdbConnectWorker(BaseRunnableWorker):
         try:
             result = adb_handler.connect_wifi(self.address)
             if "connected" in result or "already connected" in result:
+                self.signals.result.emit(result)
+            else:
+                self.signals.error.emit(result)
+        except Exception as e:
+            self.signals.error.emit(str(e))
+        finally:
+            self.signals.finished.emit()
+
+
+class AdbPairWorker(BaseRunnableWorker):
+    def __init__(self, address, pairing_code):
+        super().__init__()
+        self.address = address
+        self.pairing_code = pairing_code
+        self.signals = AdbWorkerSignals()
+
+    def run(self):
+        try:
+            result = adb_handler.pair_wifi(self.address, self.pairing_code)
+            if "Successfully paired to" in result:
                 self.signals.result.emit(result)
             else:
                 self.signals.error.emit(result)
