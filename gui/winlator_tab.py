@@ -308,10 +308,12 @@ class WinlatorTab(BaseGridTab):
     def start_icon_extraction_flow(self, tasks):
         self.total_tasks = len(tasks)
         self.completed_tasks_count = 0
-        self.progress_dialog = CustomThemedProgressDialog(self.app_config.tr('winlator_tab', 'extracting_icons'), None, 0, self.total_tasks, self) # Change "Cancel" to None
-        self.progress_dialog.setWindowFlags(self.progress_dialog.windowFlags() | Qt.WindowStaysOnTopHint) # Make it stay on top
-        self.progress_dialog.title_bar.minimize_button.setVisible(False) # Hide minimize button
-        self.progress_dialog.title_bar.close_button.setVisible(False) # Ensure close button is hidden
+        self.progress_dialog = CustomThemedProgressDialog(self.app_config.tr('winlator_tab', 'extracting_icons'), None, 0, self.total_tasks, self)
+        # Ensure it has the method; if it's the class in common_widgets, it definitely has it.
+        # Maybe the reference is not what we think it is.
+        self.progress_dialog.setWindowFlags(self.progress_dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.progress_dialog.title_bar.minimize_button.setVisible(False)
+        self.progress_dialog.title_bar.close_button.setVisible(False)
         self.progress_dialog.setValue(0)
         self.progress_dialog.show()
 

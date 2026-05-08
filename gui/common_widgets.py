@@ -206,6 +206,35 @@ class CustomThemedProgressDialog(CustomThemedDialog):
             self.title_bar.close_button.setVisible(False)
 
 
+    def setLabelText(self, text):
+        self.progress_label.setText(text)
+
+    def setRange(self, minimum, maximum):
+        self.progress_bar.setRange(minimum, maximum)
+
+    def setValue(self, value):
+        self.progress_bar.setValue(value)
+        if value >= self.progress_bar.maximum() and not self._canceled:
+            self.close()
+
+    def _handle_cancel(self):
+        self._canceled = True
+        self.canceled.emit()
+        self.close()
+
+    def cancel(self):
+        self._handle_cancel()
+
+    def wasCanceled(self):
+        return self._canceled
+
+    def closeEvent(self, event):
+        if not self._canceled: # If closed without explicit cancel, treat as canceled
+            self._canceled = True
+            self.canceled.emit()
+        super().closeEvent(event)
+
+
 class CustomThemedConfirmationDialog(CustomThemedDialog):
     """A themed confirmation dialog with Yes/No buttons."""
     def __init__(self, parent=None, title="Confirm", message=""):
@@ -236,32 +265,3 @@ class CustomThemedConfirmationDialog(CustomThemedDialog):
         btn_layout.addStretch()
 
         self.add_content_layout(btn_layout)
-
-
-    def setLabelText(self, text):
-        self.progress_label.setText(text)
-
-    def setRange(self, minimum, maximum):
-        self.progress_bar.setRange(minimum, maximum)
-
-    def setValue(self, value):
-        self.progress_bar.setValue(value)
-        if value >= self.progress_bar.maximum() and not self._canceled:
-            self.close()
-
-    def _handle_cancel(self):
-        self._canceled = True
-        self.canceled.emit()
-        self.close()
-
-    def cancel(self):
-        self._handle_cancel()
-
-    def wasCanceled(self):
-        return self._canceled
-
-    def closeEvent(self, event):
-        if not self._canceled: # If closed without explicit cancel, treat as canceled
-            self._canceled = True
-            self.canceled.emit()
-        super().closeEvent(event)
