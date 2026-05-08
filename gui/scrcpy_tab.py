@@ -310,8 +310,12 @@ class ScrcpyTab(QWidget):
             QMessageBox.warning(self, "Error", "Main window reference not available.")
             return
 
-        if self.main_window.web_config_window is None or not self.main_window.web_config_window.isVisible():
+        if self.main_window.web_config_window is None:
             self.main_window.web_config_window = WebServerConfigWindow(self.app_config, self.main_window)
+            
+            # Clear reference when destroyed
+            self.main_window.web_config_window.destroyed.connect(lambda: setattr(self.main_window, 'web_config_window', None))
+            
             self.main_window.web_config_window.start_server_requested.connect(self.main_window.start_web_server)
             self.main_window.web_config_window.stop_server_requested.connect(self.main_window.stop_web_server)
             self.main_window.web_server_status_changed.connect(self.main_window.web_config_window.update_status)
