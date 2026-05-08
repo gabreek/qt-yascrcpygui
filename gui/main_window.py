@@ -166,6 +166,9 @@ class MainWindow(QMainWindow):
         self.device_monitor.device_changed.connect(self._handle_device_status_update)
         self.device_monitor.start()
 
+        # Web server is now lazily initialized only when requested
+        self.web_server_thread = None
+
         if self.app_config.get('start_web_server_on_launch'):
             self.start_web_server()
 
@@ -287,6 +290,8 @@ class MainWindow(QMainWindow):
     def start_web_server(self):
         if self.is_web_server_running():
             return
+        
+        # Lazy initialization
         self.web_server_thread = WebServerThread()
         # Connect the signal from the web server thread to the ScrcpyTab's reload slot
         self.web_server_thread.config_needs_reload.connect(self.scrcpy_tab.on_config_reloaded)
@@ -299,7 +304,7 @@ class MainWindow(QMainWindow):
             return
         if self.web_server_thread:
             self.web_server_thread.stop() # Call the graceful stop method
-            self.web_server_thread = None
+            self.web_server_thread = None # Ensure reference is cleared
         self.web_server_status_changed.emit(False)
         print("Web server stopped.")
 

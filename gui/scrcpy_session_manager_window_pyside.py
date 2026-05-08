@@ -14,8 +14,7 @@ from PIL import Image # Still need PIL for loading various image formats into QI
 
 from utils import scrcpy_handler
 from . import themes
-from .common_widgets import CustomTitleBar, CustomThemedDialog
-
+from .common_widgets import CustomTitleBar, CustomThemedDialog, CustomThemedConfirmationDialog
 
 class ScrcpySessionManagerWindow(QWidget):
     # Signal to emit when the window is closed
@@ -266,11 +265,13 @@ class ScrcpySessionManagerWindow(QWidget):
 
         app_name = session_data['app_name']
 
-        reply = QMessageBox.question(self.parent_widget, self.app_config.tr('session_manager', 'confirm_kill_title'),
-                                     self.app_config.tr('session_manager', 'confirm_kill_msg', name=app_name, pid=pid),
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        dialog = CustomThemedConfirmationDialog(
+            self,
+            title=self.app_config.tr('session_manager', 'confirm_kill_title'),
+            message=self.app_config.tr('session_manager', 'confirm_kill_msg', name=app_name, pid=pid)
+        )
 
-        if reply == QMessageBox.Yes:
+        if dialog.exec():
             if scrcpy_handler.kill_scrcpy_session(pid):
                 QMessageBox.information(self.parent_widget, self.app_config.tr('common', 'success'), self.app_config.tr('session_manager', 'kill_success', name=app_name))
             else:

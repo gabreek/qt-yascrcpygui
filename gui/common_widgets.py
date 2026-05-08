@@ -206,6 +206,38 @@ class CustomThemedProgressDialog(CustomThemedDialog):
             self.title_bar.close_button.setVisible(False)
 
 
+class CustomThemedConfirmationDialog(CustomThemedDialog):
+    """A themed confirmation dialog with Yes/No buttons."""
+    def __init__(self, parent=None, title="Confirm", message=""):
+        super().__init__(parent, title=title)
+        self.setMinimumSize(400, 150)
+        
+        # Hide standard title bar buttons
+        self.title_bar.close_button.setVisible(False)
+        self.title_bar.minimize_button.setVisible(False)
+
+        label = QLabel(message)
+        label.setWordWrap(True)
+        self.add_content_widget(label)
+
+        btn_layout = QHBoxLayout()
+        yes_text = self.app_config.tr('common', 'yes') if self.app_config else "Yes"
+        no_text = self.app_config.tr('common', 'no') if self.app_config else "No"
+
+        self.yes_btn = QPushButton(yes_text)
+        self.no_btn = QPushButton(no_text)
+
+        self.yes_btn.clicked.connect(self.accept)
+        self.no_btn.clicked.connect(self.reject)
+
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.yes_btn)
+        btn_layout.addWidget(self.no_btn)
+        btn_layout.addStretch()
+
+        self.add_content_layout(btn_layout)
+
+
     def setLabelText(self, text):
         self.progress_label.setText(text)
 

@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, Signal, Slot, QUrl, QTimer
 from PySide6.QtGui import QPixmap
 import sys
 import time
+import gc
 
 from utils import scrcpy_handler
 from utils.constants import *
@@ -140,10 +141,12 @@ class WinlatorTab(BaseGridTab):
         self.app_config.device_app_cache['winlator_shortcuts'] = {g['path'] for g in games_with_pkg}
 
         self.refresh_button.setEnabled(True)
+        gc.collect()
 
     def _on_game_list_error(self, error_msg):
         self.show_message(f"{self.app_config.tr('common', 'error')}: {error_msg}")
         self.refresh_button.setEnabled(True)
+        gc.collect()
 
     def populate_games_grid_model(self, games):
         self.all_games_data = []
@@ -246,6 +249,7 @@ class WinlatorTab(BaseGridTab):
         # Refresh the entire grid to ensure visual update
         self.populate_games_grid_model(list(self.game_items.values()))
         show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('apps_tab', 'custom_icon_success_msg'), icon=QMessageBox.Information)
+        gc.collect() # Force cleanup of image processing resources
 
     @Slot(str, str)
     def _on_custom_icon_error(self, game_path, error_message):
@@ -345,6 +349,7 @@ class WinlatorTab(BaseGridTab):
         show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('winlator_tab', 'extraction_finished'))
         self.icon_extractor_workers.clear()
         self._update_grid_model(list(self.game_items.values()))
+        gc.collect()
 
     def execute_launch(self, shortcut_path, game_name):
         game_info = self.game_items.get(shortcut_path)

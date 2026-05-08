@@ -7,6 +7,7 @@ from PySide6.QtGui import QPixmap
 import sys
 import time
 import queue # Added for managing download queue
+import gc
 
 from .base_grid_tab import BaseGridTab
 from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, IconSaveWorker, BatchIconDownloadWorker, BatchSaveWorker
@@ -191,6 +192,7 @@ class AppsTab(BaseGridTab):
 
         self._update_display()
         self.refresh_button.setEnabled(True)
+        gc.collect()
 
     def _update_display(self):
         cached_data = self.app_config.get_app_list_cache()
@@ -318,7 +320,6 @@ class AppsTab(BaseGridTab):
         worker.signals.error.connect(self._on_custom_icon_error)
         if self.main_window:
             self.main_window.start_worker(worker)
-
     @Slot(str, str)
     def _on_custom_icon_saved(self, pkg_name, destination_path):
         """Handles the successful save of a custom icon."""
@@ -331,9 +332,9 @@ class AppsTab(BaseGridTab):
                 app_data['icon_path'] = new_icon_url
                 break
 
-        # Refresh the QML view by re-filtering and rebuilding the model
         self.filter_apps()
-
+        gc.collect() # Force cleanup of image processing resources
+        
         show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_success_title'), self.app_config.tr('apps_tab', 'custom_icon_success_msg'), icon=QMessageBox.Information)
 
     @Slot(str, str)
@@ -531,10 +532,17 @@ class AppsTab(BaseGridTab):
             self.main_window.start_worker(worker)
 
     def _on_all_icons_downloaded(self):
-        if self.progress_dialog.isVisible():
+        if hasattr(self, 'progress_dialog') and self.progress_dialog:
             self.progress_dialog.close()
+            self.progress_dialog.deleteLater() # Ensure cleanup
+            self.progress_dialog = None
+        
         self.icon_download_workers.clear() # Clear worker references
         self.pending_icon_downloads.clear() # Clear pending tasks
+        
+        # Aggressive memory cleanup
+        gc.collect()
+        
         self.filter_apps() # Refresh the UI once with all new icons
 
     def _on_display_id_found_for_alt_launch(self, display_id, shortcut_path, package_name):

@@ -12,6 +12,7 @@ from . import themes
 from utils import scrcpy_handler, adb_handler
 from utils.constants import *
 from .web_server_config_window import WebServerConfigWindow
+from .common_widgets import CustomThemedConfirmationDialog
 
 
 class NoArrowScrollBar(QScrollBar):
@@ -235,8 +236,13 @@ class ScrcpyTab(QWidget):
 
 
     def _redownload_all_icons(self):
-        if self.main_window and hasattr(self.main_window, 'apps_tab'):
-            self.main_window.apps_tab.trigger_icon_redownload()
+        dialog = CustomThemedConfirmationDialog(self, 
+            title=self.app_config.tr('apps_tab', 'redownload_icons_btn'),
+            message=self.app_config.tr('apps_tab', 'confirm_redownload_msg'))
+            
+        if dialog.exec():
+            if self.main_window and hasattr(self.main_window, 'apps_tab'):
+                self.main_window.apps_tab.trigger_icon_redownload()
 
     def retranslate_ui(self):
         """Updates all labels and group titles in the tab."""
