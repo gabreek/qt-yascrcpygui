@@ -19,10 +19,15 @@ Rectangle {
     color: backgroundColor
 
     property var itemsModel: []
-    property int itemIconSize: 40
+    property int itemIconSize: 44
     property int itemFontSize: 9
     property int itemWidth: 80
     property int itemHeight: 105
+    
+    // Rendering settings
+    property bool iconAntiAliasing: false
+    property bool iconSmoothing: false
+    property bool iconMipmaps: false
 
     property alias qmlInternalModel: internalModel
 
@@ -92,93 +97,59 @@ Rectangle {
                 }
             }
 
+            Menu {
+                id: contextMenu
+                MenuItem {
+                    text: "Settings"
+                    onTriggered: if (itemData) gridRoot.settingsRequested(itemData.key, itemData.item_type)
+                }
+                MenuItem {
+                    text: "Delete Config"
+                    onTriggered: if (itemData) gridRoot.deleteConfigRequested(itemData.key, itemData.item_type)
+                }
+                MenuItem {
+                    text: itemData && itemData.is_pinned ? "Unpin" : "Pin"
+                    onTriggered: if (itemData) gridRoot.pinToggled(itemData.key)
+                }
+            }
+
             // App/Game Item Content (the original Column structure)
             Column {
                 visible: !!(itemData && !itemData.isSeparator) // Visible only if NOT a separator
                 anchors.fill: parent // Fills the parent Item
+                spacing: 10
 
-                // Container for icon and overlay
+                // Container for icon
                 Item {
+                    id: iconRoot
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: gridRoot.itemIconSize
-                    height: gridRoot.itemIconSize + 10
+                    height: gridRoot.itemIconSize
 
-                    Image {
-                        id: iconImage
+                    // Container with rounded corners for masking the image
+                    Rectangle {
+                        id: imageContainer
                         anchors.centerIn: parent
                         width: gridRoot.itemIconSize
                         height: gridRoot.itemIconSize
-                        source: (itemData ? itemData.icon_path : "") || "placeholder.png"
-                        fillMode: Image.PreserveAspectFit
-                        antialiasing: true
-                    }
+                        radius: 8
+                        color: "transparent"
+                        clip: true
 
-                    // Action buttons overlay - NEW LOGIC
-                    Item {
-                        id: actionsContainer
-                        anchors.top: parent.top
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: Math.max(optionsLoader.width, secondaryActionsRow.width)
-                        height: Math.max(optionsLoader.height, secondaryActionsRow.height)
-                        opacity: mouseArea.containsMouse ? 1.0 : 0.0
-                        Behavior on opacity { OpacityAnimator { duration: 150 } }
-
-                        // This holds the secondary buttons (S, D, P)
-                        Row {
-                            id: secondaryActionsRow
-                            spacing: 2
-                            opacity: 0.0 // Initially hidden
-                            Behavior on opacity { OpacityAnimator { duration: 150 } }
-
-
-                            Loader {
-                                id: settingsButtonLoader
-                                property var buttonText: "S"
-                                sourceComponent: (itemData && (itemData.item_type === 'app' || itemData.item_type === 'winlator_game')) ? actionButtonComponent : undefined
-                                onLoaded: {
-                                    item.text = buttonText;
-                                    item.clicked.connect(function() {
-                                        if (itemData) gridRoot.settingsRequested(itemData.key, itemData.item_type);
-                                    });
-                                }
-                                width: 28
-                                height: 28
-                            }
-                            Loader {
-                                id: deleteButtonLoader
-                                property var buttonText: "D"
-                                sourceComponent: (itemData && (itemData.item_type === 'app' || itemData.item_type === 'winlator_game')) ? actionButtonComponent : undefined
-                                onLoaded: {
-                                    item.text = buttonText
-                                    item.clicked.connect(function() {
-                                        if (itemData) gridRoot.deleteConfigRequested(itemData.key, itemData.item_type)
-                                    })
-                                }
-                                width: 28
-                                height: 28
-                            }
-                            Loader {
-                                id: pinButtonLoader
-                                property var buttonText: itemData && itemData.is_pinned ? "P" : "p"
-                                sourceComponent: (itemData && (itemData.item_type === 'app' && !itemData.is_launcher_shortcut)) ? actionButtonComponent : undefined
-                                onLoaded: {
-                                    item.text = buttonText
-                                    item.clicked.connect(function() {
-                                        if (itemData) gridRoot.pinToggled(itemData.key)
-                                    })
-                                }
-                                width: 28
-                                height: 28
-                            }
-                        }
-
-                        // The primary "Options" button
-                        Loader {
-                            id: optionsLoader
-                            property var buttonText: "..."
-                            opacity: secondaryActionsRow.opacity === 1.0 ? 0.0 : 1.0
-                            sourceComponent: actionButtonComponent
-                            onLoaded: { item.text = buttonText }
+                        Image {
+                            id: iconImage
+                            anchors.centerIn: parent
+                            width: gridRoot.itemIconSize
+                            height: gridRoot.itemIconSize
+                            // Correctly construct source with query parameters for rendering updates
+                            source: (itemData && itemData.icon_path) 
+                                    ? itemData.icon_path + "?" + (gridRoot.iconAntiAliasing ? "1" : "0") + (gridRoot.iconSmoothing ? "1" : "0") + (gridRoot.iconMipmaps ? "1" : "0") 
+                                    : "placeholder.png"
+                            fillMode: Image.PreserveAspectFit
+                            antialiasing: gridRoot.iconAntiAliasing
+                            smooth: gridRoot.iconSmoothing
+                            mipmap: gridRoot.iconMipmaps
+                            asynchronous: true
                         }
                     }
                 }
@@ -201,61 +172,14 @@ Rectangle {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-
-                property string currentHoverTarget: ""
-
-                onPositionChanged: function(mouse) {
-                    if (!actionsContainer || !optionsLoader) return;
-                    var mappedPoint = mapToItem(actionsContainer, mouse.x, mouse.y);
-                    if (optionsLoader.contains(mappedPoint)) {
-                        if (currentHoverTarget !== "options") {
-                            currentHoverTarget = "options";
-                            expansionTimer.start();
-                        }
-                    }
-                    else {
-                        if (currentHoverTarget === "options") {
-                            currentHoverTarget = "item";
-                            expansionTimer.stop();
-                        }
-                    }
-                }
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
 
                 onClicked: function(mouse) {
                     if (!itemData || itemData.isSeparator) return;
-                    mouse.accepted = true; //This area handles all clicks on the delegate
-
-                    // Check for button clicks first
-                    var mappedPoint = mapToItem(actionsContainer, mouse.x, mouse.y);
-                    if (actionsContainer.contains(mappedPoint)) {
-
-                        if (settingsButtonLoader.item && settingsButtonLoader.item.contains(settingsButtonLoader.item.mapFromItem(mouseArea, mouse.x, mouse.y))) {
-                            settingsButtonLoader.item.clicked();
-                            return;
-                        }
-                        if (deleteButtonLoader.item && deleteButtonLoader.item.contains(deleteButtonLoader.item.mapFromItem(mouseArea, mouse.x, mouse.y))) {
-                            deleteButtonLoader.item.clicked();
-                            return;
-                        }
-                        if (pinButtonLoader.item && pinButtonLoader.item.contains(pinButtonLoader.item.mapFromItem(mouseArea, mouse.x, mouse.y))) {
-                            pinButtonLoader.item.clicked();
-                            return;
-                        }
-                        // If click is on actionsContainer but not a specific button, do nothing.
-
+                    if (mouse.button === Qt.RightButton) {
+                        contextMenu.popup();
                     } else {
-                        // If click was outside button area, launch the app
                         gridRoot.launchRequested(itemData.key, itemData.name);
-                    }
-                }
-                onEntered: {
-                    currentHoverTarget = "item";
-                }
-                onExited: function() {
-                    currentHoverTarget = "none";
-                    expansionTimer.stop();
-                    if (secondaryActionsRow) {
-                        secondaryActionsRow.opacity = 0.0;
                     }
                 }
             }

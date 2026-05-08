@@ -93,14 +93,14 @@ class ScrcpyTab(QWidget):
 
     def on_config_reloaded(self):
         print("Reloading GUI config due to external change (in worker thread)...")
-        
+
         device_id = self.app_config.get_connection_id()
         if not device_id or device_id == DEVICE_NOT_FOUND:
             print("No device connected, skipping cache refresh.")
             self._update_all_widgets_from_config() # Still update widgets if device status changed.
             self.update_profile_dropdown()
             return
-        
+
         # Store current profile to restore later
         self._pending_profile_restore_key = self.profile_combo.currentData()
 
@@ -174,9 +174,16 @@ class ScrcpyTab(QWidget):
         self.scroll_layout.addWidget(group)
         return group, layout
 
+    def _on_rendering_option_changed(self, var_key, state):
+        self.app_config.set(var_key, state)
+        # Notify other tabs to refresh their QML grid properties
+        if self.main_window:
+            self.main_window.apps_tab.update_theme()
+            self.main_window.winlator_tab.update_theme()
+
     def _create_yascrcpy_group(self):
         self.yascrcpy_group, layout = self._create_group_box(self.app_config.tr('scrcpy_tab', 'groups', key='yascrcpy'))
-        
+
         # Theme
         row_theme = QHBoxLayout()
         label_theme = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='theme'))
@@ -207,24 +214,43 @@ class ScrcpyTab(QWidget):
         self.show_system_apps_checkbox.setChecked(self.app_config.get(CONF_SHOW_SYSTEM_APPS, False))
         self.show_system_apps_checkbox.stateChanged.connect(self._on_show_system_apps_changed)
         layout.addWidget(self.show_system_apps_checkbox)
-        
+
+                # HQ Icon Rendering
+        self.hq_rendering_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'rendering', key='hq_icon_rendering'))
+        self.hq_rendering_checkbox.setChecked(self.app_config.get(CONF_HQ_ICON_RENDERING, True))
+        self.hq_rendering_checkbox.stateChanged.connect(lambda state: self._on_rendering_option_changed(CONF_HQ_ICON_RENDERING, bool(state)))
+        layout.addWidget(self.hq_rendering_checkbox)
+        self.option_checkboxes[CONF_HQ_ICON_RENDERING] = self.hq_rendering_checkbox
+
         # Add Configure Web Server button
         self.web_server_config_button = QPushButton(self.app_config.tr('scrcpy_tab', 'labels', key='web_server'))
         self.web_server_config_button.clicked.connect(self._open_web_server_config)
         layout.addWidget(self.web_server_config_button)
 
+        # Redownload Icons
+        self.redownload_icons_button = QPushButton(self.app_config.tr('apps_tab', 'redownload_icons_btn'))
+        self.redownload_icons_button.clicked.connect(self._redownload_all_icons)
+        layout.addWidget(self.redownload_icons_button)
+
+
+
+    def _redownload_all_icons(self):
+        if self.main_window and hasattr(self.main_window, 'apps_tab'):
+            self.main_window.apps_tab.pending_icon_downloads()
+
     def retranslate_ui(self):
         """Updates all labels and group titles in the tab."""
         self.yascrcpy_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='yascrcpy'))
         self.device_info_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='device_status'))
-        self.profile_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='profile'))
         self.general_settings_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='general'))
         self.video_settings_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='video'))
         self.audio_settings_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='audio'))
         self.options_group.setTitle(self.app_config.tr('scrcpy_tab', 'groups', key='options'))
 
         self.show_system_apps_checkbox.setText(self.app_config.tr('scrcpy_tab', 'labels', key='show_system_apps'))
+        self.hq_rendering_checkbox.setText(self.app_config.tr('scrcpy_tab', 'rendering', key='hq_icon_rendering'))
         self.web_server_config_button.setText(self.app_config.tr('scrcpy_tab', 'labels', key='web_server'))
+        self.redownload_icons_button.setText(self.app_config.tr('apps_tab', 'redownload_icons_btn'))
 
         # Update general fields labels
         translations = {
@@ -289,7 +315,7 @@ class ScrcpyTab(QWidget):
             self.main_window.web_config_window.start_server_requested.connect(self.main_window.start_web_server)
             self.main_window.web_config_window.stop_server_requested.connect(self.main_window.stop_web_server)
             self.main_window.web_server_status_changed.connect(self.main_window.web_config_window.update_status)
-        
+
         self.main_window.web_config_window.show()
         self.main_window.web_config_window.raise_()
         self.main_window.web_config_window.activateWindow()
@@ -619,7 +645,7 @@ class ScrcpyTab(QWidget):
 
         slider.valueChanged.connect(update_label)
         slider.valueChanged.connect(lambda value: self.app_config.set(var_key, value)) # Store the raw value (0 for auto)
-        
+
         # Set initial value and update label
         current_value = self.app_config.get(var_key, default_val)
         slider.setValue(int(current_value))
@@ -741,7 +767,8 @@ class ScrcpyTab(QWidget):
             elif isinstance(editor, QComboBox):
                 editor.setCurrentText(str(value))
         for var_key, checkbox in self.option_checkboxes.items():
-            checkbox.setChecked(self.app_config.get(var_key, False))
+            value = self.app_config.get(var_key, False)
+            checkbox.setChecked(bool(value))
         for var_key, (slider, value_label) in self.sliders.items():
             value = self.app_config.get(var_key, 0)
             slider.setValue(int(value))

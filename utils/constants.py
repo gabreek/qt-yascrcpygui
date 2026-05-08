@@ -47,6 +47,9 @@ CONF_WINDOWING_MODE = 'windowing_mode'
 CONF_SHOW_SYSTEM_APPS = 'show_system_apps'
 CONF_START_WEB_SERVER_ON_LAUNCH = 'start_web_server_on_launch'
 
+# Icon rendering setting
+CONF_HQ_ICON_RENDERING = 'hq_icon_rendering'
+
 # --- Structural Config Keys ---
 CONF_GENERAL_CONFIG = 'general_config'
 CONF_APP_METADATA = 'app_metadata'
@@ -86,6 +89,7 @@ TRANSLATIONS = {
                 'general': 'General Settings',
                 'video': 'Video Settings',
                 'audio': 'Audio Settings',
+                'rendering': 'Rendering',
                 'options': 'Options',
             },
             'labels': {
@@ -123,6 +127,9 @@ TRANSLATIONS = {
                 'audio_bitrate': 'Audio Bitrate',
                 'fetch_encoders_error': 'Could not fetch encoders: {error}',
             },
+            'rendering': {
+                'hq_icon_rendering': 'HQ Icon Rendering',
+            },
             'options': {
                 'fullscreen': 'Fullscreen',
                 'turn_screen_off': 'Turn screen off',
@@ -138,6 +145,7 @@ TRANSLATIONS = {
         'apps_tab': {
             'search_placeholder': 'Search apps...',
             'refresh_btn': 'Refresh Apps',
+            'redownload_icons_btn': 'Redownload Icons',
             'loading_from_device': 'Loading apps from device...',
             'no_apps': 'No applications to display.',
             'empty_list': "App list is empty. Click 'Refresh Apps'.",
@@ -269,9 +277,10 @@ TRANSLATIONS = {
                 'general': 'Configurações Gerais',
                 'video': 'Configurações de Vídeo',
                 'audio': 'Configurações de Áudio',
+                'rendering': 'Renderização',
                 'options': 'Opções',
-            },
-            'labels': {
+                },
+                'labels': {
                 'theme': 'Tema',
                 'language': 'Idioma',
                 'show_system_apps': 'Mostrar Apps de Sistema',
@@ -305,8 +314,10 @@ TRANSLATIONS = {
                 'audio_buffer': 'Buffer de Áudio',
                 'audio_bitrate': 'Bitrate de Áudio',
                 'fetch_encoders_error': 'Não foi possível buscar encoders: {error}',
-            },
-            'options': {
+                },
+                'rendering': {
+                    'hq_icon_rendering': 'Renderização de Ícones HQ',
+                },            'options': {
                 'fullscreen': 'Tela Cheia',
                 'turn_screen_off': 'Desligar tela',
                 'stay_awake': 'Manter Acordado',
@@ -319,13 +330,14 @@ TRANSLATIONS = {
             }
         },
         'apps_tab': {
-            'search_placeholder': 'Pesquisar apps...',
-            'refresh_btn': 'Atualizar Apps',
+            'search_placeholder': 'Buscar apps...',
+            'refresh_btn': 'Atualizar Lista',
+            'redownload_icons_btn': 'Baixar Ícones Novamente',
             'loading_from_device': 'Carregando apps do dispositivo...',
             'no_apps': 'Nenhum aplicativo para exibir.',
-            'empty_list': "A lista de apps está vazia. Clique em 'Atualizar Apps'.",
-            'pinned_section': 'Apps Fixados',
-            'all_section': 'Todos os Apps',
+            'empty_list': "A lista está vazia. Clique em 'Atualizar Lista'.",
+            'pinned_section': 'Fixados',
+            'all_section': 'Todos os Aplicativos',
             'delete_config_title': 'Excluir Configuração',
             'delete_config_msg': 'Tem certeza que deseja excluir a configuração específica para<br><b>{name}</b>?',
             'delete_success': 'Configuração específica para {name} foi excluída.',

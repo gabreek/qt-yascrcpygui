@@ -69,7 +69,13 @@ class BaseGridTab(QWidget):
             root.setProperty("highlightColor", highlight_color)
             root.setProperty("altBaseColor", alt_base_color)
 
-    
+            # Pass rendering settings
+            from utils.constants import CONF_HQ_ICON_RENDERING
+            hq_render = self.app_config.get(CONF_HQ_ICON_RENDERING, True)
+            root.setProperty("iconAntiAliasing", hq_render)
+            root.setProperty("iconSmoothing", hq_render)
+            root.setProperty("iconMipmaps", hq_render)
+
     def _clear_grid(self):
         self.items = {}
         root = self.quick_widget.rootObject()
@@ -94,7 +100,6 @@ class BaseGridTab(QWidget):
         else:
             # If the root object is not ready, wait a bit and retry.
             QTimer.singleShot(100, lambda: self._update_grid_model(model_data))
-
 
     def set_device_status_message(self, message):
         if message:

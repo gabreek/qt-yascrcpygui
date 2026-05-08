@@ -10,3 +10,4 @@ PySide6_Addons
 PySide6_Essentials
 shiboken6
 pyinstaller
+# Note: Ensure QtGraphicalEffects is installed on your system (e.g., qtdeclarative5-dev or libqt6quickeffects)
