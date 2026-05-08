@@ -52,6 +52,26 @@ class WinlatorTab(BaseGridTab):
         self._connect_qml_signals()
         self.on_device_changed()
 
+    def stop_all_workers(self):
+        """Clears the extraction queue and stops all icon extractor workers."""
+        if not hasattr(self, 'extraction_queue'):
+            return
+            
+        print("Stopping WinlatorTab workers...")
+        # Clear existing queue
+        while not self.extraction_queue.empty():
+            try:
+                self.extraction_queue.get_nowait()
+                self.extraction_queue.task_done()
+            except queue.Empty:
+                break
+        
+        # Add sentinel values for each possible worker to ensure they stop
+        for _ in range(self.NUM_WORKERS):
+            self.extraction_queue.put(None)
+        
+        print("WinlatorTab workers signaled to stop.")
+
     def retranslate_ui(self):
         """Updates all labels and UI texts in the tab."""
         self.refresh_button.setText(self.app_config.tr('winlator_tab', 'refresh_btn'))

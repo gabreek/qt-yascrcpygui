@@ -236,7 +236,7 @@ class ScrcpyTab(QWidget):
 
     def _redownload_all_icons(self):
         if self.main_window and hasattr(self.main_window, 'apps_tab'):
-            self.main_window.apps_tab.pending_icon_downloads()
+            self.main_window.apps_tab.trigger_icon_redownload()
 
     def retranslate_ui(self):
         """Updates all labels and group titles in the tab."""

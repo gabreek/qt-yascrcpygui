@@ -9,7 +9,7 @@ import time
 import queue # Added for managing download queue
 
 from .base_grid_tab import BaseGridTab
-from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, IconSaveWorker, BatchIconDownloadWorker
+from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, IconSaveWorker, BatchIconDownloadWorker, BatchSaveWorker
 from .dialogs import show_message_box
 from .common_widgets import CustomThemedProgressDialog
 from utils.constants import *
@@ -59,8 +59,45 @@ class AppsTab(BaseGridTab):
         self._connect_qml_signals()
         self.on_device_changed()
 
-    def closeEvent(self, event):
-        super().closeEvent(event)
+    def trigger_icon_redownload(self):
+        """Deletes existing icon files and clears failure flags to force a complete re-download."""
+        print("Forcing icon redownload for all apps...")
+        for app_data in self.all_apps_data:
+            pkg_name = app_data['key']
+            if not app_data.get('is_launcher_shortcut'):
+                # 1. Clear failure flag in metadata
+                self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': False})
+                
+                # 2. Delete local icon file if it exists to force redownload
+                cached_icon_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
+                if os.path.exists(cached_icon_path):
+                    try:
+                        os.remove(cached_icon_path)
+                    except Exception as e:
+                        print(f"Error deleting icon for {pkg_name}: {e}")
+        
+        # 3. Update display which will identify missing icons and trigger the batch download
+        self._update_display()
+
+    def stop_all_workers(self):
+        """Clears the download queue and stops all icon download workers."""
+        if not hasattr(self, 'download_queue'):
+            return
+            
+        print("Stopping AppsTab workers...")
+        # Clear existing queue
+        while not self.download_queue.empty():
+            try:
+                self.download_queue.get_nowait()
+                self.download_queue.task_done()
+            except queue.Empty:
+                break
+        
+        # Add sentinel values for each possible worker to ensure they stop
+        for _ in range(self.NUM_ICON_WORKERS):
+            self.download_queue.put(None)
+        
+        print("AppsTab workers signaled to stop.")
 
     def retranslate_ui(self):
         """Updates all labels and UI texts in the tab."""

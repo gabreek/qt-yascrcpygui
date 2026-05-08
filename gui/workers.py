@@ -1,4 +1,4 @@
-from PySide6.QtCore import QObject, Signal, QRunnable
+from PySide6.QtCore import QObject, Signal, QRunnable, QThread
 from PySide6.QtGui import QPixmap
 from utils import scrcpy_handler, icon_scraper, adb_handler
 import re
@@ -127,6 +127,24 @@ class ScrcpyLaunchWorker(QRunnable):
             self.signals.error.emit(f"Failed to launch Scrcpy: {e}")
         finally:
             self.signals.finished.emit()
+
+class BatchSaveWorker(QRunnable):
+    """Worker to save app metadata in the background."""
+    def __init__(self, pkg_name, data, app_config):
+        super().__init__()
+        self.pkg_name = pkg_name
+        self.data = data
+        self.app_config = app_config
+        self.signals = BaseRunnableWorkerSignals()
+
+    def run(self):
+        try:
+            self.app_config.save_app_metadata(self.pkg_name, self.data)
+        except Exception as e:
+            self.signals.error.emit(str(e))
+        finally:
+            self.signals.finished.emit()
+
 
 # --- Scrcpy Tab Workers ---
 class DeviceInfoWorkerSignals(BaseRunnableWorkerSignals):
@@ -272,10 +290,13 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
                 # Lemos o conteúdo do .desktop para a memória
                 cat_cmd = ['adb', '-s', self.connection_id, 'shell', f'cat "{self.shortcut_path}"']
                 env = get_clean_env()
-                backup_process = subprocess.run(cat_cmd, capture_output=True, text=True, env=env)
-                if backup_process.returncode == 0:
-                    original_content = backup_process.stdout
-                    print(f"[DEBUG] Backup realizado: {self.shortcut_path}")
+                try:
+                    backup_process = subprocess.run(cat_cmd, capture_output=True, text=True, env=env, timeout=10)
+                    if backup_process.returncode == 0:
+                        original_content = backup_process.stdout
+                        print(f"[DEBUG] Backup realizado: {self.shortcut_path}")
+                except subprocess.TimeoutExpired:
+                    print("[DEBUG] Timeout ao realizar backup do shortcut.")
 
             # 2. LANÇAMENTO
             adb_handler.start_winlator_app(
@@ -294,8 +315,11 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
                 with open("temp_shortcut.desktop", "w") as f:
                     f.write(original_content)
                 env = get_clean_env()
-                subprocess.run(['adb', '-s', self.connection_id, 'push', 'temp_shortcut.desktop', self.shortcut_path], env=env)
-                print(f"[DEBUG] Arquivo restaurado para contornar bug do Ludashi.")
+                try:
+                    subprocess.run(['adb', '-s', self.connection_id, 'push', 'temp_shortcut.desktop', self.shortcut_path], env=env, timeout=15)
+                    print(f"[DEBUG] Arquivo restaurado para contornar bug do Ludashi.")
+                except subprocess.TimeoutExpired:
+                    print("[DEBUG] Timeout ao restaurar shortcut.")
 
         except Exception as e:
             self.signals.error.emit(f"Failed to launch Winlator: {e}")
@@ -389,27 +413,46 @@ class BatchIconDownloadWorker(QRunnable):
 
 
 # --- Main Window Workers ---
+class DeviceMonitor(QThread):
+    """
+    Persistent thread to monitor connected ADB devices.
+    Replaces the previous QTimer + QRunnable approach for better stability.
+    """
+    device_changed = Signal(str)
 
-
-
-# --- Main Window Workers ---
-class DeviceCheckWorkerSignals(QObject):
-    finished = Signal()
-    result = Signal(str)
-
-class DeviceCheckWorker(QRunnable):
-    def __init__(self):
+    def __init__(self, interval_ms=2000):
         super().__init__()
-        self.signals = DeviceCheckWorkerSignals()
+        self.interval_ms = interval_ms
+        self._running = True
+        self._paused = False
+        self._last_device_id = None
 
     def run(self):
-        try:
-            device_id = adb_handler.get_connected_device_id()
-            self.signals.result.emit(device_id)
-        except Exception:
-            self.signals.result.emit(None)
-        finally:
-            self.signals.finished.emit()
+        while self._running:
+            if not self._paused:
+                try:
+                    # Uses the adb_handler with timeout protection
+                    device_id = adb_handler.get_connected_device_id()
+                    if device_id != self._last_device_id:
+                        self._last_device_id = device_id
+                        self.device_changed.emit(device_id)
+                except Exception as e:
+                    print(f"DeviceMonitor error: {e}")
+
+            self.msleep(self.interval_ms)
+
+    def stop(self):
+        """Signals the thread to stop and waits for it to finish."""
+        self._running = False
+        self.wait()
+
+    def pause(self):
+        """Temporarily suspends device checking."""
+        self._paused = True
+
+    def resume(self):
+        """Resumes device checking."""
+        self._paused = False
 
 
 class DeviceConfigLoaderWorkerSignals(QObject):

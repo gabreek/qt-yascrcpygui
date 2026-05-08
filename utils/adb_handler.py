@@ -16,7 +16,7 @@ def _get_startupinfo():
         return startupinfo
     return None
 
-def _run_adb_command(command, device_id=None, print_command=False, ignore_errors=False):
+def _run_adb_command(command, device_id=None, print_command=False, ignore_errors=False, timeout=10):
     """Helper para executar um comando adb, retornando a saída decodificada."""
     base_cmd = ['adb']
     if device_id:
@@ -31,7 +31,7 @@ def _run_adb_command(command, device_id=None, print_command=False, ignore_errors
     env = get_clean_env()
 
     try:
-        result = subprocess.check_output(full_cmd, text=True, stderr=subprocess.PIPE, startupinfo=startupinfo, env=env)
+        result = subprocess.check_output(full_cmd, text=True, stderr=subprocess.PIPE, startupinfo=startupinfo, env=env, timeout=timeout)
         return result.strip()
     except FileNotFoundError:
         if not ignore_errors:
@@ -40,6 +40,10 @@ def _run_adb_command(command, device_id=None, print_command=False, ignore_errors
         return ""
     except subprocess.CalledProcessError:
         # These are common and should be handled by the calling function
+        return ""
+    except subprocess.TimeoutExpired:
+        if not ignore_errors:
+            print(f"Error: ADB command '{shlex.join(full_cmd)}' timed out after {timeout}s.")
         return ""
     except Exception:
         # General exceptions should also be handled by the caller
@@ -170,7 +174,7 @@ def get_game_executable_info(shortcut_path, device_id=None):
 
     return None
 
-def pull_file(remote_path, local_path, device_id=None):
+def pull_file(remote_path, local_path, device_id=None, timeout=60):
     """Baixa um arquivo do dispositivo para o computador local de forma síncrona."""
     cmd = ['adb']
     if device_id:
@@ -182,7 +186,13 @@ def pull_file(remote_path, local_path, device_id=None):
         env = get_clean_env()
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', startupinfo=startupinfo, env=env)
-        stdout, stderr = process.communicate()
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            print(f"Error: pull_file timed out after {timeout}s for {remote_path}")
+            return False
+            
         if process.returncode != 0:
             # Error is handled by the caller, no need to print here
             return False

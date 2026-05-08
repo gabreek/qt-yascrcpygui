@@ -11,7 +11,7 @@ from .scrcpy_tab import ScrcpyTab
 from .apps_tab import AppsTab
 from .scrcpy_session_manager_window_pyside import ScrcpySessionManagerWindow
 from .winlator_tab import WinlatorTab
-from .workers import DeviceCheckWorker, DeviceConfigLoaderWorker
+from .workers import DeviceMonitor, DeviceConfigLoaderWorker
 from .dialogs import show_message_box
 from .adb_wifi_window import AdbWifiWindow
 from . import themes
@@ -161,12 +161,10 @@ class MainWindow(QMainWindow):
         self.update_theme()
 
         self.last_known_device_id = None
-        self.device_check_timer = QTimer(self)
-        self.device_check_timer.timeout.connect(self.check_device_connection)
-        self.device_check_timer.start(2000)
-        self.check_device_connection()
-
-        self.device_status_updated.connect(self._handle_device_status_update)
+        # Persistent device monitor thread (replaces QTimer + QRunnable)
+        self.device_monitor = DeviceMonitor(interval_ms=2000)
+        self.device_monitor.device_changed.connect(self._handle_device_status_update)
+        self.device_monitor.start()
 
         if self.app_config.get('start_web_server_on_launch'):
             self.start_web_server()
@@ -289,10 +287,6 @@ class MainWindow(QMainWindow):
     def start_web_server(self):
         if self.is_web_server_running():
             return
-
-    def start_web_server(self):
-        if self.is_web_server_running():
-            return
         self.web_server_thread = WebServerThread()
         # Connect the signal from the web server thread to the ScrcpyTab's reload slot
         self.web_server_thread.config_needs_reload.connect(self.scrcpy_tab.on_config_reloaded)
@@ -313,22 +307,43 @@ class MainWindow(QMainWindow):
         return self.web_server_thread is not None and self.web_server_thread.isRunning()
 
     def closeEvent(self, event):
-        self.stop_web_server() # Ensure server is stopped first
+        """Gerencia o fechamento da aplicação, garantindo que threads e o servidor sejam parados."""
+        print("Closing application...")
+        
+        # 1. Stop the web server
+        self.stop_web_server()
+        
+        # 2. Stop the device monitor thread
+        if hasattr(self, 'device_monitor'):
+            self.device_monitor.stop()
+        
+        # 3. Close auxiliary windows
         if self.scrcpy_session_manager_window:
             self.scrcpy_session_manager_window.close()
-        self.device_check_timer.stop()
-        self.thread_pool.clear()
-        self.thread_pool.waitForDone()
+        
+        if self.adb_wifi_window:
+            self.adb_wifi_window.close()
+
+        # 4. Stop workers in all tabs
         self.scrcpy_tab.stop_all_workers()
+        self.apps_tab.stop_all_workers()
+        self.winlator_tab.stop_all_workers()
+        
+        # 5. Clear and wait for the global thread pool
+        # This will wait for any non-infinite-loop QRunnables to finish.
+        self.thread_pool.clear()
+        self.thread_pool.waitForDone(3000) # Wait up to 3s for remaining workers
+        
+        print("Application closed successfully.")
         event.accept()
 
-    # ... (rest of the methods are the same) ...
-
     def pause_device_check(self):
-        self.device_check_timer.stop()
+        if hasattr(self, 'device_monitor'):
+            self.device_monitor.pause()
 
     def resume_device_check(self):
-        self.device_check_timer.start(2000)
+        if hasattr(self, 'device_monitor'):
+            self.device_monitor.resume()
 
     def _handle_launch_request(self, item_key, item_name, launch_type):
         device_id = self.app_config.get_connection_id()
@@ -410,16 +425,6 @@ class MainWindow(QMainWindow):
     def _on_worker_finished(self, worker):
         if worker in self.active_workers:
             self.active_workers.remove(worker)
-
-    def check_device_connection(self):
-        worker = DeviceCheckWorker()
-        worker.signals.result.connect(self._on_device_check_result)
-        worker.signals.finished.connect(lambda: self._on_worker_finished(worker))
-        self.active_workers.append(worker)
-        self.thread_pool.start(worker)
-
-    def _on_device_check_result(self, current_device_id):
-        self.device_status_updated.emit(current_device_id)
 
     def _update_all_tabs_status(self, message=None):
         if message:

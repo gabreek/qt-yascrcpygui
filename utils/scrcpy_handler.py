@@ -328,7 +328,7 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
 
     return scrcpy_process
 
-def list_installed_apps(device_id=None):
+def list_installed_apps(device_id=None, timeout=15):
     """Lista os apps, separando entre usuário e sistema, usando o comando scrcpy."""
     cmd = ['scrcpy', '--list-apps']
     if device_id:
@@ -340,12 +340,16 @@ def list_installed_apps(device_id=None):
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo, env=env)
 
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            raise RuntimeError(f"Scrcpy --list-apps timed out after {timeout}s")
+
         user_apps = {}
         system_apps = {}
-        output_lines = []
 
-        for line in process.stdout:
-            output_lines.append(line)
+        for line in stdout.splitlines():
             line = line.strip()
             if not line or line[0] not in ('-', '*'):
                 continue
@@ -361,17 +365,14 @@ def list_installed_apps(device_id=None):
                 elif app_type == '*':
                     system_apps[name.strip()] = pkg.strip()
 
-        process.wait()
-
         if process.returncode != 0:
-            full_output = "".join(output_lines)
-            raise RuntimeError(f"Scrcpy command failed with exit code {process.returncode}: {full_output.strip()}")
+            raise RuntimeError(f"Scrcpy command failed with exit code {process.returncode}: {stdout.strip()}")
 
         return (user_apps, system_apps)
     except (subprocess.SubprocessError, FileNotFoundError) as e:
         raise RuntimeError(f"Could not list apps via scrcpy: {e}")
 
-def list_encoders(device_id=None):
+def list_encoders(device_id=None, timeout=15):
     cmd = ['scrcpy', '--list-encoders']
     if device_id:
         cmd.extend(['-s', device_id])
@@ -382,14 +383,15 @@ def list_encoders(device_id=None):
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo, env=env)
 
-        output_lines = []
-        for line in process.stdout:
-            output_lines.append(line)
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            raise RuntimeError(f"Scrcpy --list-encoders timed out after {timeout}s")
 
-        output = "".join(output_lines)
         video_encoders = {}
         audio_encoders = {}
-        for line in output.splitlines():
+        for line in stdout.splitlines():
             line = line.strip()
             if "(alias for" in line: continue
             vm = re.match(r"--video-codec=(\w+)\s+--video-encoder='?([\w.-]+)'?\s+\((\w+)\)(?:\s+\[\w+\])?", line)
@@ -477,7 +479,7 @@ def kill_scrcpy_session(pid):
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return False
 
-def list_displays(device_id=None):
+def list_displays(device_id=None, timeout=10):
 
     """Lista os displays disponíveis usando scrcpy."""
     cmd = ['scrcpy', '--list-displays']
@@ -490,13 +492,14 @@ def list_displays(device_id=None):
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo, env=env)
 
-        output_lines = []
-        for line in process.stdout:
-            output_lines.append(line)
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            return []
 
-        output = "".join(output_lines)
         displays = []
-        for line in output.splitlines():
+        for line in stdout.splitlines():
             match = re.match(r"--display=(\d+)\s+\(size=(\d+x\d+)\)", line)
             if match:
                 display_id, size = match.groups()
