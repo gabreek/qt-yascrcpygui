@@ -33,6 +33,7 @@ class ScrcpySessionManagerWindow(QWidget):
         # Set window flags for frameless window
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground) # For rounded corners and shadows
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose) # Ensure window is destroyed on close
 
         self.container_widget = QWidget()
         self.container_widget.setObjectName("main_widget")
@@ -115,6 +116,16 @@ class ScrcpySessionManagerWindow(QWidget):
 
 
     def _load_icon(self, relative_path):
+        """Loads and resizes an icon, using a cache to prevent memory leaks."""
+        if not relative_path:
+            return None
+            
+        if not hasattr(self, '_icon_cache'):
+            self._icon_cache = {}
+
+        if relative_path in self._icon_cache:
+            return self._icon_cache[relative_path]
+
         # Determine the base path for resources
         if getattr(sys, 'frozen', False):
             # Running in a PyInstaller bundle
@@ -123,14 +134,26 @@ class ScrcpySessionManagerWindow(QWidget):
             # Running in a normal Python environment
             base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-        full_path = os.path.join(base_path, relative_path)
+        # Check if it's an absolute path or relative
+        if os.path.isabs(relative_path):
+            full_path = relative_path
+        else:
+            full_path = os.path.join(base_path, relative_path)
+
+        if not os.path.exists(full_path):
+            return None
 
         try:
             # Use PIL to open and resize, then convert to QPixmap
-            img = Image.open(full_path).resize((32, 32), Image.LANCZOS)
-            qimage = QImage(img.tobytes(), img.width, img.height, QImage.Format_RGBA8888)
-            return QPixmap.fromImage(qimage)
-        except Exception:
+            with Image.open(full_path) as img:
+                img = img.convert("RGBA").resize((32, 32), Image.LANCZOS)
+                # Creating a QImage that COPIES the data to be safe
+                qimage = QImage(img.tobytes(), img.width, img.height, QImage.Format_RGBA8888).copy()
+                pixmap = QPixmap.fromImage(qimage)
+                self._icon_cache[relative_path] = pixmap
+                return pixmap
+        except Exception as e:
+            print(f"Error loading session icon {relative_path}: {e}")
             return None
 
     def _connect_signals(self):
@@ -286,8 +309,14 @@ class ScrcpySessionManagerWindow(QWidget):
         if self.refresh_timer.isActive():
             self.refresh_timer.stop()
         
+        # Clear resources to prevent leaks
+        self.session_data_map.clear()
+        if hasattr(self, '_icon_cache'):
+            self._icon_cache.clear()
+
         # Uninstall event filter from parent
-        self.parent_widget.removeEventFilter(self)
+        if self.parent_widget:
+            self.parent_widget.removeEventFilter(self)
 
         if self.close_callback:
             self.close_callback()
