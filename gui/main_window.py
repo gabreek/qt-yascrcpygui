@@ -321,7 +321,7 @@ class MainWindow(QMainWindow):
         if self.scrcpy_session_manager_window:
             self.scrcpy_session_manager_window.close()
         
-        if self.adb_wifi_window:
+        if self.adb_wifi_window is not None:
             self.adb_wifi_window.close()
 
         # 4. Stop workers in all tabs
@@ -386,7 +386,7 @@ class MainWindow(QMainWindow):
         self.showMinimized()
 
     def toggle_scrcpy_session_manager(self):
-        if self.scrcpy_session_manager_window is None or not self.scrcpy_session_manager_window.isVisible():
+        if self.scrcpy_session_manager_window is None:
             parent_geometry = self.geometry()
             self.scrcpy_session_manager_window = ScrcpySessionManagerWindow(
                 self.app_config,
@@ -395,6 +395,10 @@ class MainWindow(QMainWindow):
                 parent_geometry.y(),
                 parent_geometry.width()
             )
+            # Clear reference and update button state when window is destroyed
+            self.scrcpy_session_manager_window.destroyed.connect(lambda: setattr(self, 'scrcpy_session_manager_window', None))
+            self.scrcpy_session_manager_window.destroyed.connect(lambda: self.session_manager_button.setText(">"))
+            
             self.scrcpy_session_manager_window.show()
             self.session_manager_button.setText("<")
         else:
@@ -405,6 +409,9 @@ class MainWindow(QMainWindow):
     def open_adb_wifi_manager(self):
         if self.adb_wifi_window is None or not self.adb_wifi_window.isVisible():
             self.adb_wifi_window = AdbWifiWindow(self.app_config, self)
+            
+            # Clear reference when the window is destroyed
+            self.adb_wifi_window.destroyed.connect(lambda: setattr(self, 'adb_wifi_window', None))
             
             # Calculate center position
             parent_rect = self.geometry()

@@ -17,6 +17,7 @@ class AdbWifiWindow(QWidget):
         self.setWindowTitle(self.app_config.tr('adb_wifi', 'title'))
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose) # Ensure window is destroyed on close
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)

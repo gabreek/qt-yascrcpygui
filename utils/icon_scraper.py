@@ -44,8 +44,8 @@ def get_icon(app_name, package_name, cache_dir, app_config, download_if_missing=
             for chunk in icon_response.iter_content(1024):
                 f.write(chunk)
 
-        img = Image.open(icon_path)
-        img.save(icon_path, "PNG")
+        with Image.open(icon_path) as img:
+            img.save(icon_path, "PNG")
 
         # Marca que o download foi bem-sucedido (ou pelo menos não falhou)
         app_config.save_app_metadata(package_name, {"icon_fetch_failed": False})
