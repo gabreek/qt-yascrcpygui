@@ -9,6 +9,7 @@ import os
 import shlex
 import sys
 import subprocess
+from utils.env_helper import get_clean_env
 from PIL import Image # Still need PIL for loading various image formats into QImage
 
 from utils import scrcpy_handler
@@ -174,7 +175,8 @@ class ScrcpySessionManagerWindow(QWidget):
         try:
             # Use wmctrl to activate the window by its title
             cmd = ['wmctrl', '-a', window_title]
-            subprocess.run(cmd, check=False, capture_output=True, text=True)
+            env = get_clean_env()
+            subprocess.run(cmd, check=False, capture_output=True, text=True, env=env)
         except (FileNotFoundError, Exception):
             # Fail silently if wmctrl is not available or if there's an error
             pass

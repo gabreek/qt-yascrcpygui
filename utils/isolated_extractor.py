@@ -2,6 +2,7 @@ import os
 import extract_icon
 import subprocess
 import shlex
+from utils.env_helper import get_clean_env
 from PIL import Image
 
 def extract_icon_from_exe(exe_path, save_path, device_id=None, size=(128, 128)):
@@ -19,8 +20,9 @@ def extract_icon_from_exe(exe_path, save_path, device_id=None, size=(128, 128)):
             # 1. Checa o tamanho do arquivo no Android primeiro
             quoted_exe_path = shlex.quote(exe_path)
             size_cmd = ['adb', '-s', device_id, 'shell', f'stat -c%s {quoted_exe_path} 2>/dev/null']
+            env = get_clean_env()
             try:
-                res = subprocess.check_output(size_cmd, text=True).strip()
+                res = subprocess.check_output(size_cmd, text=True, env=env).strip()
                 remote_size = int(res) if res.isdigit() else 0
             except:
                 remote_size = 0
@@ -40,8 +42,9 @@ def extract_icon_from_exe(exe_path, save_path, device_id=None, size=(128, 128)):
                 cmd = ['adb', '-s', device_id, 'exec-out', f'dd if={quoted_exe_path} bs=1M count={pull_limit_mb} 2>/dev/null']
             
             try:
+                env = get_clean_env()
                 with open(temp_exe, 'wb') as f:
-                    subprocess.run(cmd, stdout=f, check=True)
+                    subprocess.run(cmd, stdout=f, check=True, env=env)
             except subprocess.CalledProcessError:
                 return False
 

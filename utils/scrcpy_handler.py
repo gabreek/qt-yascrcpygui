@@ -9,6 +9,7 @@ import re
 import threading
 import time # Added for delays in output parsing
 import utils.adb_handler # Explicit import for clarity
+from utils.env_helper import get_clean_env
 
 from utils.constants import *
 
@@ -238,10 +239,11 @@ def _wait_for_scrcpy_and_post_cmds(scrcpy_process, post_cmds, startupinfo):
     # Clean up the session from the active list once it has ended
     remove_active_scrcpy_session(scrcpy_process.pid)
 
+    env = get_clean_env()
     for post_cmd_str in post_cmds:
         try:
             post_cmd = shlex.split(post_cmd_str)
-            subprocess.run(post_cmd, check=True, startupinfo=startupinfo)
+            subprocess.run(post_cmd, check=True, startupinfo=startupinfo, env=env)
         except (subprocess.SubprocessError, FileNotFoundError):
             pass # Errors are not critical here
 
@@ -253,7 +255,8 @@ def _run_adb_home_command(device_id, startupinfo):
         if device_id:
             home_cmd.extend(['-s', device_id])
         home_cmd.extend(['shell', 'input', 'keyevent', 'KEYCODE_HOME'])
-        subprocess.run(home_cmd, check=True, startupinfo=startupinfo)
+        env = get_clean_env()
+        subprocess.run(home_cmd, check=True, startupinfo=startupinfo, env=env)
     except (subprocess.SubprocessError, FileNotFoundError):
         pass # Not critical if it fails
 
@@ -277,7 +280,7 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
     for pre_cmd_str in parsed_args['prepend']:
         try:
             pre_cmd = shlex.split(pre_cmd_str)
-            subprocess.run(pre_cmd, check=True, startupinfo=startupinfo)
+            subprocess.run(pre_cmd, check=True, startupinfo=startupinfo, env=env)
         except (subprocess.SubprocessError, FileNotFoundError):
             pass # Not critical
 
@@ -287,7 +290,7 @@ def launch_scrcpy(config_values, capture_output=False, window_title=None, device
     # Construir e executar o comando scrcpy
     cmd = _build_command(config_values, parsed_args['scrcpy'], window_title, device_id, force_no_start_app=force_no_start_app)
     
-    env = os.environ.copy()
+    env = get_clean_env()
     if icon_path and os.path.exists(icon_path):
         env['SCRCPY_ICON_PATH'] = icon_path
 
@@ -333,8 +336,9 @@ def list_installed_apps(device_id=None):
 
     try:
         startupinfo = _get_startupinfo()
+        env = get_clean_env()
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo, env=env)
 
         user_apps = {}
         system_apps = {}
@@ -374,8 +378,9 @@ def list_encoders(device_id=None):
 
     try:
         startupinfo = _get_startupinfo()
+        env = get_clean_env()
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo, env=env)
 
         output_lines = []
         for line in process.stdout:
@@ -481,8 +486,9 @@ def list_displays(device_id=None):
 
     try:
         startupinfo = _get_startupinfo()
+        env = get_clean_env()
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', startupinfo=startupinfo, env=env)
 
         output_lines = []
         for line in process.stdout:

@@ -6,6 +6,7 @@ import shlex
 import re
 import os
 import time
+from utils.env_helper import get_clean_env
 
 def _get_startupinfo():
     """Returns a startupinfo object for subprocesses on Windows to suppress console window."""
@@ -27,9 +28,10 @@ def _run_adb_command(command, device_id=None, print_command=False, ignore_errors
         print('Executing ADB Command:', shlex.join(full_cmd))
 
     startupinfo = _get_startupinfo()
+    env = get_clean_env()
 
     try:
-        result = subprocess.check_output(full_cmd, text=True, stderr=subprocess.PIPE, startupinfo=startupinfo)
+        result = subprocess.check_output(full_cmd, text=True, stderr=subprocess.PIPE, startupinfo=startupinfo, env=env)
         return result.strip()
     except FileNotFoundError:
         if not ignore_errors:
@@ -177,8 +179,9 @@ def pull_file(remote_path, local_path, device_id=None):
 
     try:
         startupinfo = _get_startupinfo()
+        env = get_clean_env()
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', startupinfo=startupinfo)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', startupinfo=startupinfo, env=env)
         stdout, stderr = process.communicate()
         if process.returncode != 0:
             # Error is handled by the caller, no need to print here
@@ -253,6 +256,7 @@ def pair_wifi(address, pairing_code):
     """Pairs with a device via Wi-Fi."""
     cmd = ['adb', 'pair', address]
     startupinfo = _get_startupinfo()
+    env = get_clean_env()
     print(f"Executing ADB Command: {' '.join(cmd)}")
     try:
         process = subprocess.Popen(
@@ -261,7 +265,8 @@ def pair_wifi(address, pairing_code):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            startupinfo=startupinfo
+            startupinfo=startupinfo,
+            env=env
         )
         # We send the pairing code and wait for the process to finish
         stdout, stderr = process.communicate(input=pairing_code + '\n', timeout=30)

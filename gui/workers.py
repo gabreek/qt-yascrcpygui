@@ -7,6 +7,7 @@ import time
 import subprocess
 import shlex
 import queue
+from utils.env_helper import get_clean_env
 from utils.isolated_extractor import extract_icon_in_process
 from multiprocessing import Process, Queue
 from PIL import Image
@@ -270,7 +271,8 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
 
                 # Lemos o conteúdo do .desktop para a memória
                 cat_cmd = ['adb', '-s', self.connection_id, 'shell', f'cat "{self.shortcut_path}"']
-                backup_process = subprocess.run(cat_cmd, capture_output=True, text=True)
+                env = get_clean_env()
+                backup_process = subprocess.run(cat_cmd, capture_output=True, text=True, env=env)
                 if backup_process.returncode == 0:
                     original_content = backup_process.stdout
                     print(f"[DEBUG] Backup realizado: {self.shortcut_path}")
@@ -291,7 +293,8 @@ class WinlatorLaunchWorker(BaseRunnableWorker):
                 time.sleep(3)
                 with open("temp_shortcut.desktop", "w") as f:
                     f.write(original_content)
-                subprocess.run(['adb', '-s', self.connection_id, 'push', 'temp_shortcut.desktop', self.shortcut_path])
+                env = get_clean_env()
+                subprocess.run(['adb', '-s', self.connection_id, 'push', 'temp_shortcut.desktop', self.shortcut_path], env=env)
                 print(f"[DEBUG] Arquivo restaurado para contornar bug do Ludashi.")
 
         except Exception as e:
