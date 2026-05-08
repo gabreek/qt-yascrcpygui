@@ -141,15 +141,21 @@ Rectangle {
                             anchors.centerIn: parent
                             width: gridRoot.itemIconSize
                             height: gridRoot.itemIconSize
-                            // Correctly construct source with query parameters for rendering updates
+                            // sourceSize is CRITICAL for memory management. It limits the decoded image size in RAM.
+                            // We use a slightly larger size than the display size for better quality when scaled.
+                            sourceSize: Qt.size(gridRoot.itemIconSize * 2, gridRoot.itemIconSize * 2)
+                            
+                            // Query parameter is necessary to avoid "Mipmap settings changed" error when toggling HQ rendering
                             source: (itemData && itemData.icon_path) 
-                                    ? itemData.icon_path + "?" + (gridRoot.iconAntiAliasing ? "1" : "0") + (gridRoot.iconSmoothing ? "1" : "0") + (gridRoot.iconMipmaps ? "1" : "0") 
+                                    ? itemData.icon_path + "?" + (gridRoot.iconMipmaps ? "hq" : "sd")
                                     : "placeholder.png"
+                            
                             fillMode: Image.PreserveAspectFit
                             antialiasing: gridRoot.iconAntiAliasing
                             smooth: gridRoot.iconSmoothing
                             mipmap: gridRoot.iconMipmaps
                             asynchronous: true
+                            cache: false
                         }
                     }
                 }

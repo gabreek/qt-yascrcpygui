@@ -41,10 +41,14 @@ class BaseGridTab(QWidget):
         self.info_label.hide()
 
     def update_theme(self, status=None):
-        """Passes the current palette colors to the QML component."""
+        """Passes the current palette colors to the QML component and triggers garbage collection."""
         # The status argument is passed when connected to statusChanged signal
         if status is not None and status != QQuickWidget.Status.Ready:
             return
+
+        # Force garbage collection to help clean up unused textures
+        if self.quick_widget and self.quick_widget.engine():
+            self.quick_widget.engine().collectGarbage()
 
         root = self.quick_widget.rootObject()
         if root:
