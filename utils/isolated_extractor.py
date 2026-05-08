@@ -2,7 +2,7 @@ import os
 import extract_icon
 import subprocess
 import shlex
-from utils.env_helper import get_clean_env
+from .env_helper import get_clean_env
 from PIL import Image
 
 def extract_icon_from_exe(exe_path, save_path, device_id=None, size=(128, 128)):

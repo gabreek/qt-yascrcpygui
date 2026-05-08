@@ -6,7 +6,7 @@ import shlex
 import re
 import os
 import time
-from utils.env_helper import get_clean_env
+from .env_helper import get_clean_env
 
 def _get_startupinfo():
     """Returns a startupinfo object for subprocesses on Windows to suppress console window."""

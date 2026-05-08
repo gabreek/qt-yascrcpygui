@@ -9,7 +9,7 @@ import re
 import threading
 import time # Added for delays in output parsing
 import utils.adb_handler # Explicit import for clarity
-from utils.env_helper import get_clean_env
+from .env_helper import get_clean_env
 
 from utils.constants import *
 
