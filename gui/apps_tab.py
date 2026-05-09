@@ -375,45 +375,53 @@ class AppsTab(BaseGridTab):
         app_data = next((app for app in self.all_apps_data if app['key'] == pkg_name), None)
         if not app_data: return
         
-        app_name = app_data['name']
-        is_launcher_shortcut = app_data.get('is_launcher_shortcut', False)
+        # Check if config already exists
+        existing_configs = self.app_config.get_app_config_keys(include_name=False)
+        
+        if pkg_name not in existing_configs:
+            # Create a new config only if it doesn't exist
+            is_launcher_shortcut = app_data.get('is_launcher_shortcut', False)
 
-        if is_launcher_shortcut:
-            icon_path = self.launcher_icon_path
-        else:
-            cached_icon_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
-            icon_path = cached_icon_path if os.path.exists(cached_icon_path) else None
-
-        is_launcher = (pkg_name == self.app_config.get('default_launcher'))
-        global_config = self.app_config.get_global_values_no_profile()
-        global_is_virtual = global_config.get('new_display') and global_config.get('new_display') != 'Disabled'
-
-        if is_launcher and global_is_virtual:
-            reply = show_message_box(
-                self, self.app_config.tr('apps_tab', 'virtual_display_warn_title'),
-                self.app_config.tr('apps_tab', 'virtual_display_warn_msg'),
-                icon=QMessageBox.Warning, buttons=QMessageBox.Yes | QMessageBox.No, default_button=QMessageBox.Yes, app_icon_path=icon_path
-            )
-            if reply == QMessageBox.Yes:
-                config_to_save = global_config.copy()
-                config_to_save[CONF_NEW_DISPLAY] = 'Disabled'
-                config_to_save[CONF_MAX_SIZE] = '0'
+            if is_launcher_shortcut:
+                icon_path = self.launcher_icon_path
             else:
-                show_message_box(
-                    self, self.app_config.tr('apps_tab', 'action_cancelled_title'),
-                    self.app_config.tr('apps_tab', 'action_cancelled_msg'),
-                    icon=QMessageBox.Information, app_icon_path=icon_path
+                cached_icon_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
+                icon_path = cached_icon_path if os.path.exists(cached_icon_path) else None
+
+            is_launcher = (pkg_name == self.app_config.get('default_launcher'))
+            global_config = self.app_config.get_global_values_no_profile()
+            global_is_virtual = global_config.get('new_display') and global_config.get('new_display') != 'Disabled'
+
+            if is_launcher and global_is_virtual:
+                reply = show_message_box(
+                    self, self.app_config.tr('apps_tab', 'virtual_display_warn_title'),
+                    self.app_config.tr('apps_tab', 'virtual_display_warn_msg'),
+                    icon=QMessageBox.Warning, buttons=QMessageBox.Yes | QMessageBox.No, default_button=QMessageBox.Yes, app_icon_path=icon_path
                 )
-                return
-        else:
-            config_to_save = global_config.copy()
+                if reply == QMessageBox.Yes:
+                    config_to_save = global_config.copy()
+                    config_to_save[CONF_NEW_DISPLAY] = 'Disabled'
+                    config_to_save[CONF_MAX_SIZE] = '0'
+                else:
+                    show_message_box(
+                        self, self.app_config.tr('apps_tab', 'action_cancelled_title'),
+                        self.app_config.tr('apps_tab', 'action_cancelled_msg'),
+                        icon=QMessageBox.Information, app_icon_path=icon_path
+                    )
+                    return
+            else:
+                config_to_save = global_config.copy()
 
-        keys_to_exclude = {CONF_DEVICE_ID, CONF_THEME, CONF_LANGUAGE, CONF_DEVICE_COMMERCIAL_NAME, CONF_SHOW_SYSTEM_APPS, CONF_DEFAULT_LAUNCHER}
-        app_specific_config = {k: v for k, v in config_to_save.items() if k not in keys_to_exclude}
+            keys_to_exclude = {CONF_DEVICE_ID, CONF_THEME, CONF_LANGUAGE, CONF_DEVICE_COMMERCIAL_NAME, CONF_SHOW_SYSTEM_APPS, CONF_DEFAULT_LAUNCHER}
+            app_specific_config = {k: v for k, v in config_to_save.items() if k not in keys_to_exclude}
 
-        self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)
-        show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('apps_tab', 'settings_saved', name=app_name), icon=QMessageBox.Information, app_icon_path=icon_path)
-        self.config_changed.emit(pkg_name)
+            self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)
+            self.config_changed.emit(pkg_name)
+        
+        # Switch to configuration tab and select this profile
+        if self.main_window:
+            self.main_window.tabs.setCurrentIndex(2) # Tab index for ScrcpyTab
+            self.main_window.scrcpy_tab.select_profile(pkg_name)
 
     def filter_apps(self):
         search_text = self.search_input.text().lower()

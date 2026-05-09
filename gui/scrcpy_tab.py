@@ -848,3 +848,14 @@ class ScrcpyTab(QWidget):
             self._set_all_widgets_enabled(False)
         else:
             self.refresh_device_info()
+
+    def select_profile(self, profile_key):
+        """Programmatically selects a configuration profile."""
+        # Refresh the dropdown to ensure the (possibly newly created) profile is there
+        self.update_profile_dropdown()
+        
+        index = self.profile_combo.findData(profile_key)
+        if index != -1:
+            self.profile_combo.setCurrentIndex(index)
+        else:
+            print(f"DEBUG: Profile key '{profile_key}' not found in dropdown.")
