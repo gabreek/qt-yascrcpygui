@@ -209,10 +209,12 @@ class WinlatorTab(BaseGridTab):
         game_name = self.game_items.get(itemKey, {}).get('name', 'N/A')
         current_scrcpy_config = self.app_config.get_global_values_no_profile().copy()
         self.app_config.save_winlator_game_config(itemKey, current_scrcpy_config)
-        
-        icon_path = self._get_game_icon_path(itemKey)
-        show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('winlator_tab', 'config_saved', name=game_name), icon=QMessageBox.Information, app_icon_path=icon_path)
         self.config_changed.emit(itemKey)
+        
+        # Switch to configuration tab and select this profile
+        if self.main_window:
+            self.main_window.tabs.setCurrentIndex(2) # Tab index for ScrcpyTab
+            self.main_window.scrcpy_tab.select_profile(itemKey)
 
     @Slot(str, str)
     def on_icon_dropped(self, game_path, file_url):

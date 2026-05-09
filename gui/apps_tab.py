@@ -412,8 +412,12 @@ class AppsTab(BaseGridTab):
         app_specific_config = {k: v for k, v in config_to_save.items() if k not in keys_to_exclude}
 
         self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)
-        show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('apps_tab', 'settings_saved', name=app_name), icon=QMessageBox.Information, app_icon_path=icon_path)
         self.config_changed.emit(pkg_name)
+        
+        # Switch to configuration tab and select this profile
+        if self.main_window:
+            self.main_window.tabs.setCurrentIndex(2) # Tab index for ScrcpyTab
+            self.main_window.scrcpy_tab.select_profile(pkg_name)
 
     def filter_apps(self):
         search_text = self.search_input.text().lower()
