@@ -376,8 +376,16 @@ class MainWindow(QMainWindow):
         elif launch_type == 'winlator':
             self.winlator_tab.execute_launch(item_key, item_name)
 
-    def update_theme(self):
+    def update_theme(self, theme_name=None):
+        if theme_name is None:
+            theme_name = self.app_config.get(CONF_THEME, 'System')
+        
+        # Apply theme globally to the app
+        themes.apply_theme(self.app, theme_name)
+        
+        # Then apply window-specific tweaks if needed
         themes.apply_stylesheet_to_window(self)
+        
         if self.adb_wifi_window and self.adb_wifi_window.isVisible():
             self.adb_wifi_window.update_theme()
         if self.scrcpy_session_manager_window and self.scrcpy_session_manager_window.isVisible():

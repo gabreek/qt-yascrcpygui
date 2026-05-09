@@ -2,6 +2,7 @@
 # PURPOSE: Centralizes theme management for the application.
 
 from PySide6.QtGui import QPalette
+from qt_material import apply_stylesheet, list_themes
 
 def is_dark_theme(palette):
     """Checks if the provided palette corresponds to a dark theme."""
@@ -250,27 +251,100 @@ def get_theme_stylesheet(palette):
     """
     return style
 
+def get_custom_tweaks(palette):
+    """Returns custom stylesheet tweaks that should be applied on top of any theme."""
+    window_bg_qcolor = palette.color(QPalette.ColorRole.Window)
+    main_bg_color = window_bg_qcolor.name()
+    title_text_color = palette.color(QPalette.ColorRole.WindowText).name()
+    border_color = window_bg_qcolor.darker(140).name() if not is_dark_theme(palette) else window_bg_qcolor.lighter(170).name()
+    
+    base_bg_qcolor = palette.color(QPalette.ColorRole.Base)
+    base_bg_color = base_bg_qcolor.name()
+    
+    highlight_color = palette.color(QPalette.ColorRole.Highlight).name()
+    highlighted_text_color = palette.color(QPalette.ColorRole.HighlightedText).name()
+    alt_base_color = palette.color(QPalette.ColorRole.AlternateBase).name()
+
+    return f"""
+        #main_widget, #container_widget {{
+            background-color: {main_bg_color};
+            border: 1px solid {border_color};
+            border-radius: 15px;
+        }}
+        QDialog {{
+            background-color: transparent;
+        }}
+        #close_button, #minimize_button, #wifi_button, #session_manager_button {{
+            background-color: transparent;
+            border: none;
+            padding: 0;
+            border-radius: 4px;
+        }}
+        #close_button:hover {{
+             background-color: #d32f2f;
+        }}
+        #minimize_button:hover, #wifi_button:hover, #session_manager_button:hover {{
+            background-color: {alt_base_color};
+        }}
+        
+        /* Ensure combo dropdowns look right even with material themes */
+        #combo-dropdown-view {{
+            border: 1px solid {border_color};
+            border-radius: 10px;
+            background-color: {base_bg_color};
+            color: {title_text_color};
+            selection-background-color: {highlight_color};
+            selection-color: {highlighted_text_color};
+            outline: 0px;
+        }}
+        #combo-dropdown-view::item {{
+            padding: 5px 10px;
+        }}
+        
+        /* Custom scrollbar behavior for combo dropdowns */
+        #combo-dropdown-view QScrollBar:vertical {{
+            border: none;
+            background: transparent;
+            width: 8px;
+            margin: 4px 0 4px 0;
+        }}
+        #combo-dropdown-view QScrollBar::handle:vertical {{
+            background: {border_color};
+            border-radius: 4px;
+            min-height: 20px;
+        }}
+        #combo-dropdown-view QScrollBar::add-line:vertical, #combo-dropdown-view QScrollBar::sub-line:vertical {{
+            height: 0;
+            border: none;
+            background: none;
+        }}
+    """
+
 def apply_theme_to_custom_title_bar(title_bar, palette):
     """Applies specific styles to a CustomTitleBar."""
     title_text_color = palette.color(QPalette.ColorRole.WindowText).name()
     title_bar.title_label.setStyleSheet(f"color: {title_text_color}; padding-left: 10px; font-weight: bold; background-color: transparent;")
 
 
-THEMES = {
-    "System": get_theme_stylesheet
-}
-
 def get_available_themes():
     """Returns a list of available theme names."""
-    return list(THEMES.keys())
+    material_themes = [t.replace('.xml', '') for t in list_themes()]
+    return ["System"] + material_themes
 
 def apply_theme(app, theme_name):
     """Applies a theme to the entire application."""
-    if theme_name in THEMES:
-        stylesheet_generator = THEMES[theme_name]
+    if theme_name == "System":
         palette = app.palette()
-        stylesheet = stylesheet_generator(palette)
+        stylesheet = get_theme_stylesheet(palette)
         app.setStyleSheet(stylesheet)
+        return palette
+    elif theme_name in get_available_themes():
+        # Apply qt-material theme
+        apply_stylesheet(app, theme=f"{theme_name}.xml")
+        
+        palette = app.palette()
+        # Append our custom tweaks to whatever qt-material set
+        app.setStyleSheet(app.styleSheet() + get_custom_tweaks(palette))
         return palette
     return None
 
@@ -279,11 +353,13 @@ def apply_stylesheet_to_window(window):
     Applies the application's stylesheet and specific title bar styling
     to any given window (QMainWindow, QWidget, QDialog).
     """
-    from .common_widgets import CustomTitleBar # Updated import
+    from .common_widgets import CustomTitleBar
 
     app_palette = window.palette()
-    app_stylesheet = get_theme_stylesheet(app_palette)
-    window.setStyleSheet(app_stylesheet)
+    
+    # We use the existing application stylesheet if possible, 
+    # but we always re-apply tweaks to ensure the window looks right.
+    window.setStyleSheet(window.styleSheet() + get_custom_tweaks(app_palette))
 
     # Find and style the custom title bar if it exists
     title_bar = window.findChild(CustomTitleBar, "CustomTitleBar")
