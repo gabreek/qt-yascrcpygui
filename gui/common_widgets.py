@@ -61,13 +61,14 @@ class CustomTitleBar(QWidget):
 
 class CustomThemedDialog(QDialog):
     """A frameless, themed QDialog with a custom title bar."""
-    def __init__(self, parent=None, title="Dialog"):
+    def __init__(self, parent=None, title="Dialog", auto_delete=True):
         super().__init__(parent)
         self.app_config = getattr(parent, 'app_config', None) if parent else None
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose) # Ensure window is destroyed on close
+        if auto_delete:
+            self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose) # Ensure window is destroyed on close
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -111,8 +112,8 @@ class CustomThemedDialog(QDialog):
 
 class CustomThemedInputDialog(CustomThemedDialog):
     """A frameless, themed input dialog."""
-    def __init__(self, parent=None, title="Input", label_text="", text_input_mode=QLineEdit.Normal, initial_text=""):
-        super().__init__(parent, title=title)
+    def __init__(self, parent=None, title="Input", label_text="", text_input_mode=QLineEdit.Normal, initial_text="", auto_delete=True):
+        super().__init__(parent, title=title, auto_delete=auto_delete)
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setMinimumSize(400, 150) # Adjust size as needed
 
@@ -155,11 +156,16 @@ class CustomThemedInputDialog(CustomThemedDialog):
 
     @staticmethod
     def getText(parent, title, label, text_input_mode=QLineEdit.Normal, initial_text=""):
-        dialog = CustomThemedInputDialog(parent, title, label, text_input_mode, initial_text)
+        dialog = CustomThemedInputDialog(parent, title, label, text_input_mode, initial_text, auto_delete=False)
         result = dialog.exec()
+        value = ""
+        success = False
         if result == QDialog.Accepted:
-            return dialog.textValue(), True
-        return "", False
+            value = dialog.textValue()
+            success = True
+        
+        dialog.deleteLater() # Clean up manually
+        return value, success
 
 class CustomThemedProgressDialog(CustomThemedDialog):
     canceled = Signal()
