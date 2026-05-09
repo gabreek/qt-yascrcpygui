@@ -206,10 +206,14 @@ class WinlatorTab(BaseGridTab):
     def on_settings_requested(self, itemKey, itemType):
         if itemType != 'winlator_game': return
         
-        game_name = self.game_items.get(itemKey, {}).get('name', 'N/A')
-        current_scrcpy_config = self.app_config.get_global_values_no_profile().copy()
-        self.app_config.save_winlator_game_config(itemKey, current_scrcpy_config)
-        self.config_changed.emit(itemKey)
+        # Check if config already exists
+        existing_configs = self.app_config.get_winlator_config_keys(include_name=False)
+
+        if itemKey not in existing_configs:
+            # Create a new config only if it doesn't exist
+            current_scrcpy_config = self.app_config.get_global_values_no_profile().copy()
+            self.app_config.save_winlator_game_config(itemKey, current_scrcpy_config)
+            self.config_changed.emit(itemKey)
         
         # Switch to configuration tab and select this profile
         if self.main_window:
