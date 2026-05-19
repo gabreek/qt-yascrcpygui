@@ -409,6 +409,30 @@ class AppsTab(BaseGridTab):
         if self.main_window:
             self.main_window.start_worker(worker)
 
+    @Slot(str, str)
+    def _on_custom_icon_saved(self, pkg_name, destination_path):
+        """Handles the successful save of a custom icon."""
+        self.app_config.save_app_metadata(pkg_name, {'has_custom_icon': True})
+        new_icon_url = QUrl.fromLocalFile(destination_path).toString()
+
+        # Update the model in memory
+        for app_data in self.all_apps_data:
+            if app_data['key'] == pkg_name:
+                app_data['icon_path'] = new_icon_url
+                break
+
+        self.filter_apps()
+        gc.collect() # Force cleanup of image processing resources
+        
+        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_success_title'), self.app_config.tr('apps_tab', 'custom_icon_success_msg'), icon=QMessageBox.Information)
+
+    @Slot(str, str)
+    def _on_custom_icon_error(self, pkg_name, error_message):
+        """Handles an error during icon saving."""
+        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_error_title'), self.app_config.tr('apps_tab', 'custom_icon_error_msg', pkg=pkg_name, error=error_message), icon=QMessageBox.Critical)
+        # Optionally, revert to the old icon if you stored it before starting the worker
+        self.filter_apps()
+
     @Slot(str)
     def on_settings_requested(self, pkg_name):
         app_data = next((app for app in self.all_apps_data if app['key'] == pkg_name), None)
