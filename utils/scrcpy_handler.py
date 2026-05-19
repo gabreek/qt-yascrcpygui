@@ -389,6 +389,9 @@ def list_encoders(device_id=None, timeout=15):
             process.kill()
             raise RuntimeError(f"Scrcpy --list-encoders timed out after {timeout}s")
 
+        if process.returncode != 0:
+            raise RuntimeError(f"Scrcpy --list-encoders failed with exit code {process.returncode}: {stdout.strip()}")
+
         video_encoders = {}
         audio_encoders = {}
         for line in stdout.splitlines():
@@ -406,6 +409,11 @@ def list_encoders(device_id=None, timeout=15):
                 audio_encoders.setdefault(codec, [])
                 if (encoder, mode) not in audio_encoders[codec]:
                     audio_encoders[codec].append((encoder, mode))
+
+        if not video_encoders and not audio_encoders:
+            print(f"DEBUG: No encoders found in scrcpy output for device {device_id}.")
+            print(f"DEBUG: Scrcpy Output:\n{stdout}")
+
         return video_encoders, audio_encoders
     except (subprocess.SubprocessError, FileNotFoundError) as e:
         raise RuntimeError(f"Could not list encoders via scrcpy: {e}")

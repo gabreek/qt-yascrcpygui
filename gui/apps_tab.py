@@ -485,8 +485,10 @@ class AppsTab(BaseGridTab):
 
         for app in filtered_apps:
             pkg_name = app['key']
-            # Important: 'pinned' in all_apps_data is already a string (folder name or "")
-            folder = app.get('pinned', "")
+            # Fetch the most up-to-date folder assignment from AppConfig
+            metadata = self.app_config.get_app_metadata(pkg_name)
+            folder = metadata.get('pinned', "")
+            if not isinstance(folder, str): folder = ""
 
             if folder:
                 sessions.setdefault(folder, []).append(app)

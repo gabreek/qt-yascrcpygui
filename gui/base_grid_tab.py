@@ -123,7 +123,6 @@ class BaseGridTab(QWidget):
     @Slot(str, bool)
     def on_section_toggled(self, section_id, collapsed):
         """Slot to handle section toggle from QML."""
-        print(f"Python: Section {section_id} toggled to collapsed={collapsed}")
         if collapsed:
             self.collapsed_sections.add(section_id)
         else:

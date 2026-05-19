@@ -124,7 +124,6 @@ Rectangle {
                         onClicked: {
                             var collapsed = !itemData.isCollapsed
                             var sectionId = itemData.sectionId || itemData.text
-                            console.log("QML: Toggling section:", sectionId, "to", collapsed)
                             
                             // 1. Update the separator itself
                             internalModel.setProperty(index, "isCollapsed", collapsed)
@@ -138,7 +137,6 @@ Rectangle {
                                 var isNextSeparator = nextItem.isSeparator === true
                                 
                                 if (isNextSeparator) {
-                                    console.log("QML: Next section found at", i, "- stopping.")
                                     break
                                 }
                                 

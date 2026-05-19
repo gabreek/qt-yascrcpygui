@@ -173,13 +173,14 @@ class EncoderListWorkerSignals(BaseRunnableWorkerSignals):
     result = Signal(object)
 
 class EncoderListWorker(BaseRunnableWorker):
-    def __init__(self):
+    def __init__(self, connection_id=None):
         super().__init__()
+        self.connection_id = connection_id
         self.signals = EncoderListWorkerSignals()
 
     def run(self):
         try:
-            video_encoders, audio_encoders = scrcpy_handler.list_encoders()
+            video_encoders, audio_encoders = scrcpy_handler.list_encoders(self.connection_id)
             self.signals.result.emit((video_encoders, audio_encoders))
         except Exception as e:
             self.signals.error.emit(str(e))

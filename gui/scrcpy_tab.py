@@ -704,9 +704,10 @@ class ScrcpyTab(QWidget):
         self._load_encoders_from_cache()
 
     def _fetch_and_update_encoders(self):
-        if self.app_config.get_connection_id() == DEVICE_NOT_FOUND: return
+        device_id = self.app_config.get_connection_id()
+        if device_id == DEVICE_NOT_FOUND: return
         self.device_info_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='fetching_encoders'))
-        worker = EncoderListWorker()
+        worker = EncoderListWorker(device_id)
         worker.signals.result.connect(self._on_encoders_ready)
         worker.signals.error.connect(lambda err: show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('scrcpy_tab', 'labels', key='fetch_encoders_error', error=err), icon=QMessageBox.Critical))
         self._start_worker(worker)
