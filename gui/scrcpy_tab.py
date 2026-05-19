@@ -380,8 +380,9 @@ class ScrcpyTab(QWidget):
         winlator_shortcuts_on_device = self.app_config.device_app_cache.get('winlator_shortcuts', set())
         filtered_app_configs = []
         app_configs_from_settings = self.app_config.get_app_config_keys()
+        launcher_pkg = self.app_config.get(CONF_DEFAULT_LAUNCHER)
         for key, name in app_configs_from_settings:
-            if key in installed_apps_packages:
+            if key in installed_apps_packages or key == launcher_pkg:
                 filtered_app_configs.append((key, name))
         if filtered_app_configs:
             self.profile_combo.insertSeparator(self.profile_combo.count())

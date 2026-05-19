@@ -15,6 +15,7 @@ class BaseGridTab(QWidget):
         self.app_config = app_config
         self.main_window = main_window
         self.items = {}  # This will hold the model data
+        self.collapsed_sections = set()
 
         self.main_layout = QVBoxLayout(self)
 
@@ -96,9 +97,14 @@ class BaseGridTab(QWidget):
         self.quick_widget.show()
 
     def _update_grid_model(self, model_data):
-        """Updates the model in the QML GridView."""
+        """Updates the model in the QML GridView with optimization."""
         root = self.quick_widget.rootObject()
         if root:
+            # Skip if model data is identical to last update
+            if hasattr(self, '_last_model_data') and self._last_model_data == model_data:
+                return
+            self._last_model_data = model_data
+            
             # Set the item list for the QML model property
             root.setProperty("itemsModel", model_data)
         else:
@@ -113,3 +119,23 @@ class BaseGridTab(QWidget):
 
     def on_device_changed(self):
         raise NotImplementedError("Subclasses must implement on_device_changed")
+
+    @Slot(str, bool)
+    def on_section_toggled(self, section_id, collapsed):
+        """Slot to handle section toggle from QML."""
+        print(f"Python: Section {section_id} toggled to collapsed={collapsed}")
+        if collapsed:
+            self.collapsed_sections.add(section_id)
+        else:
+            self.collapsed_sections.discard(section_id)
+        
+        # Persist collapsed state if it's a custom session or special section
+        if hasattr(self, 'app_config'):
+            if section_id in ['pinned', 'all']:
+                # Maybe handle special sections too? 
+                # For now, let's just use the app_config helper if it's an AppsTab
+                if hasattr(self, 'save_session_state'):
+                    self.save_session_state(section_id, collapsed)
+            else:
+                if hasattr(self, 'save_session_state'):
+                    self.save_session_state(section_id, collapsed)

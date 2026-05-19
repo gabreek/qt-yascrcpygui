@@ -12,6 +12,7 @@ import gc
 from .base_grid_tab import BaseGridTab
 from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, IconSaveWorker, BatchIconDownloadWorker, BatchSaveWorker
 from .dialogs import show_message_box
+from .session_dialogs import CreateSessionDialog, FoldersManagerDialog
 from .common_widgets import CustomThemedProgressDialog
 from utils.constants import *
 
@@ -49,12 +50,15 @@ class AppsTab(BaseGridTab):
         self.search_input.setPlaceholderText(self.app_config.tr('apps_tab', 'search_placeholder'))
 
         self.refresh_button = QPushButton(self.app_config.tr('apps_tab', 'refresh_btn'))
+        self.folders_button = QPushButton(self.app_config.tr('apps_tab', 'folders_btn'))
 
         top_panel.addWidget(self.search_input)
         top_panel.addWidget(self.refresh_button)
+        top_panel.addWidget(self.folders_button)
         self.main_layout.insertLayout(0, top_panel)
 
         self.refresh_button.clicked.connect(self.refresh_apps_list)
+        self.folders_button.clicked.connect(self.open_folders_manager)
         self.search_input.textChanged.connect(self.filter_apps)
 
         self._connect_qml_signals()
@@ -68,7 +72,7 @@ class AppsTab(BaseGridTab):
             if not app_data.get('is_launcher_shortcut'):
                 # 1. Clear failure flag in metadata
                 self.app_config.save_app_metadata(pkg_name, {'icon_fetch_failed': False})
-                
+
                 # 2. Delete local icon file if it exists to force redownload
                 cached_icon_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
                 if os.path.exists(cached_icon_path):
@@ -76,7 +80,7 @@ class AppsTab(BaseGridTab):
                         os.remove(cached_icon_path)
                     except Exception as e:
                         print(f"Error deleting icon for {pkg_name}: {e}")
-        
+
         # 3. Update display which will identify missing icons and trigger the batch download
         self._update_display()
 
@@ -84,7 +88,7 @@ class AppsTab(BaseGridTab):
         """Clears the download queue and stops all icon download workers."""
         if not hasattr(self, 'download_queue'):
             return
-            
+
         print("Stopping AppsTab workers...")
         # Clear existing queue
         while not self.download_queue.empty():
@@ -93,12 +97,16 @@ class AppsTab(BaseGridTab):
                 self.download_queue.task_done()
             except queue.Empty:
                 break
-        
+
         # Add sentinel values for each possible worker to ensure they stop
         for _ in range(self.NUM_ICON_WORKERS):
             self.download_queue.put(None)
-        
+
         print("AppsTab workers signaled to stop.")
+
+    def open_folders_manager(self):
+        dialog = FoldersManagerDialog(self.app_config, self, self)
+        dialog.exec()
 
     def retranslate_ui(self):
         """Updates all labels and UI texts in the tab."""
@@ -112,12 +120,65 @@ class AppsTab(BaseGridTab):
         if not root:
             QTimer.singleShot(100, self._connect_qml_signals)
             return
-        
+
         root.launchRequested.connect(self._on_qml_launch_requested)
         root.settingsRequested.connect(self._on_qml_settings_requested)
         root.deleteConfigRequested.connect(self._on_qml_delete_config_requested)
-        root.pinToggled.connect(self.on_pin_toggled)
         root.iconDropped.connect(self.on_icon_dropped)
+        root.sectionToggled.connect(self.on_section_toggled)
+        root.launchLauncherRequested.connect(self.execute_launcher_launch)
+        root.folderRequested.connect(self.open_create_session_dialog)
+        root.moveRequested.connect(self.on_move_to_folder)
+
+        # Initialize folder list in QML
+        self._update_folder_list_in_qml(root)
+
+    def _update_folder_list_in_qml(self, root=None):
+        if not root: root = self.quick_widget.rootObject()
+        if root:
+            # Refresh from app_config and filter out 'all'
+            folders = [f for f in self.app_config.get_custom_sessions().keys() if f != 'all']
+            root.setProperty("folderList", folders)
+            root.setProperty("allAppsText", self.app_config.tr('apps_tab', 'all_section'))
+
+    @Slot(str, str)
+    def on_move_to_folder(self, pkg_name, folder_name):
+        actual_folder = "" if folder_name == "all" else folder_name
+        self.app_config.save_app_metadata(pkg_name, {'pinned': actual_folder})
+        
+        # Surgical update: find item in all_apps_data and update it
+        for app in self.all_apps_data:
+            if app['key'] == pkg_name:
+                app['pinned'] = actual_folder
+                break
+        
+        # Instead of full filter_apps(), we do a full refresh but optimized
+        # Future optimization: manually move item in QML model to avoid full reset
+        self.filter_apps()
+
+
+    @Slot(str)
+    def open_create_session_dialog(self, pkg_name=None):
+        # Pass all apps to the dialog
+        selected_apps = [pkg_name] if pkg_name else None
+        dialog = CreateSessionDialog(self.app_config, self.all_apps_data, self, selected_apps=selected_apps)
+        if dialog.exec():
+            name = dialog.session_name
+            apps = dialog.selected_apps
+            if not name or name == 'all': return
+            self.app_config.save_custom_session(name)
+            for pkg in apps:
+                self.app_config.save_app_metadata(pkg, {'pinned': name})
+            self.filter_apps()
+            self._update_folder_list_in_qml()
+
+    @Slot()
+    def execute_launcher_launch(self):
+        launcher_pkg = self.app_config.get(CONF_DEFAULT_LAUNCHER)
+        if launcher_pkg:
+            self.execute_launch(launcher_pkg, "Launcher")
+        else:
+            show_message_box(self, self.app_config.tr('common', 'error'), "Launcher not configured.")
 
     @Slot(str, str)
     def _on_qml_settings_requested(self, itemKey, itemType):
@@ -134,6 +195,9 @@ class AppsTab(BaseGridTab):
         """Slot to receive launch request from QML and emit the Python signal."""
         self.launch_requested.emit(itemKey, itemName)
 
+    def save_session_state(self, session_id, collapsed):
+        self.app_config.save_custom_session(session_id, collapsed)
+
     def on_device_changed(self):
         self._clear_grid()
         self.all_apps_data = []
@@ -141,8 +205,18 @@ class AppsTab(BaseGridTab):
         if not device_id or device_id == "no_device":
             self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
             self.refresh_button.setEnabled(False)
+            self.folders_button.setEnabled(False)
         else:
             self.refresh_button.setEnabled(True)
+            self.folders_button.setEnabled(True)
+
+            # Load collapsed sections from config
+            self.collapsed_sections = set()
+            custom_sessions = self.app_config.get_custom_sessions()
+            for name, data in custom_sessions.items():
+                if data.get('collapsed'):
+                    self.collapsed_sections.add(name)
+
             cached_data = self.app_config.get_app_list_cache()
             if cached_data and cached_data.get('user_apps'):
                 self.load_apps_from_cache_and_update_display()
@@ -186,7 +260,7 @@ class AppsTab(BaseGridTab):
             'system_apps': system_app_list,
         }
         self.app_config.save_app_list_cache(new_cache)
-        
+
         # Synchronize memory cache for ScrcpyTab profile filtering
         self.app_config.device_app_cache['installed_apps'] = set(user_apps.values()) | set(system_apps.values())
 
@@ -211,10 +285,11 @@ class AppsTab(BaseGridTab):
         if not apps_to_process:
             self.show_message(self.app_config.tr('apps_tab', 'no_apps'))
             return
-        
+
         self.show_grid()
         self._populate_grid_model(apps_to_process)
         self.filter_apps() # This will apply the current filter and update the QML model
+        self._update_folder_list_in_qml() # Ensure folder list is updated
 
     def _on_app_list_error(self, error_msg):
         self.show_message(f"{self.app_config.tr('common', 'error')}: {error_msg}")
@@ -222,19 +297,27 @@ class AppsTab(BaseGridTab):
 
     def _populate_grid_model(self, apps_from_cache):
         self.all_apps_data = [] # Reset
-        
+
         launcher_pkg = self.app_config.get(CONF_DEFAULT_LAUNCHER)
+
+        # Pass launcher key to QML
+        root = self.quick_widget.rootObject()
+        if root:
+            root.setProperty("launcherPkg", launcher_pkg if launcher_pkg else "")
+
         launcher_name = 'Launcher'
 
         # Add launcher info first if it exists
         if launcher_pkg:
+            folder = self.app_config.get_app_metadata(launcher_pkg).get('pinned', "")
             self.all_apps_data.append({
                 'key': launcher_pkg,
                 'name': launcher_name,
                 'item_type': "app",
                 'is_launcher_shortcut': True,
                 'icon_path': QUrl.fromLocalFile(self.launcher_icon_path).toString(),
-                'is_pinned': self.app_config.get_app_metadata(launcher_pkg).get('pinned', False)
+                'is_pinned': False,
+                'pinned': folder if isinstance(folder, str) else ""
             })
 
         for app_info in apps_from_cache:
@@ -243,15 +326,15 @@ class AppsTab(BaseGridTab):
             app_name = app_info.get('name') or app_info.get('app_name')
 
             if not pkg_name or not app_name:
-                print(f"Skipping malformed app_info: {app_info}") # Debug print
                 continue # Skip malformed records
 
             # Avoid adding the launcher app twice if it's in the main list
             if launcher_pkg and pkg_name == launcher_pkg:
                 continue
-            
+
             metadata = self.app_config.get_app_metadata(pkg_name)
-            
+            folder = metadata.get('pinned', "")
+
             icon_path_file_exists = False
             icon_path_url = ""
             cached_icon_full_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
@@ -259,91 +342,26 @@ class AppsTab(BaseGridTab):
             if os.path.exists(cached_icon_full_path):
                 icon_path_url = QUrl.fromLocalFile(cached_icon_full_path).toString()
                 icon_path_file_exists = True
-            
+
             if not icon_path_file_exists:
                 if os.path.exists(self.placeholder_icon_path):
                     icon_path_url = QUrl.fromLocalFile(self.placeholder_icon_path).toString()
-                else:
-                    print(f"WARNING: Placeholder icon not found at {self.placeholder_icon_path}. Icons will be blank.")
-                    icon_path_url = ""
-                
+
                 # Load icon if not failed before and no custom icon
                 if not metadata.get('has_custom_icon') and not metadata.get('icon_fetch_failed'):
                     self.pending_icon_downloads[pkg_name] = app_name # Add to pending list
-            
+
             self.all_apps_data.append({
                 'key': pkg_name,
                 'name': app_name,
                 'item_type': "app",
                 'is_launcher_shortcut': False,
                 'icon_path': icon_path_url,
-                'is_pinned': metadata.get('pinned', False)
+                'is_pinned': False, # This is the legacy role, keeping it false
+                'pinned': folder if isinstance(folder, str) else "" # Ensure String type
             })
-
         if self.pending_icon_downloads:
             self._start_batch_icon_download()
-
-    @Slot(str)
-    def on_pin_toggled(self, pkg_name):
-        # Update the pin status in the config
-        metadata = self.app_config.get_app_metadata(pkg_name)
-        is_pinned = not metadata.get('pinned', False)
-        self.app_config.save_app_metadata(pkg_name, {'pinned': is_pinned})
-        
-        # Update the model data in-place
-        for app_data in self.all_apps_data:
-            if app_data['key'] == pkg_name:
-                app_data['is_pinned'] = is_pinned
-                break
-        
-        # Re-apply filter and sorting
-        self.filter_apps()
-        self.config_changed.emit(pkg_name) # Notify other components if needed
-
-    @Slot(str, str)
-    def on_icon_dropped(self, pkg_name, file_url):
-        """Handles a dropped image file to set a custom icon asynchronously."""
-        if not file_url:
-            return
-
-        local_path = QUrl(file_url).toLocalFile()
-
-        if not os.path.exists(local_path) or not local_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
-            show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('apps_tab', 'invalid_image_error'), icon=QMessageBox.Warning)
-            return
-
-        destination_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
-
-        # Create and start the background worker
-        worker = IconSaveWorker(pkg_name, local_path, destination_path)
-        worker.signals.finished.connect(self._on_custom_icon_saved)
-        worker.signals.error.connect(self._on_custom_icon_error)
-        if self.main_window:
-            self.main_window.start_worker(worker)
-    @Slot(str, str)
-    def _on_custom_icon_saved(self, pkg_name, destination_path):
-        """Handles the successful save of a custom icon."""
-        self.app_config.save_app_metadata(pkg_name, {'has_custom_icon': True})
-        new_icon_url = QUrl.fromLocalFile(destination_path).toString()
-
-        # Update the model in memory
-        for app_data in self.all_apps_data:
-            if app_data['key'] == pkg_name:
-                app_data['icon_path'] = new_icon_url
-                break
-
-        self.filter_apps()
-        gc.collect() # Force cleanup of image processing resources
-        
-        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_success_title'), self.app_config.tr('apps_tab', 'custom_icon_success_msg'), icon=QMessageBox.Information)
-
-    @Slot(str, str)
-    def _on_custom_icon_error(self, pkg_name, error_message):
-        """Handles an error during icon saving."""
-        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_error_title'), self.app_config.tr('apps_tab', 'custom_icon_error_msg', pkg=pkg_name, error=error_message), icon=QMessageBox.Critical)
-        # Optionally, revert to the old icon if you stored it before starting the worker
-        self.filter_apps()
-
 
     @Slot(str)
     def on_delete_config_requested(self, pkg_name):
@@ -370,14 +388,40 @@ class AppsTab(BaseGridTab):
             else:
                 show_message_box(self, self.app_config.tr('apps_tab', 'delete_config_title'), self.app_config.tr('apps_tab', 'delete_not_found', name=app_name), icon=QMessageBox.Warning, app_icon_path=icon_path)
 
+    @Slot(str, str)
+    def on_icon_dropped(self, pkg_name, file_url):
+        """Handles a dropped image file to set a custom icon asynchronously."""
+        if not file_url:
+            return
+
+        local_path = QUrl(file_url).toLocalFile()
+
+        if not os.path.exists(local_path) or not local_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+            show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('apps_tab', 'invalid_image_error'), icon=QMessageBox.Warning)
+            return
+
+        destination_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
+
+        # Create and start the background worker
+        worker = IconSaveWorker(pkg_name, local_path, destination_path)
+        worker.signals.finished.connect(self._on_custom_icon_saved)
+        worker.signals.error.connect(self._on_custom_icon_error)
+        if self.main_window:
+            self.main_window.start_worker(worker)
+
     @Slot(str)
     def on_settings_requested(self, pkg_name):
         app_data = next((app for app in self.all_apps_data if app['key'] == pkg_name), None)
+
+        # If it's the launcher and not in all_apps_data, reconstruct minimal metadata
+        if not app_data and pkg_name == self.app_config.get(CONF_DEFAULT_LAUNCHER):
+            app_data = {'key': pkg_name, 'name': 'Launcher', 'is_launcher_shortcut': True}
+
         if not app_data: return
-        
+
         # Check if config already exists
         existing_configs = self.app_config.get_app_config_keys(include_name=False)
-        
+
         if pkg_name not in existing_configs:
             # Create a new config only if it doesn't exist
             is_launcher_shortcut = app_data.get('is_launcher_shortcut', False)
@@ -417,7 +461,7 @@ class AppsTab(BaseGridTab):
 
             self.app_config.save_app_scrcpy_config(pkg_name, app_specific_config)
             self.config_changed.emit(pkg_name)
-        
+
         # Switch to configuration tab and select this profile
         if self.main_window:
             self.main_window.tabs.setCurrentIndex(2) # Tab index for ScrcpyTab
@@ -425,6 +469,7 @@ class AppsTab(BaseGridTab):
 
     def filter_apps(self):
         search_text = self.search_input.text().lower()
+        is_searching = bool(search_text)
 
         # Filter all apps that match the search text
         filtered_apps = [
@@ -432,41 +477,65 @@ class AppsTab(BaseGridTab):
             if search_text in app['name'].lower()
         ]
 
-        # Separate the launcher from the rest of the apps
-        launcher_item = None
-        other_apps = []
+        sessions = {} # folder_name -> list of apps
+        unassigned_apps = []
+
+        # Get custom sessions configuration
+        session_order = self.app_config.get_custom_sessions_order()
+
         for app in filtered_apps:
-            if app.get('is_launcher_shortcut', False):
-                launcher_item = app
+            pkg_name = app['key']
+            # Important: 'pinned' in all_apps_data is already a string (folder name or "")
+            folder = app.get('pinned', "")
+
+            if folder:
+                sessions.setdefault(folder, []).append(app)
             else:
-                other_apps.append(app)
-
-        # Sort the other apps (pinned first, then by name)
-        sorted_other_apps = sorted(other_apps, key=lambda x: (not x.get('is_pinned', False), x['name'].lower()))
-
-        pinned_apps = [app for app in sorted_other_apps if app.get('is_pinned', False)]
-        unpinned_apps = [app for app in sorted_other_apps if not app.get('is_pinned', False)]
-
-        # Add the launcher to the correct list based on pinned items
-        if launcher_item:
-            if pinned_apps:
-                pinned_apps.insert(0, launcher_item)
-            else:
-                unpinned_apps.insert(0, launcher_item)
+                unassigned_apps.append(app)
 
         qml_model_data = []
 
-        if pinned_apps:
-            qml_model_data.append({'isSeparator': True, 'text': self.app_config.tr('apps_tab', 'pinned_section')})
-            qml_model_data.extend(pinned_apps)
+        # 1. Custom Sessions (respecting saved order)
+        existing_folders = list(sessions.keys())
+        sorted_folders = [f for f in session_order if f in existing_folders]
+        remaining_folders = sorted([f for f in existing_folders if f not in sorted_folders], key=lambda x: x.lower())
 
-        if unpinned_apps:
-            qml_model_data.append({'isSeparator': True, 'text': self.app_config.tr('apps_tab', 'all_section')})
-            qml_model_data.extend(unpinned_apps)
+        for folder_name in (sorted_folders + remaining_folders):
+            # If searching, force expand. Otherwise, use saved state.
+            is_collapsed = (folder_name in self.collapsed_sections) and not is_searching
+
+            qml_model_data.append({
+                'isSeparator': True, 
+                'text': folder_name,
+                'sectionId': folder_name,
+                'isCollapsed': is_collapsed,
+                'key': f"sep_{folder_name}" # Unique key for separators too
+            })
+            for app in sorted(sessions[folder_name], key=lambda x: x['name'].lower()):
+                app_copy = app.copy()
+                app_copy['is_pinned'] = False
+                app_copy['isHidden'] = is_collapsed
+                qml_model_data.append(app_copy)
+
+        # 2. All Apps (Unassigned)
+        if unassigned_apps:
+            # If searching, force expand. Otherwise, use saved state.
+            is_collapsed = ("all" in self.collapsed_sections) and not is_searching
+
+            qml_model_data.append({
+                'isSeparator': True, 
+                'text': self.app_config.tr('apps_tab', 'all_section'),
+                'sectionId': 'all',
+                'isCollapsed': is_collapsed,
+                'key': "sep_all" # Unique key
+            })
+            for app in sorted(unassigned_apps, key=lambda x: x['name'].lower()):
+                app_copy = app.copy()
+                app_copy['is_pinned'] = False
+                app_copy['isHidden'] = is_collapsed
+                qml_model_data.append(app_copy)
 
         self._update_grid_model(qml_model_data)
-
-
 
     def _start_batch_icon_download(self):
         self.total_icon_tasks = len(self.pending_icon_downloads)
@@ -503,7 +572,7 @@ class AppsTab(BaseGridTab):
             worker.signals.finished.connect(self._on_icon_batch_finished)
             worker.signals.error.connect(self._on_icon_batch_error)
             if self.main_window: self.main_window.start_worker(worker)
-        
+
         # Add sentinel values for workers to stop after processing all tasks
         for _ in range(self.NUM_ICON_WORKERS):
             self.download_queue.put(None)
@@ -519,7 +588,7 @@ class AppsTab(BaseGridTab):
             if app_data['key'] == pkg_name:
                 app_data['icon_path'] = QUrl.fromLocalFile(icon_path_string).toString()
                 break
-        
+
         if self.completed_icon_tasks >= self.total_icon_tasks:
             self._on_all_icons_downloaded()
 
@@ -544,13 +613,13 @@ class AppsTab(BaseGridTab):
             self.progress_dialog.close()
             self.progress_dialog.deleteLater() # Ensure cleanup
             self.progress_dialog = None
-        
+
         self.icon_download_workers.clear() # Clear worker references
         self.pending_icon_downloads.clear() # Clear pending tasks
-        
+
         # Aggressive memory cleanup
         gc.collect()
-        
+
         self.filter_apps() # Refresh the UI once with all new icons
 
     def _on_display_id_found_for_alt_launch(self, display_id, shortcut_path, package_name):
@@ -585,7 +654,7 @@ class AppsTab(BaseGridTab):
 
         use_alt_launch = config_to_use.get(ALTERNATE_LAUNCH_METHOD, False)
         is_launcher = (package_name == self.app_config.get('default_launcher'))
-        
+
         session_type = 'app'
         if is_launcher:
             if config_to_use.get('new_display') and config_to_use.get('new_display') != 'Disabled':
@@ -605,7 +674,7 @@ class AppsTab(BaseGridTab):
 
         launch_worker = ScrcpyLaunchWorker(config_to_use, app_name, self.app_config.get_connection_id(), icon_path, session_type)
         launch_worker.signals.error.connect(lambda msg: show_message_box(self, self.app_config.tr('apps_tab', 'scrcpy_error_title'), msg, icon=QMessageBox.Critical, app_icon_path=icon_path))
-        
+
         if use_alt_launch and not is_launcher:
             launch_worker.signals.display_id_found.connect(self._on_display_id_found_for_alt_launch)
 

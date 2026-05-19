@@ -90,6 +90,7 @@ class WinlatorTab(BaseGridTab):
         root.settingsRequested.connect(self.on_settings_requested)
         root.deleteConfigRequested.connect(self.on_delete_config_requested)
         root.iconDropped.connect(self.on_icon_dropped)
+        root.sectionToggled.connect(self.on_section_toggled)
 
     @Slot(str, str)
     def _on_qml_launch_requested(self, itemKey, itemName):
@@ -177,7 +178,14 @@ class WinlatorTab(BaseGridTab):
             else: # If there's a version suffix, format it nicely
                 display_name = f"Winlator {display_name}"
 
-            qml_model_data.append({'isSeparator': True, 'text': display_name})
+            is_collapsed = display_name in self.collapsed_sections
+            qml_model_data.append({
+                'isSeparator': True, 
+                'text': display_name,
+                'sectionId': display_name,
+                'isCollapsed': is_collapsed,
+                'isHidden': False
+            })
 
             for game_info in games_in_pkg:
                 game_path = game_info.get('path', '')
@@ -195,7 +203,9 @@ class WinlatorTab(BaseGridTab):
                     'name': game_name,
                     'item_type': "winlator_game",
                     'icon_path': QUrl.fromLocalFile(icon_path).toString(),
-                    'pkg': pkg # Store pkg for launch worker
+                    'pkg': pkg, # Store pkg for launch worker
+                    'isSeparator': False,
+                    'isHidden': is_collapsed
                 }
                 qml_model_data.append(game_data)
                 self.game_items[game_path] = game_data # Update game_items for icon extraction/config
@@ -356,7 +366,7 @@ class WinlatorTab(BaseGridTab):
         if self.progress_dialog.isVisible(): self.progress_dialog.close()
         show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('winlator_tab', 'extraction_finished'))
         self.icon_extractor_workers.clear()
-        self._update_grid_model(list(self.game_items.values()))
+        self.populate_games_grid_model(list(self.game_items.values()))
         gc.collect()
 
     def execute_launch(self, shortcut_path, game_name):

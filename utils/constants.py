@@ -56,6 +56,7 @@ CONF_APP_METADATA = 'app_metadata'
 CONF_WINLATOR_GAME_CONFIGS = 'winlator_game_configs'
 CONF_ENCODER_CACHE = 'encoder_cache'
 CONF_APP_LIST_CACHE = 'app_list_cache'
+CONF_CUSTOM_SESSIONS = 'custom_sessions'
 
 # --- Translations ---
 TRANSLATIONS = {
@@ -162,6 +163,18 @@ TRANSLATIONS = {
             'action_cancelled_msg': "No specific configuration was saved for the Launcher.\n\nTo use the Launcher without a virtual display, please go to the 'Scrcpy' tab, set 'Virtual Display' to 'Disabled', and select a desired 'Max Size'.",
             'downloading_icons': 'Downloading missing app icons...',
             'confirm_redownload_msg': 'Are you sure you want to clear the icon cache and redownload all icons?\n\nThis may take some time.',
+            'folders_btn': 'Folders',
+            'folders_manager_title': 'Folders Manager',
+            'create_session_title': 'Create New Folder',
+            'edit_session_title': 'Edit Folder',
+            'session_name_label': 'Folder Name:',
+            'session_name_placeholder': 'Enter folder name...',
+            'select_apps_label': 'Select Apps:',
+            'session_exists_error': 'A folder with this name already exists.',
+            'empty_session_name_error': 'Folder name cannot be empty.',
+            'delete_session_confirm': 'Are you sure you want to delete the folder "{name}"? Apps will be moved to "All Apps".',
+            'move_up': 'Up',
+            'move_down': 'Down',
             'custom_icon_success_title': 'Success',
             'custom_icon_success_msg': 'Custom icon has been set.',
             'custom_icon_error_title': 'Error',
@@ -350,6 +363,18 @@ TRANSLATIONS = {
             'action_cancelled_msg': "Nenhuma configuração específica foi salva para o Launcher.\n\nPara usar o Launcher sem um display virtual, vá para a aba 'Scrcpy', defina 'Display Virtual' como 'Desativado' e selecione o 'Tamanho Máximo' desejado.",
             'downloading_icons': 'Baixando ícones de apps ausentes...',
             'confirm_redownload_msg': 'Tem certeza de que deseja limpar o cache de ícones e baixar todos os ícones novamente?\n\nIsso pode levar algum tempo.',
+            'folders_btn': 'Pastas',
+            'folders_manager_title': 'Gerenciar Pastas',
+            'create_session_title': 'Criar Nova Pasta',
+            'edit_session_title': 'Editar Pasta',
+            'session_name_label': 'Nome da Pasta:',
+            'session_name_placeholder': 'Digite o nome da pasta...',
+            'select_apps_label': 'Selecionar Apps:',
+            'session_exists_error': 'Já existe uma pasta com este nome.',
+            'empty_session_name_error': 'O nome da pasta não pode estar vazio.',
+            'delete_session_confirm': 'Tem certeza que deseja excluir a pasta "{name}"? Os apps serão movidos para "Todos os Aplicativos".',
+            'move_up': 'Subir',
+            'move_down': 'Descer',
             'custom_icon_success_title': 'Sucesso',
             'custom_icon_success_msg': 'O ícone personalizado foi definido.',
             'custom_icon_error_title': 'Erro',

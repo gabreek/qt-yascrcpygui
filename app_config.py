@@ -354,6 +354,43 @@ class AppConfig:
         if self.CONFIG_FILE is None: return False
         return bool(self.get_encoder_cache().get('video') or self.get_encoder_cache().get('audio'))
 
+    def get_custom_sessions(self):
+        return self.config_data.get(CONF_CUSTOM_SESSIONS, {})
+
+    def save_custom_session(self, name, collapsed=False):
+        with self._config_lock:
+            if CONF_CUSTOM_SESSIONS not in self.config_data:
+                self.config_data[CONF_CUSTOM_SESSIONS] = {}
+            if name not in self.config_data[CONF_CUSTOM_SESSIONS]:
+                 self.config_data[CONF_CUSTOM_SESSIONS][name] = {}
+            self.config_data[CONF_CUSTOM_SESSIONS][name]['collapsed'] = collapsed
+            self._save_json(self.config_data, self.CONFIG_FILE)
+
+    def delete_custom_session(self, name):
+        with self._config_lock:
+            if CONF_CUSTOM_SESSIONS in self.config_data and name in self.config_data[CONF_CUSTOM_SESSIONS]:
+                del self.config_data[CONF_CUSTOM_SESSIONS][name]
+                # Also reset all apps that were in this session
+                app_metadata = self.config_data.get(CONF_APP_METADATA, {})
+                for pkg, data in app_metadata.items():
+                    if data.get('pinned') == name:
+                        data['pinned'] = False
+                self._save_json(self.config_data, self.CONFIG_FILE)
+                return True
+            return False
+
+    def save_custom_sessions_order(self, order):
+        with self._config_lock:
+            if CONF_CUSTOM_SESSIONS not in self.config_data:
+                self.config_data[CONF_CUSTOM_SESSIONS] = {}
+            # We can store the order as a special key in custom_sessions or a separate key
+            # Let's use a separate key for clarity
+            self.config_data['custom_sessions_order'] = order
+            self._save_json(self.config_data, self.CONFIG_FILE)
+
+    def get_custom_sessions_order(self):
+        return self.config_data.get('custom_sessions_order', [])
+
     def load_config_for_device(self, device_id):
         self.active_profile = 'global' # Reset on device change
         if device_id is None or device_id == "no_device":
@@ -384,6 +421,7 @@ class AppConfig:
         self.config_data.setdefault(CONF_APP_LIST_CACHE, {})
         self.config_data.setdefault(CONF_WINLATOR_GAME_CONFIGS, {})
         self.config_data.setdefault(CONF_ENCODER_CACHE, {})
+        self.config_data.setdefault(CONF_CUSTOM_SESSIONS, {})
 
         # Populate memory cache from file cache as a fallback
         cached_apps = self.config_data.get(CONF_APP_LIST_CACHE, {})
