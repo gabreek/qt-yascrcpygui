@@ -25,8 +25,9 @@ class WebServerThread(QThread):
     Thread to run the FastAPI web server with graceful shutdown using uvicorn.Server.
     """
     config_needs_reload = Signal() # Added for synchronization
-    def __init__(self, parent=None):
+    def __init__(self, app_config, parent=None):
         super().__init__(parent)
+        self.app_config = app_config
         self.server = None
         self._loop = None
 
@@ -38,7 +39,8 @@ class WebServerThread(QThread):
             # Set the thread instance in the web_server module
             web_server.set_thread_instance(self)
 
-            config = uvicorn.Config(web_server.app, host="0.0.0.0", port=8000, log_level="info", loop="asyncio")
+            port = int(self.app_config.get('web_port', 8000))
+            config = uvicorn.Config(web_server.app, host="0.0.0.0", port=port, log_level="info", loop="asyncio")
             self.server = uvicorn.Server(config)
 
             self._loop.run_until_complete(self.server.serve())
@@ -292,7 +294,7 @@ class MainWindow(QMainWindow):
             return
         
         # Lazy initialization
-        self.web_server_thread = WebServerThread()
+        self.web_server_thread = WebServerThread(self.app_config)
         # Connect the signal from the web server thread to the ScrcpyTab's reload slot
         self.web_server_thread.config_needs_reload.connect(self.scrcpy_tab.on_config_reloaded)
         self.web_server_thread.start()

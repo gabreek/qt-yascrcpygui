@@ -501,9 +501,37 @@ async def kill_session(pid: int, device_id: str = None):
 
 from fastapi.responses import HTMLResponse
 
+from fastapi import FastAPI, Query, Body, HTTPException, Security, Depends, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
+
+# ... (código existente) ...
+
+security_basic = HTTPBasic()
+
+def check_web_auth(credentials: HTTPBasicCredentials = Depends(security_basic)):
+    app_config = AppConfig(None)
+    
+    correct_username = app_config.get(CONF_WEB_USERNAME, "")
+    encoded_pass = app_config.get(CONF_WEB_PASSWORD, "")
+    correct_password = ""
+    if encoded_pass:
+        try:
+            correct_password = base64.b64decode(encoded_pass.encode()).decode()
+        except:
+            pass
+
+    if not correct_username or not correct_password:
+        raise HTTPException(status_code=401, detail="Authentication not configured", headers={"WWW-Authenticate": "Basic"})
+    
+    if credentials.username != correct_username or credentials.password != correct_password:
+        raise HTTPException(status_code=401, detail="Invalid credentials", headers={"WWW-Authenticate": "Basic"})
+    return True
+
 # Serve index.html with the injected API token
 @app.get("/", response_class=HTMLResponse, summary="Serve the web interface with auth token")
-async def serve_index():
+async def serve_index(authenticated: bool = Depends(check_web_auth)):
     index_path = get_resource_path('web/index.html')
     with open(index_path, 'r') as f:
         content = f.read()
@@ -525,4 +553,6 @@ def set_thread_instance(thread):
     web_thread = thread
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    app_config = AppConfig(None)
+    port = int(app_config.get(CONF_WEB_PORT, 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

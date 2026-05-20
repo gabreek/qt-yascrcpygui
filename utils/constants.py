@@ -46,6 +46,9 @@ ALTERNATE_LAUNCH_METHOD = 'alternate_launch_method'
 CONF_WINDOWING_MODE = 'windowing_mode'
 CONF_SHOW_SYSTEM_APPS = 'show_system_apps'
 CONF_START_WEB_SERVER_ON_LAUNCH = 'start_web_server_on_launch'
+CONF_WEB_PORT = 'web_port'
+CONF_WEB_USERNAME = 'web_username'
+CONF_WEB_PASSWORD = 'web_password'
 
 # Icon rendering setting
 CONF_HQ_ICON_RENDERING = 'hq_icon_rendering'
@@ -229,6 +232,11 @@ TRANSLATIONS = {
         'web_server_config': {
             'title': 'Web Server Configuration',
             'start_on_launch': 'Start web server on application launch',
+            'port': 'Port:',
+            'username': 'Username:',
+            'username_placeholder': 'Enter username',
+            'password': 'Password:',
+            'password_placeholder': 'Enter password',
             'server_status': 'Server Status:',
             'stopped': 'Stopped',
             'running': 'Running',
@@ -429,6 +437,11 @@ TRANSLATIONS = {
         'web_server_config': {
             'title': 'Configuração do Servidor Web',
             'start_on_launch': 'Iniciar servidor web ao abrir o aplicativo',
+            'port': 'Porta:',
+            'username': 'Usuário:',
+            'username_placeholder': 'Digite o usuário',
+            'password': 'Senha:',
+            'password_placeholder': 'Digite a senha',
             'server_status': 'Status do Servidor:',
             'stopped': 'Parado',
             'running': 'Executando',
