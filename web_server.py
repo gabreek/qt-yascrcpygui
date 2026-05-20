@@ -1,5 +1,6 @@
 import uvicorn
-from fastapi import FastAPI, Query, Body, HTTPException
+from fastapi import FastAPI, Query, Body, HTTPException, Security, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -12,10 +13,20 @@ import shlex
 import sys
 import base64
 import logging
+import secrets
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# --- Security Setup ---
+AUTH_TOKEN = secrets.token_urlsafe(32)
+security = HTTPBearer()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+    if credentials.credentials != AUTH_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid or missing API token")
+    return credentials.credentials
 
 app = FastAPI()
 web_thread = None
@@ -109,7 +120,7 @@ def get_config_for_device(device_id: str):
     app_config.connection_id = device_id  # Ensure connection_id is set for subsequent operations
     return app_config
 
-@app.post("/api/adb/connect", summary="Connect to a device via ADB over WiFi")
+@app.post("/api/adb/connect", summary="Connect to a device via ADB over WiFi", dependencies=[Depends(verify_token)])
 async def adb_connect(request: AdbConnectRequest):
     """Connects to an ADB device over WiFi."""
     try:
@@ -126,7 +137,7 @@ async def adb_connect(request: AdbConnectRequest):
         tmp_config = AppConfig(None)
         raise HTTPException(status_code=500, detail=tmp_config.tr('api', 'error_adb_connect'))
 
-@app.post("/api/app/pin", summary="Pin or unpin an application")
+@app.post("/api/app/pin", summary="Pin or unpin an application", dependencies=[Depends(verify_token)])
 async def pin_app(request: PinRequest):
     """Pins or unpins an application for the current device."""
     try:
@@ -139,7 +150,7 @@ async def pin_app(request: PinRequest):
         app_config = get_config_for_device(request.device_id)
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_pin'))
 
-@app.post("/api/input/text")
+@app.post("/api/input/text", dependencies=[Depends(verify_token)])
 async def text_input(request: TextInputRequest):
     """Types the given text on the device."""
     try:
@@ -151,7 +162,7 @@ async def text_input(request: TextInputRequest):
         app_config = get_config_for_device(request.device_id)
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_text_input'))
 
-@app.post("/api/input/keyevent")
+@app.post("/api/input/keyevent", dependencies=[Depends(verify_token)])
 async def key_event(request: KeyEventRequest):
     """Sends a key event to the device."""
     try:
@@ -169,7 +180,7 @@ async def key_event(request: KeyEventRequest):
         app_config = get_config_for_device(request.device_id)
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_key_event'))
 
-@app.get("/api/config")
+@app.get("/api/config", dependencies=[Depends(verify_token)])
 async def get_config(device_id: str, profile_key: str, b64: bool = False):
     """Retrieves the configuration for a specific app on a device."""
     try:
@@ -200,7 +211,7 @@ async def get_config(device_id: str, profile_key: str, b64: bool = False):
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_get_config'))
 
 
-@app.post("/api/config")
+@app.post("/api/config", dependencies=[Depends(verify_token)])
 async def set_config(request: ConfigRequest):
     """Saves the configuration for a specific app on a device."""
     try:
@@ -224,7 +235,7 @@ async def set_config(request: ConfigRequest):
         app_config = get_config_for_device(request.device_id)
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_set_config'))
 
-@app.get("/api/devices")
+@app.get("/api/devices", dependencies=[Depends(verify_token)])
 async def list_devices():
     """Returns a list of all connected ADB devices with their info."""
     try:
@@ -251,7 +262,7 @@ async def list_devices():
         raise HTTPException(status_code=500, detail=tmp_config.tr('api', 'error_list_devices'))
 
 
-@app.get("/api/devices/{device_id}/info", summary="Get detailed device information")
+@app.get("/api/devices/{device_id}/info", summary="Get detailed device information", dependencies=[Depends(verify_token)])
 async def get_device_details(device_id: str):
     try:
         info = adb_handler.get_device_info(device_id)
@@ -269,7 +280,7 @@ async def get_device_details(device_id: str):
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_device_details'))
 
 
-@app.get("/api/profiles", summary="List profiles with existing configurations for a device")
+@app.get("/api/profiles", summary="List profiles with existing configurations for a device", dependencies=[Depends(verify_token)])
 async def list_profiles(device_id: str):
     """
     Lists app and Winlator profiles that have a saved configuration and are currently installed on the device.
@@ -309,7 +320,7 @@ async def list_profiles(device_id: str):
         return {"apps": [], "winlator": []}
 
 
-@app.get("/api/apps")
+@app.get("/api/apps", dependencies=[Depends(verify_token)])
 async def list_apps(device_id: str, include_system_apps: bool = False):
     """Lists installed applications for a given device."""
     try:
@@ -334,7 +345,7 @@ async def list_apps(device_id: str, include_system_apps: bool = False):
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_list_apps'))
 
 
-@app.get("/api/winlator/apps", summary="List Winlator shortcuts/games")
+@app.get("/api/winlator/apps", summary="List Winlator shortcuts/games", dependencies=[Depends(verify_token)])
 async def list_winlator_apps(device_id: str):
     """Lists Winlator shortcuts found on the device."""
     try:
@@ -355,7 +366,7 @@ async def list_winlator_apps(device_id: str):
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_list_winlator'))
 
 
-@app.post("/api/launch", summary="Launch a standard Android application")
+@app.post("/api/launch", summary="Launch a standard Android application", dependencies=[Depends(verify_token)])
 async def launch_app(request: LaunchRequest):
     """Launches an application on a device and tracks the session."""
     try:
@@ -393,7 +404,7 @@ async def launch_app(request: LaunchRequest):
         app_config = get_config_for_device(request.device_id)
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_launch'))
 
-@app.post("/api/winlator/launch", summary="Launch a Winlator application")
+@app.post("/api/winlator/launch", summary="Launch a Winlator application", dependencies=[Depends(verify_token)])
 async def launch_winlator_app(request: WinlatorLaunchRequest):
     """Launches a Winlator app on a device and tracks the session."""
     try:
@@ -434,7 +445,7 @@ async def launch_winlator_app(request: WinlatorLaunchRequest):
         app_config = get_config_for_device(request.device_id)
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_launch_winlator'))
 
-@app.get("/api/scrcpy/encoders", summary="List available scrcpy encoders")
+@app.get("/api/scrcpy/encoders", summary="List available scrcpy encoders", dependencies=[Depends(verify_token)])
 async def list_encoders(device_id: str = None):
     try:
         if not device_id:
@@ -459,7 +470,7 @@ async def list_encoders(device_id: str = None):
         logger.exception("Error in list_encoders")
         return {"video_encoders": {}, "audio_encoders": {}}
 
-@app.get("/api/scrcpy/sessions", summary="List active scrcpy sessions")
+@app.get("/api/scrcpy/sessions", summary="List active scrcpy sessions", dependencies=[Depends(verify_token)])
 async def get_active_sessions():
     """Returns a list of active (running) scrcpy sessions."""
     try:
@@ -468,7 +479,7 @@ async def get_active_sessions():
         logger.exception("Error in get_active_sessions")
         raise HTTPException(status_code=500, detail="Internal error while listing scrcpy sessions.")
 
-@app.delete("/api/scrcpy/sessions/{pid}", summary="Kill a scrcpy session by PID")
+@app.delete("/api/scrcpy/sessions/{pid}", summary="Kill a scrcpy session by PID", dependencies=[Depends(verify_token)])
 async def kill_session(pid: int, device_id: str = None):
     """Terminates a scrcpy session by its Process ID (PID)."""
     try:
@@ -488,12 +499,24 @@ async def kill_session(pid: int, device_id: str = None):
 # --- Path resolution for PyInstaller ---
 # (Removed duplicate get_resource_path definition)
 
-# Mount the entire web directory for static files (THIS MUST BE LAST)
+from fastapi.responses import HTMLResponse
+
+# Serve index.html with the injected API token
+@app.get("/", response_class=HTMLResponse, summary="Serve the web interface with auth token")
+async def serve_index():
+    index_path = get_resource_path('web/index.html')
+    with open(index_path, 'r') as f:
+        content = f.read()
+    # Injeta o token diretamente no script do HTML
+    content = content.replace('{{API_TOKEN}}', AUTH_TOKEN)
+    return content
+
+# Mount the static web assets (excluding index.html)
 web_dir = get_resource_path('web')
 if os.path.exists(web_dir):
-    app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
+    app.mount("/static", StaticFiles(directory=web_dir), name="web_static")
 else:
-    print(f"CRITICAL: Web directory '{web_dir}' not found. The web interface will not be available.")
+    print(f"CRITICAL: Web directory '{web_dir}' not found.")
 
 
 def set_thread_instance(thread):

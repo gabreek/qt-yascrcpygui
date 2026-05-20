@@ -92,6 +92,18 @@
     </div>
 
     <script>
+        // Injetado pelo servidor no momento da carga da página
+        const API_TOKEN = "{{API_TOKEN}}";
+        
+        async function authorizedFetch(url, options = {}) {
+            options.headers = {
+                ...options.headers,
+                'Authorization': `Bearer ${API_TOKEN}`,
+                'Content-Type': 'application/json'
+            };
+            return await fetch(url, options);
+        }
+
         const devicesContainer = document.getElementById('devices');
         const appsGrid = document.getElementById('apps-grid');
         const winlatorGrid = document.getElementById('winlator-grid');
@@ -119,9 +131,8 @@
             }
             statusP.textContent = 'Connecting...';
             try {
-                const response = await fetch('/api/adb/connect', {
+                const response = await authorizedFetch('/api/adb/connect', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ address: address })
                 });
                 const result = await response.json();
@@ -171,7 +182,7 @@
             devicesContainer.appendChild(deviceListContainer);
 
             try {
-                const response = await fetch('/api/devices');
+                const response = await authorizedFetch('/api/devices');
                 const devices = await response.json();
                 if (devices.length === 0) {
                     deviceListContainer.innerHTML = '<p>No devices found.</p>';
@@ -265,7 +276,7 @@
                 return;
             }
             try {
-                const response = await fetch(`/api/apps?device_id=${deviceId}&include_system_apps=true`);
+                const response = await authorizedFetch(`/api/apps?device_id=${deviceId}&include_system_apps=true`);
                 const apps = await response.json();
                 if (apps.error) throw new Error(apps.error);
                 cachedApps[deviceId] = apps; // Cache the fetched data
@@ -280,7 +291,7 @@
                 return;
             }
             try {
-                const response = await fetch(`/api/winlator/apps?device_id=${deviceId}`);
+                const response = await authorizedFetch(`/api/winlator/apps?device_id=${deviceId}`);
                 const games = await response.json();
                 if (games.error) throw new Error(games.error);
                 cachedWinlatorApps[deviceId] = games; // Cache the fetched data
@@ -291,9 +302,8 @@
         async function launchApp(pkgName, appName) {
             if (!currentDeviceId) { alert('Please select a device first.'); return; }
             try {
-                await fetch('/api/launch', {
+                await authorizedFetch('/api/launch', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ device_id: currentDeviceId, pkg_name: pkgName, app_name: appName })
                 });
             } catch (error) { alert('Failed to send launch command.'); }
@@ -302,9 +312,8 @@
         async function launchWinlatorApp(item) {
             if (!currentDeviceId) { alert('Please select a device first.'); return; }
             try {
-                await fetch('/api/winlator/launch', {
+                await authorizedFetch('/api/winlator/launch', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         device_id: currentDeviceId,
                         shortcut_path: item.path,
@@ -321,8 +330,8 @@
             if (!currentDeviceId) { configTab.innerHTML = '<p>Please select a device.</p>'; return; }
 
             const [profilesRes, encodersRes] = await Promise.all([
-                fetch(`/api/profiles?device_id=${currentDeviceId}`),
-                fetch(`/api/scrcpy/encoders?device_id=${currentDeviceId}`)
+                authorizedFetch(`/api/profiles?device_id=${currentDeviceId}`),
+                authorizedFetch(`/api/scrcpy/encoders?device_id=${currentDeviceId}`)
             ]);
             const profiles = await profilesRes.json();
             const encoders = await encodersRes.json();
@@ -381,7 +390,7 @@
                 queryParams += `&profile_key=${encodeURIComponent(profileKey)}`;
             }
 
-            const response = await fetch(`/api/config?${queryParams}`);
+            const response = await authorizedFetch(`/api/config?${queryParams}`);
             const config = await response.json();
             populateConfigForm(config);
         }
@@ -455,9 +464,8 @@
                 }
             });
 
-            await fetch('/api/config', {
+            await authorizedFetch('/api/config', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     device_id: currentDeviceId,
                     pkg_name: profileKey,
