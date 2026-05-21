@@ -480,7 +480,7 @@ Rectangle {
         border.color: gridRoot.buttonBorderColor
         border.width: 1
         radius: 10
-        visible: launcherPkg !== ""
+        visible: false
         clip: true
         Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
 
