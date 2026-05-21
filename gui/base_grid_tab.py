@@ -80,9 +80,15 @@ class BaseGridTab(QWidget):
             root.setProperty("iconAntiAliasing", hq_render)
             root.setProperty("iconSmoothing", hq_render)
             root.setProperty("iconMipmaps", hq_render)
+            
+            # Pass hover effect setting
+            from utils.constants import CONF_WEB_HOVER_EFFECT
+            root.setProperty("hoverEffectEnabled", self.app_config.get(CONF_WEB_HOVER_EFFECT, True))
 
     def _clear_grid(self):
         self.items = {}
+        if hasattr(self, '_last_model_data'):
+            self._last_model_data = None
         root = self.quick_widget.rootObject()
         if root:
             root.setProperty("itemsModel", [])

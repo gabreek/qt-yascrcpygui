@@ -52,6 +52,7 @@ CONF_WEB_PASSWORD = 'web_password'
 
 # Icon rendering setting
 CONF_HQ_ICON_RENDERING = 'hq_icon_rendering'
+CONF_WEB_HOVER_EFFECT = 'web_hover_effect'
 
 # --- Structural Config Keys ---
 CONF_GENERAL_CONFIG = 'general_config'
@@ -68,7 +69,7 @@ TRANSLATIONS = {
             'ok': 'OK', 'cancel': 'Cancel', 'yes': 'Yes', 'no': 'No',
             'success': 'Success', 'error': 'Error', 'warning': 'Warning',
             'info': 'Information', 'close': 'Close', 'confirm': 'Confirm',
-            'loading': 'Loading...',
+            'loading': 'Loading...', 'settings': 'Settings',
             'adb_missing': "Command 'adb' not found. Please install Android Platform Tools and add it to your system's PATH.",
             'scrcpy_missing': "Command 'scrcpy' not found. Please install scrcpy and ensure it is in your system's PATH.",
         },
@@ -133,6 +134,7 @@ TRANSLATIONS = {
             },
             'rendering': {
                 'hq_icon_rendering': 'HQ Icon Rendering',
+                'web_hover_effect': 'Enable Hover Effect',
             },
             'options': {
                 'fullscreen': 'Fullscreen',
@@ -155,6 +157,8 @@ TRANSLATIONS = {
             'empty_list': "App list is empty. Click 'Refresh Apps'.",
             'pinned_section': 'Pinned Apps',
             'all_section': 'All Apps',
+            'move_to': 'Move to',
+            'launcher_label': 'Launcher',
             'delete_config_title': 'Delete Configuration',
             'delete_config_msg': 'Are you sure you want to delete the specific configuration for<br><b>{name}</b>?',
             'delete_success': 'Specific configuration for {name} has been deleted.',
@@ -274,7 +278,7 @@ TRANSLATIONS = {
             'ok': 'OK', 'cancel': 'Cancelar', 'yes': 'Sim', 'no': 'Não',
             'success': 'Sucesso', 'error': 'Erro', 'warning': 'Aviso',
             'info': 'Informação', 'close': 'Fechar', 'confirm': 'Confirmar',
-            'loading': 'Carregando...',
+            'loading': 'Carregando...', 'settings': 'Configurações',
             'adb_missing': "Comando 'adb' não encontrado. Por favor, instale o Android Platform Tools e adicione-o ao PATH do seu sistema.",
             'scrcpy_missing': "Comando 'scrcpy' não encontrado. Por favor, instale o scrcpy e certifique-se de que ele esteja no PATH do seu sistema.",
         },
@@ -339,7 +343,9 @@ TRANSLATIONS = {
                 },
                 'rendering': {
                     'hq_icon_rendering': 'Renderização de Ícones HQ',
-                },            'options': {
+                    'web_hover_effect': 'Habilitar Efeito de Hover',
+                },
+            'options': {
                 'fullscreen': 'Tela Cheia',
                 'turn_screen_off': 'Desligar tela',
                 'stay_awake': 'Manter Acordado',
@@ -360,6 +366,8 @@ TRANSLATIONS = {
             'empty_list': "A lista está vazia. Clique em 'Atualizar Lista'.",
             'pinned_section': 'Fixados',
             'all_section': 'Todos os Aplicativos',
+            'move_to': 'Mover para',
+            'launcher_label': 'Launcher',
             'delete_config_title': 'Excluir Configuração',
             'delete_config_msg': 'Tem certeza que deseja excluir a configuração específica para<br><b>{name}</b>?',
             'delete_success': 'Configuração específica para {name} foi excluída.',

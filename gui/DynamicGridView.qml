@@ -21,9 +21,11 @@ Rectangle {
     property var itemsModel: []
     property int itemIconSize: 44
     property int itemFontSize: 9
-    property int itemWidth: 80
-    property int itemHeight: 105
-    
+    property int itemWidth: 98
+    property int itemHeight: 98
+    property int itemSpacingHorizontal: -5
+    property int itemSpacingVertical: 15
+
     // Rendering settings
     property bool iconAntiAliasing: false
     property bool iconSmoothing: false
@@ -63,27 +65,32 @@ Rectangle {
             Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
             Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
 
-            Timer {
-                id: expansionTimer
-                interval: 900
-                repeat: false
-                onTriggered: {
-                    if (secondaryActionsRow) {
-                        secondaryActionsRow.opacity = 1.0
-                    }
-                }
-            }
-
-            width: (itemData && itemData.isSeparator) ? flowView.width : (gridRoot.itemWidth + 10)
-            height: isHidden ? 0 : ((itemData && itemData.isSeparator) ? 60 : (gridRoot.itemHeight + 25))
-            opacity: isHidden ? 0 : 1
+            width: (itemData && itemData.isSeparator) ? flowView.width : (gridRoot.itemWidth + gridRoot.itemSpacingHorizontal)
+            height: isHidden ? 0 : ((itemData && itemData.isSeparator) ? 60 : (gridRoot.itemHeight + gridRoot.itemSpacingVertical))
             clip: true
+
+            // 2. Feedback visual de hover e clique (Quadrado que define a célula)
+            Rectangle {
+                id: highlightRect
+                anchors.centerIn: parent
+                width: gridRoot.itemWidth
+                height: gridRoot.itemHeight
+                color: mouseArea.pressed ? Qt.lighter(gridRoot.highlightColor, 1.4) : gridRoot.highlightColor
+                opacity: (mouseArea.pressed && !itemData.isSeparator) ? 0.4 : (mouseArea.containsMouse && !itemData.isSeparator ? 0.15 : 0)
+                radius: 12
+                visible: !!(itemData && !itemData.isSeparator) && gridRoot.hoverEffectEnabled
+
+                Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                Behavior on color { ColorAnimation { duration: 100 } }
+            }
 
             // Separator content
             Rectangle {
                 visible: !!(itemData && itemData.isSeparator)
                 anchors.fill: parent
                 color: gridRoot.backgroundColor
+                // ... (rest of separator content - I'll keep it via context)
 
                 RowLayout {
                     anchors.fill: parent
@@ -124,26 +131,26 @@ Rectangle {
                         onClicked: {
                             var collapsed = !itemData.isCollapsed
                             var sectionId = itemData.sectionId || itemData.text
-                            
+
                             // 1. Update the separator itself
                             internalModel.setProperty(index, "isCollapsed", collapsed)
-                            
+
                             // 2. Loop through following items until next separator or end of model
                             for (var i = index + 1; i < internalModel.count; i++) {
                                 var nextItem = internalModel.get(i)
-                                
+
                                 // Robust check for separator: check both isSeparator property and text
                                 // In some versions of Winlator/Qt, isSeparator might be undefined or behave differently
                                 var isNextSeparator = nextItem.isSeparator === true
-                                
+
                                 if (isNextSeparator) {
                                     break
                                 }
-                                
+
                                 // Apply the hidden state to the item
                                 internalModel.setProperty(i, "isHidden", collapsed)
                             }
-                            
+
                             gridRoot.sectionToggled(sectionId, collapsed)
                         }
                     }
@@ -163,7 +170,7 @@ Rectangle {
                 id: contextMenu
                 modal: true
                 dim: false // Capture clicks without darkening the screen
-                
+
                 background: Rectangle {
                     implicitWidth: 150
                     color: gridRoot.backgroundColor
@@ -172,26 +179,26 @@ Rectangle {
                 }
 
                 // Close the menu automatically when any action is triggered
-                onClosed: { } 
-                
+                onClosed: { }
+
                 MenuItem {
-                    text: "Settings"
+                    text: gridRoot.settingsText
                     onTriggered: {
                         if (itemData) gridRoot.settingsRequested(itemData.key, itemData.item_type)
                         contextMenu.close()
                     }
                 }
                 MenuItem {
-                    text: "Delete Config"
+                    text: gridRoot.deleteConfigText
                     onTriggered: {
                         if (itemData) gridRoot.deleteConfigRequested(itemData.key, itemData.item_type)
                         contextMenu.close()
                     }
                 }
                 Menu {
-                    title: "Move to"
+                    title: gridRoot.moveToText
                     id: moveSubMenu
-                    
+
                     background: Rectangle {
                         implicitWidth: 150
                         color: gridRoot.backgroundColor
@@ -202,8 +209,8 @@ Rectangle {
                     property bool hasAllApps: (itemData && itemData.pinned !== undefined) ? (itemData.pinned !== "") : false
                     property var filteredFolders: {
                         if (!itemData || itemData.pinned === undefined || !gridRoot.folderList) return [];
-                        return gridRoot.folderList.filter(function(f) { 
-                            return itemData.pinned !== f 
+                        return gridRoot.folderList.filter(function(f) {
+                            return itemData.pinned !== f
                         })
                     }
 
@@ -216,8 +223,8 @@ Rectangle {
                             gridRoot.moveRequested(itemData.key, "all")
                         }
                     }
-                    
-                    MenuSeparator { 
+
+                    MenuSeparator {
                         visible: moveSubMenu.hasAllApps && (moveSubMenu.filteredFolders.length > 0 || true)
                     }
 
@@ -231,13 +238,13 @@ Rectangle {
                             }
                         }
                     }
-                    
-                    MenuSeparator { 
-                        visible: moveSubMenu.filteredFolders.length > 0 
+
+                    MenuSeparator {
+                        visible: moveSubMenu.filteredFolders.length > 0
                     }
 
                     MenuItem {
-                        text: "Create New Folder"
+                        text: gridRoot.createNewFolderText
                         onTriggered: {
                             contextMenu.close()
                             gridRoot.folderRequested(itemData.key)
@@ -249,8 +256,9 @@ Rectangle {
             // App/Game Item Content (the original Column structure)
             Column {
                 visible: !!(itemData && !itemData.isSeparator) // Visible only if NOT a separator
-                anchors.fill: parent // Fills the parent Item
-                spacing: 10
+                anchors.centerIn: parent // Centraliza vertical e horizontalmente
+                width: parent.width - 10
+                spacing: 8
 
                 // Container for icon
                 Item {
@@ -277,18 +285,20 @@ Rectangle {
                             // sourceSize is CRITICAL for memory management. It limits the decoded image size in RAM.
                             // We use a slightly larger size than the display size for better quality when scaled.
                             sourceSize: Qt.size(gridRoot.itemIconSize * 2, gridRoot.itemIconSize * 2)
-                            
+
                             // Query parameter is necessary to avoid "Mipmap settings changed" error when toggling HQ rendering
-                            source: (itemData && itemData.icon_path) 
+                            source: (itemData && itemData.icon_path)
                                     ? itemData.icon_path + "?" + (gridRoot.iconMipmaps ? "hq" : "sd")
                                     : "placeholder.png"
-                            
+
                             fillMode: Image.PreserveAspectFit
                             antialiasing: gridRoot.iconAntiAliasing
                             smooth: gridRoot.iconSmoothing
                             mipmap: gridRoot.iconMipmaps
                             asynchronous: true
-                            cache: false
+                            cache: true
+                            opacity: status === Image.Ready ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 300 } }
                         }
                     }
                 }
@@ -308,7 +318,9 @@ Rectangle {
             MouseArea {
                 id: mouseArea
                 visible: !!(itemData && !itemData.isSeparator)
-                anchors.fill: parent
+                width: gridRoot.itemWidth
+                height: gridRoot.itemHeight
+                anchors.centerIn: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -326,7 +338,9 @@ Rectangle {
             DropArea {
                 id: dropArea
                 visible: !!(itemData && !itemData.isSeparator)
-                anchors.fill: parent
+                width: gridRoot.itemWidth
+                height: gridRoot.itemHeight
+                anchors.centerIn: parent
                 onDropped: function(drop) {
                     if (itemData && !itemData.isSeparator && drop.hasUrls) {
                         let url = drop.urls[0] // This is the QUrl object
@@ -341,7 +355,7 @@ Rectangle {
 
     // Populate internalModel when itemsModel changes
     onItemsModelChanged: {
-        if (!itemsModel) {
+        if (!itemsModel || itemsModel.length === 0) {
             internalModel.clear();
             return;
         }
@@ -358,10 +372,10 @@ Rectangle {
         for (var j = 0; j < itemsModel.length; j++) {
             var newItem = itemsModel[j];
             var newId = newItem.isSeparator ? ("sep_" + newItem.sectionId) : ("app_" + newItem.key);
-            
+
             if (oldItemsMap.hasOwnProperty(newId)) {
                 var oldIdx = oldItemsMap[newId];
-                
+
                 // Move if necessary
                 if (oldIdx !== j) {
                     internalModel.move(oldIdx, j, 1);
@@ -376,7 +390,7 @@ Rectangle {
                     }
                     oldItemsMap[newId] = j;
                 }
-                
+
                 // Update properties
                 var currentItem = internalModel.get(j);
                 for (var prop in newItem) {
@@ -403,7 +417,7 @@ Rectangle {
             toRemove.push(oldItemsMap[keyRem]);
         }
         toRemove.sort(function(a, b) { return b - a; });
-        
+
         for (var k = 0; k < toRemove.length; k++) {
             internalModel.remove(toRemove[k]);
         }
@@ -422,12 +436,19 @@ Rectangle {
 
     property var folderList: []
     property string allAppsText: "All Apps"
+    property string settingsText: "Settings"
+    property string deleteConfigText: "Delete Config"
+    property string moveToText: "Move to"
+    property string createNewFolderText: "Create New Folder"
+    property string launcherText: "Launcher"
+
+    property bool hoverEffectEnabled: true
 
     ScrollView {
         id: scrollView
         anchors.fill: parent
         clip: true
-        topPadding: overlaySection.visible ? overlaySection.height : 0
+        topPadding: overlaySection.visible ? (overlaySection.height + 15) : 0
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
@@ -436,6 +457,7 @@ Rectangle {
         Flow {
             id: flowView
             width: scrollView.width
+            clip: true
 
             Repeater {
                 model: internalModel
@@ -458,14 +480,14 @@ Rectangle {
         border.color: gridRoot.buttonBorderColor
         border.width: 1
         radius: 10
-        visible: false
+        visible: launcherPkg !== ""
         clip: true
         Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
 
         Column {
             anchors.centerIn: parent
             spacing: 2
-            
+
             // Launcher Icon Button
             Item {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -478,7 +500,7 @@ Rectangle {
                     width: gridRoot.itemIconSize
                     height: gridRoot.itemIconSize
                     fillMode: Image.PreserveAspectFit
-                    
+
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -493,18 +515,19 @@ Rectangle {
                 }
             }
             Text {
-                text: "Launcher"
+                text: gridRoot.launcherText
                 color: gridRoot.textColor
                 font.pointSize: gridRoot.itemFontSize
                 anchors.horizontalCenter: parent.horizontalCenter
             }
         }
+
     }
 
     Menu {
         id: launcherMenu
         MenuItem {
-            text: "Settings"
+            text: gridRoot.settingsText
             onTriggered: gridRoot.settingsRequested(gridRoot.launcherPkg, "app")
         }
     }
@@ -520,7 +543,7 @@ Rectangle {
         radius: 3
         color: gridRoot.buttonBorderColor
         opacity: 0.5
-        
+
         MouseArea {
             anchors.fill: parent
             onClicked: overlaySection.visible = !overlaySection.visible

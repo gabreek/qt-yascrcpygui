@@ -10,7 +10,8 @@ import queue # Added for managing download queue
 import gc
 
 from .base_grid_tab import BaseGridTab
-from .workers import AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, IconSaveWorker, BatchIconDownloadWorker, BatchSaveWorker
+from .workers import (AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, 
+                      IconSaveWorker, BatchIconDownloadWorker, BatchSaveWorker)
 from .dialogs import show_message_box
 from .session_dialogs import CreateSessionDialog, FoldersManagerDialog
 from .common_widgets import CustomThemedProgressDialog
@@ -45,12 +46,18 @@ class AppsTab(BaseGridTab):
         self.launcher_icon_path = os.path.join(base_path, "gui/launcher.png")
         self.icon_cache_dir = self.app_config.get_icon_cache_dir()
 
+        self._last_model_fingerprint = None # 8. Otimização de reconstrução do modelo
+
         top_panel = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(self.app_config.tr('apps_tab', 'search_placeholder'))
 
         self.refresh_button = QPushButton(self.app_config.tr('apps_tab', 'refresh_btn'))
-        self.folders_button = QPushButton(self.app_config.tr('apps_tab', 'folders_btn'))
+        
+        # 7. Botão "Folders" como ícone
+        self.folders_button = QPushButton("📁")
+        self.folders_button.setToolTip(self.app_config.tr('apps_tab', 'folders_btn'))
+        self.folders_button.setFixedWidth(35)
 
         top_panel.addWidget(self.search_input)
         top_panel.addWidget(self.refresh_button)
@@ -59,7 +66,13 @@ class AppsTab(BaseGridTab):
 
         self.refresh_button.clicked.connect(self.refresh_apps_list)
         self.folders_button.clicked.connect(self.open_folders_manager)
-        self.search_input.textChanged.connect(self.filter_apps)
+        
+        # 6. Campo de busca com debounce
+        self._search_timer = QTimer()
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(200)
+        self._search_timer.timeout.connect(self.filter_apps)
+        self.search_input.textChanged.connect(self._search_timer.start)
 
         self._connect_qml_signals()
         self.on_device_changed()
@@ -140,6 +153,11 @@ class AppsTab(BaseGridTab):
             folders = [f for f in self.app_config.get_custom_sessions().keys() if f != 'all']
             root.setProperty("folderList", folders)
             root.setProperty("allAppsText", self.app_config.tr('apps_tab', 'all_section'))
+            root.setProperty("settingsText", self.app_config.tr('common', 'settings'))
+            root.setProperty("deleteConfigText", self.app_config.tr('apps_tab', 'delete_config_title'))
+            root.setProperty("moveToText", self.app_config.tr('apps_tab', 'move_to'))
+            root.setProperty("createNewFolderText", self.app_config.tr('apps_tab', 'create_session_title'))
+            root.setProperty("launcherText", self.app_config.tr('apps_tab', 'launcher_label'))
 
     @Slot(str, str)
     def on_move_to_folder(self, pkg_name, folder_name):
@@ -201,6 +219,7 @@ class AppsTab(BaseGridTab):
     def on_device_changed(self):
         self._clear_grid()
         self.all_apps_data = []
+        self._last_model_fingerprint = None
         device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
             self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
@@ -560,6 +579,12 @@ class AppsTab(BaseGridTab):
                 app_copy['is_pinned'] = False
                 app_copy['isHidden'] = is_collapsed
                 qml_model_data.append(app_copy)
+
+        # 8. Fingerprint optimization
+        model_fingerprint = hash(str(qml_model_data))
+        if model_fingerprint == self._last_model_fingerprint:
+            return
+        self._last_model_fingerprint = model_fingerprint
 
         self._update_grid_model(qml_model_data)
 

@@ -223,6 +223,13 @@ class ScrcpyTab(QWidget):
         layout.addWidget(self.hq_rendering_checkbox)
         self.option_checkboxes[CONF_HQ_ICON_RENDERING] = self.hq_rendering_checkbox
 
+        # Web Hover Effect
+        self.hover_effect_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'rendering', key='web_hover_effect'))
+        self.hover_effect_checkbox.setChecked(self.app_config.get(CONF_WEB_HOVER_EFFECT, True))
+        self.hover_effect_checkbox.stateChanged.connect(lambda state: self._on_rendering_option_changed(CONF_WEB_HOVER_EFFECT, bool(state)))
+        layout.addWidget(self.hover_effect_checkbox)
+        self.option_checkboxes[CONF_WEB_HOVER_EFFECT] = self.hover_effect_checkbox
+
         # Add Configure Web Server button
         self.web_server_config_button = QPushButton(self.app_config.tr('scrcpy_tab', 'labels', key='web_server'))
         self.web_server_config_button.clicked.connect(self._open_web_server_config)
@@ -255,6 +262,7 @@ class ScrcpyTab(QWidget):
 
         self.show_system_apps_checkbox.setText(self.app_config.tr('scrcpy_tab', 'labels', key='show_system_apps'))
         self.hq_rendering_checkbox.setText(self.app_config.tr('scrcpy_tab', 'rendering', key='hq_icon_rendering'))
+        self.hover_effect_checkbox.setText(self.app_config.tr('scrcpy_tab', 'rendering', key='web_hover_effect'))
         self.web_server_config_button.setText(self.app_config.tr('scrcpy_tab', 'labels', key='web_server'))
         self.redownload_icons_button.setText(self.app_config.tr('apps_tab', 'redownload_icons_btn'))
 
@@ -370,33 +378,38 @@ class ScrcpyTab(QWidget):
         self.profile_combo.addItem(self.app_config.tr('scrcpy_tab', 'labels', key='global_config'), "global")
         device_id = self.app_config.get_connection_id()
         if device_id == DEVICE_NOT_FOUND or device_id is None:
-            active_profile = self.app_config.active_profile
-            index = self.profile_combo.findData(active_profile)
-            if index != -1:
-                self.profile_combo.setCurrentIndex(index)
             self.profile_combo.blockSignals(False)
             return
+        
+        # Get the set of currently installed/detected apps and shortcuts
         installed_apps_packages = self.app_config.device_app_cache.get('installed_apps', set())
         winlator_shortcuts_on_device = self.app_config.device_app_cache.get('winlator_shortcuts', set())
-        filtered_app_configs = []
-        app_configs_from_settings = self.app_config.get_app_config_keys()
         launcher_pkg = self.app_config.get(CONF_DEFAULT_LAUNCHER)
-        for key, name in app_configs_from_settings:
-            if key in installed_apps_packages or key == launcher_pkg:
-                filtered_app_configs.append((key, name))
-        if filtered_app_configs:
+
+        # Filter App configs: only show if installed on device or is the default launcher
+        app_configs_from_settings = self.app_config.get_app_config_keys()
+        filtered_apps = [
+            (key, name) for key, name in app_configs_from_settings 
+            if key in installed_apps_packages or key == launcher_pkg
+        ]
+        
+        if filtered_apps:
             self.profile_combo.insertSeparator(self.profile_combo.count())
-            for key, name in sorted(filtered_app_configs, key=lambda x: x[1].lower()):
+            for key, name in sorted(filtered_apps, key=lambda x: x[1].lower()):
                 self.profile_combo.addItem(f"{name} (App)", key)
-        filtered_winlator_configs = []
+        
+        # Filter Winlator configs: only show if the shortcut path still exists on device
         winlator_configs_from_settings = self.app_config.get_winlator_config_keys()
-        for key, name in winlator_configs_from_settings:
-            if key in winlator_shortcuts_on_device:
-                filtered_winlator_configs.append((key, name))
-        if filtered_winlator_configs:
+        filtered_winlator = [
+            (key, name) for key, name in winlator_configs_from_settings
+            if key in winlator_shortcuts_on_device
+        ]
+
+        if filtered_winlator:
             self.profile_combo.insertSeparator(self.profile_combo.count())
-            for key, name in sorted(filtered_winlator_configs, key=lambda x: x[1].lower()):
+            for key, name in sorted(filtered_winlator, key=lambda x: x[1].lower()):
                 self.profile_combo.addItem(f"{name} (Winlator)", key)
+        
         active_profile = self.app_config.active_profile
         index = self.profile_combo.findData(active_profile)
         if index != -1:
@@ -404,7 +417,7 @@ class ScrcpyTab(QWidget):
         else:
             self.app_config.load_profile("global")
             self.profile_combo.setCurrentIndex(0)
-            self._update_all_widgets_from_config()
+        
         self.profile_combo.blockSignals(False)
 
     def _on_profile_selected(self, index):
@@ -765,41 +778,57 @@ class ScrcpyTab(QWidget):
     def _update_all_widgets_from_config(self):
         for editor in self.general_editors.values(): editor.blockSignals(True)
         for checkbox in self.option_checkboxes.values(): checkbox.blockSignals(True)
-        for slider, _ in self.sliders.values(): slider.blockSignals(True)
+        for slider_tuple in self.sliders.values(): slider_tuple[0].blockSignals(True)
         self.theme_combo.blockSignals(True)
         self.profile_combo.blockSignals(True)
         self.v_codec_combo.blockSignals(True)
         self.v_encoder_combo.blockSignals(True)
         self.a_codec_combo.blockSignals(True)
         self.a_encoder_combo.blockSignals(True)
+        
         for var_key, editor in self.general_editors.items():
             value = self.app_config.get(var_key, "")
+            if value is None: value = ""
             if isinstance(editor, QLineEdit):
                 editor.setText(str(value))
             elif isinstance(editor, QComboBox):
                 editor.setCurrentText(str(value))
+        
         for var_key, checkbox in self.option_checkboxes.items():
             value = self.app_config.get(var_key, False)
             checkbox.setChecked(bool(value))
+            
         for var_key, (slider, value_label) in self.sliders.items():
-            value = self.app_config.get(var_key, 0)
-            slider.setValue(int(value))
+            value = self.app_config.get(var_key)
+            if value is None:
+                # Default values for specific keys if None
+                if var_key == 'iframe_interval': value = 0
+                elif 'bitrate' in var_key: value = 3000 if 'video' in var_key else 128
+                else: value = 0
+            
+            try:
+                slider.setValue(int(value))
+            except (ValueError, TypeError):
+                slider.setValue(0)
+
             if var_key == 'iframe_interval':
-                if value == 0:
+                if int(value) == 0:
                     value_label.setText("Auto")
                 else:
                     value_label.setText(f"{value}s")
             else:
-                unit = slider.property('unit')
+                unit = slider.property('unit') or ""
                 value_label.setText(f"{value}{unit}")
+        
         self._update_theme_dropdown()
         self.update_profile_dropdown()
         self._populate_encoder_widgets()
         self._update_resolution_state()
         self._update_launch_control_widgets_state()
+        
         for editor in self.general_editors.values(): editor.blockSignals(False)
         for checkbox in self.option_checkboxes.values(): checkbox.blockSignals(False)
-        for slider, _ in self.sliders.values(): slider.blockSignals(False)
+        for slider_tuple in self.sliders.values(): slider_tuple[0].blockSignals(False)
         self.theme_combo.blockSignals(False)
         self.profile_combo.blockSignals(False)
         self.v_codec_combo.blockSignals(False)

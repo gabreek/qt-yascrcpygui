@@ -112,7 +112,17 @@ class WinlatorTab(BaseGridTab):
         else:
             self.refresh_button.setEnabled(True)
             self.fetch_icons_button.setEnabled(True)
-            self.refresh_games_list()
+            
+            # Reset collapsed sections for new device
+            self.collapsed_sections = set()
+            
+            # Check for cached games
+            cached_games = self.app_config.get_app_list_cache().get('winlator_games', [])
+            if cached_games:
+                self.populate_games_grid_model(cached_games)
+                self.show_grid()
+            else:
+                self.refresh_games_list()
 
     def refresh_games_list(self):
         device_id = self.app_config.get_connection_id()
@@ -137,6 +147,11 @@ class WinlatorTab(BaseGridTab):
         else:
             self.populate_games_grid_model(games_with_pkg)
             self.show_grid()
+        
+        # Save to cache
+        cache = self.app_config.get_app_list_cache()
+        cache['winlator_games'] = games_with_pkg
+        self.app_config.save_app_list_cache(cache)
         
         # Synchronize memory cache for ScrcpyTab profile filtering
         self.app_config.device_app_cache['winlator_shortcuts'] = {g['path'] for g in games_with_pkg}

@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(content_widget)
 
         self.setCentralWidget(main_widget)
-        self.resize(495, 700)
+        self.resize(510, 720)
         self.setMinimumSize(400, 400) # Set a minimum size for the window
 
         self.scrcpy_session_manager_window = None
@@ -292,7 +292,7 @@ class MainWindow(QMainWindow):
     def start_web_server(self):
         if self.is_web_server_running():
             return
-        
+
         # Lazy initialization
         self.web_server_thread = WebServerThread(self.app_config)
         # Connect the signal from the web server thread to the ScrcpyTab's reload slot
@@ -316,18 +316,18 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Gerencia o fechamento da aplicação, garantindo que threads e o servidor sejam parados."""
         print("Closing application...")
-        
+
         # 1. Stop the web server
         self.stop_web_server()
-        
+
         # 2. Stop the device monitor thread
         if hasattr(self, 'device_monitor'):
             self.device_monitor.stop()
-        
+
         # 3. Close auxiliary windows
         if self.scrcpy_session_manager_window:
             self.scrcpy_session_manager_window.close()
-        
+
         if self.adb_wifi_window is not None:
             self.adb_wifi_window.close()
 
@@ -335,12 +335,12 @@ class MainWindow(QMainWindow):
         self.scrcpy_tab.stop_all_workers()
         self.apps_tab.stop_all_workers()
         self.winlator_tab.stop_all_workers()
-        
+
         # 5. Clear and wait for the global thread pool
         # This will wait for any non-infinite-loop QRunnables to finish.
         self.thread_pool.clear()
         self.thread_pool.waitForDone(3000) # Wait up to 3s for remaining workers
-        
+
         print("Application closed successfully.")
         event.accept()
 
@@ -405,7 +405,7 @@ class MainWindow(QMainWindow):
             # Clear reference and update button state when window is destroyed
             self.scrcpy_session_manager_window.destroyed.connect(lambda: setattr(self, 'scrcpy_session_manager_window', None))
             self.scrcpy_session_manager_window.destroyed.connect(lambda: self.session_manager_button.setText(">"))
-            
+
             self.scrcpy_session_manager_window.show()
             self.session_manager_button.setText("<")
         else:
@@ -416,10 +416,10 @@ class MainWindow(QMainWindow):
     def open_adb_wifi_manager(self):
         if self.adb_wifi_window is None or not self.adb_wifi_window.isVisible():
             self.adb_wifi_window = AdbWifiWindow(self.app_config, self)
-            
+
             # Clear reference when the window is destroyed
             self.adb_wifi_window.destroyed.connect(lambda: setattr(self, 'adb_wifi_window', None))
-            
+
             # Calculate center position
             parent_rect = self.geometry()
             child_width = self.adb_wifi_window.width()

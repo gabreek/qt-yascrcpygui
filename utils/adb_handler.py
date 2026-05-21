@@ -146,12 +146,12 @@ def get_game_executable_info(shortcut_path, device_id=None):
             if match:
                 drive = match.group(1).lower()
                 rel_path = match.group(2).strip().replace('\\', '/')
-                
+
                 # Mapeamento de drives padrão do Winlator
                 drive_root = "/storage/emulated/0/Download"
                 if drive == 'e': drive_root = "/storage/emulated/0"
                 # C: é ignorado pois fica em área protegida do app e raramente tem jogos
-                
+
                 base_dir = f"{drive_root}/{rel_path}"
 
     # 3. Fallback: Se o Path= falhou, tenta o caminho completo do Exec=
@@ -160,10 +160,10 @@ def get_game_executable_info(shortcut_path, device_id=None):
         if match:
             drive = match.group(1).lower()
             full_wine_path = match.group(2).strip().replace('\\', '/')
-            
+
             drive_root = "/storage/emulated/0/Download"
             if drive == 'e': drive_root = "/storage/emulated/0"
-            
+
             final_path = re.sub(r'/+', '/', f"{drive_root}/{full_wine_path}")
             return final_path
 
@@ -192,7 +192,7 @@ def pull_file(remote_path, local_path, device_id=None, timeout=60):
             process.kill()
             print(f"Error: pull_file timed out after {timeout}s for {remote_path}")
             return False
-            
+
         if process.returncode != 0:
             # Error is handled by the caller, no need to print here
             return False
