@@ -77,6 +77,8 @@ class WinlatorTab(BaseGridTab):
         """Updates all labels and UI texts in the tab."""
         self.refresh_button.setText(self.app_config.tr('winlator_tab', 'refresh_btn'))
         self.fetch_icons_button.setText(self.app_config.tr('winlator_tab', 'refresh_icons_btn'))
+        # Update strings in QML
+        self.update_strings()
         # Re-populate to update separators and other texts
         self.populate_games_grid_model(list(self.game_items.values()))
 
@@ -91,6 +93,37 @@ class WinlatorTab(BaseGridTab):
         root.deleteConfigRequested.connect(self.on_delete_config_requested)
         root.iconDropped.connect(self.on_icon_dropped)
         root.sectionToggled.connect(self.on_section_toggled)
+        root.quickAccessRequested.connect(self.on_quick_access_requested)
+        
+        self._update_qml_properties(root)
+
+    def _update_qml_properties(self, root=None):
+        if not root: root = self.quick_widget.rootObject()
+        if root:
+            root.setProperty("settingsText", self.app_config.tr('common', 'settings'))
+            root.setProperty("deleteConfigText", self.app_config.tr('apps_tab', 'delete_config_title'))
+            root.setProperty("moveToText", self.app_config.tr('apps_tab', 'move_to'))
+            root.setProperty("launcherText", self.app_config.tr('apps_tab', 'launcher_label'))
+            root.setProperty("quickAccessText", self.app_config.tr('apps_tab', 'quick_access_label'))
+            root.setProperty("allAppsText", self.app_config.tr('apps_tab', 'all_section'))
+
+    @Slot(str, bool)
+    def on_quick_access_requested(self, game_path, checked):
+        metadata = self.app_config.get_app_metadata(game_path)
+        pinned_val = metadata.get('pinned', "")
+        if not isinstance(pinned_val, str): pinned_val = ""
+        parts = [p.strip() for p in pinned_val.split(',') if p.strip()]
+        
+        if checked:
+            if CONF_QUICK_ACCESS not in parts: parts.append(CONF_QUICK_ACCESS)
+        else:
+            if CONF_QUICK_ACCESS in parts: parts.remove(CONF_QUICK_ACCESS)
+            
+        new_pinned = ",".join(parts)
+        self.app_config.save_app_metadata(game_path, {'pinned': new_pinned})
+        
+        # Refresh the model to update pinning status in QML
+        self.populate_games_grid_model(list(self.game_items.values()))
 
     @Slot(str, str)
     def _on_qml_launch_requested(self, itemKey, itemName):
@@ -167,6 +200,7 @@ class WinlatorTab(BaseGridTab):
     def populate_games_grid_model(self, games):
         self.all_games_data = []
         self.game_items = {} # Reset game_items for new population
+        quick_access_items = []
 
         # Group games by their 'pkg' (which represents the Winlator CMOD version)
         grouped_games = {}
@@ -213,6 +247,10 @@ class WinlatorTab(BaseGridTab):
                     if os.path.exists(cached_icon_path):
                         icon_path = cached_icon_path
 
+                metadata = self.app_config.get_app_metadata(game_path)
+                pinned_val = metadata.get('pinned', "")
+                if not isinstance(pinned_val, str): pinned_val = ""
+                
                 game_data = {
                     'key': game_path,
                     'name': game_name,
@@ -220,10 +258,20 @@ class WinlatorTab(BaseGridTab):
                     'icon_path': QUrl.fromLocalFile(icon_path).toString(),
                     'pkg': pkg, # Store pkg for launch worker
                     'isSeparator': False,
-                    'isHidden': is_collapsed
+                    'isHidden': is_collapsed,
+                    'pinned': pinned_val
                 }
+                
+                if CONF_QUICK_ACCESS in pinned_val.split(','):
+                    quick_access_items.append(game_data)
+
                 qml_model_data.append(game_data)
                 self.game_items[game_path] = game_data # Update game_items for icon extraction/config
+
+        # Update QML models
+        root = self.quick_widget.rootObject()
+        if root:
+            root.setProperty("quickAccessModel", sorted(quick_access_items, key=lambda x: x['name'].lower()))
 
         self._update_grid_model(qml_model_data)
 

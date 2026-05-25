@@ -125,7 +125,8 @@ class AppsTab(BaseGridTab):
         """Updates all labels and UI texts in the tab."""
         self.search_input.setPlaceholderText(self.app_config.tr('apps_tab', 'search_placeholder'))
         self.refresh_button.setText(self.app_config.tr('apps_tab', 'refresh_btn'))
-        # Refresh the grid display to update separators
+        # Refresh the grid display and strings
+        self.update_strings()
         self.filter_apps()
 
     def _connect_qml_signals(self):
@@ -142,6 +143,7 @@ class AppsTab(BaseGridTab):
         root.launchLauncherRequested.connect(self.execute_launcher_launch)
         root.folderRequested.connect(self.open_create_session_dialog)
         root.moveRequested.connect(self.on_move_to_folder)
+        root.quickAccessRequested.connect(self.on_quick_access_requested)
 
         # Initialize folder list in QML
         self._update_folder_list_in_qml(root)
@@ -158,20 +160,55 @@ class AppsTab(BaseGridTab):
             root.setProperty("moveToText", self.app_config.tr('apps_tab', 'move_to'))
             root.setProperty("createNewFolderText", self.app_config.tr('apps_tab', 'create_session_title'))
             root.setProperty("launcherText", self.app_config.tr('apps_tab', 'launcher_label'))
+            root.setProperty("quickAccessText", self.app_config.tr('apps_tab', 'quick_access_label'))
 
     @Slot(str, str)
     def on_move_to_folder(self, pkg_name, folder_name):
+        metadata = self.app_config.get_app_metadata(pkg_name)
+        pinned_val = metadata.get('pinned', "")
+        if not isinstance(pinned_val, str): pinned_val = ""
+        parts = [p.strip() for p in pinned_val.split(',') if p.strip()]
+        
+        is_qqs = CONF_QUICK_ACCESS in parts
+        
+        # Replace non-qqs parts with actual_folder
         actual_folder = "" if folder_name == "all" else folder_name
-        self.app_config.save_app_metadata(pkg_name, {'pinned': actual_folder})
+        new_parts = [actual_folder] if actual_folder else []
+        if is_qqs:
+            new_parts.append(CONF_QUICK_ACCESS)
+            
+        new_pinned = ",".join(new_parts)
+        self.app_config.save_app_metadata(pkg_name, {'pinned': new_pinned})
         
         # Surgical update: find item in all_apps_data and update it
         for app in self.all_apps_data:
             if app['key'] == pkg_name:
-                app['pinned'] = actual_folder
+                app['pinned'] = new_pinned
                 break
         
-        # Instead of full filter_apps(), we do a full refresh but optimized
-        # Future optimization: manually move item in QML model to avoid full reset
+        self.filter_apps()
+
+    @Slot(str, bool)
+    def on_quick_access_requested(self, pkg_name, checked):
+        metadata = self.app_config.get_app_metadata(pkg_name)
+        pinned_val = metadata.get('pinned', "")
+        if not isinstance(pinned_val, str): pinned_val = ""
+        parts = [p.strip() for p in pinned_val.split(',') if p.strip()]
+        
+        if checked:
+            if CONF_QUICK_ACCESS not in parts: parts.append(CONF_QUICK_ACCESS)
+        else:
+            if CONF_QUICK_ACCESS in parts: parts.remove(CONF_QUICK_ACCESS)
+            
+        new_pinned = ",".join(parts)
+        self.app_config.save_app_metadata(pkg_name, {'pinned': new_pinned})
+        
+        # Surgical update: find item in all_apps_data and update it
+        for app in self.all_apps_data:
+            if app['key'] == pkg_name:
+                app['pinned'] = new_pinned
+                break
+        
         self.filter_apps()
 
 
@@ -352,7 +389,8 @@ class AppsTab(BaseGridTab):
                 continue
 
             metadata = self.app_config.get_app_metadata(pkg_name)
-            folder = metadata.get('pinned', "")
+            pinned_val = metadata.get('pinned', "")
+            if not isinstance(pinned_val, str): pinned_val = ""
 
             icon_path_file_exists = False
             icon_path_url = ""
@@ -377,7 +415,7 @@ class AppsTab(BaseGridTab):
                 'is_launcher_shortcut': False,
                 'icon_path': icon_path_url,
                 'is_pinned': False, # This is the legacy role, keeping it false
-                'pinned': folder if isinstance(folder, str) else "" # Ensure String type
+                'pinned': pinned_val
             })
         if self.pending_icon_downloads:
             self._start_batch_icon_download()
@@ -522,6 +560,7 @@ class AppsTab(BaseGridTab):
 
         sessions = {} # folder_name -> list of apps
         unassigned_apps = []
+        quick_access_items = []
 
         # Get custom sessions configuration
         session_order = self.app_config.get_custom_sessions_order()
@@ -530,13 +569,23 @@ class AppsTab(BaseGridTab):
             pkg_name = app['key']
             # Fetch the most up-to-date folder assignment from AppConfig
             metadata = self.app_config.get_app_metadata(pkg_name)
-            folder = metadata.get('pinned', "")
-            if not isinstance(folder, str): folder = ""
+            pinned_val = metadata.get('pinned', "")
+            if not isinstance(pinned_val, str): pinned_val = ""
+            
+            parts = [p.strip() for p in pinned_val.split(',') if p.strip()]
+            folder = next((p for p in parts if p != CONF_QUICK_ACCESS), "")
+            
+            if app.get('is_launcher_shortcut'):
+                launcher_item = app
+                quick_access_items.append(app)
+            elif CONF_QUICK_ACCESS in parts:
+                quick_access_items.append(app)
 
-            if folder:
-                sessions.setdefault(folder, []).append(app)
-            else:
-                unassigned_apps.append(app)
+            if not app.get('is_launcher_shortcut'):
+                if folder:
+                    sessions.setdefault(folder, []).append(app)
+                else:
+                    unassigned_apps.append(app)
 
         qml_model_data = []
 
@@ -579,6 +628,13 @@ class AppsTab(BaseGridTab):
                 app_copy['is_pinned'] = False
                 app_copy['isHidden'] = is_collapsed
                 qml_model_data.append(app_copy)
+
+        # Update QML models
+        final_quick_access = sorted(quick_access_items, key=lambda x: (0 if x.get('is_launcher_shortcut') else 1, x['name'].lower()))
+
+        root = self.quick_widget.rootObject()
+        if root:
+            root.setProperty("quickAccessModel", final_quick_access)
 
         # 8. Fingerprint optimization
         model_fingerprint = hash(str(qml_model_data))

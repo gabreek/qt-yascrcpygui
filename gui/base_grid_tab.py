@@ -85,6 +85,43 @@ class BaseGridTab(QWidget):
             from utils.constants import CONF_WEB_HOVER_EFFECT
             root.setProperty("hoverEffectEnabled", self.app_config.get(CONF_WEB_HOVER_EFFECT, True))
 
+            # Pass Quick Access factor
+            from utils.constants import CONF_QUICK_ACCESS_FACTOR, CONF_QUICK_ACCESS_VISIBLE
+            root.setProperty("quickAccessFactor", self.app_config.get(CONF_QUICK_ACCESS_FACTOR, 1.0))
+            root.setProperty("quickAccessVisible", self.app_config.get(CONF_QUICK_ACCESS_VISIBLE, False))
+            
+            # Update strings
+            self.update_strings()
+            
+            # Connect custom update signals
+            root.quickAccessFactorUpdated.connect(self.on_quick_access_factor_changed)
+            root.quickAccessVisibilityChanged.connect(self.on_quick_access_visibility_changed)
+
+    def update_strings(self):
+        """Passes localized strings to the QML component."""
+        root = self.quick_widget.rootObject()
+        if not root:
+            return
+
+        # Map strings from app_config.tr to QML properties
+        root.setProperty("allAppsText", self.app_config.tr('apps_tab', 'all_section'))
+        root.setProperty("settingsText", self.app_config.tr('common', 'settings'))
+        root.setProperty("deleteConfigText", self.app_config.tr('apps_tab', 'delete_config_title'))
+        root.setProperty("moveToText", self.app_config.tr('apps_tab', 'move_to'))
+        root.setProperty("createNewFolderText", self.app_config.tr('apps_tab', 'create_session_title'))
+        root.setProperty("launcherText", self.app_config.tr('apps_tab', 'launcher_label'))
+        root.setProperty("quickAccessText", self.app_config.tr('apps_tab', 'quick_access_label'))
+
+    @Slot(float)
+    def on_quick_access_factor_changed(self, factor):
+        from utils.constants import CONF_QUICK_ACCESS_FACTOR
+        self.app_config.set(CONF_QUICK_ACCESS_FACTOR, factor)
+
+    @Slot(bool)
+    def on_quick_access_visibility_changed(self, visible):
+        from utils.constants import CONF_QUICK_ACCESS_VISIBLE
+        self.app_config.set(CONF_QUICK_ACCESS_VISIBLE, visible)
+
     def _clear_grid(self):
         self.items = {}
         if hasattr(self, '_last_model_data'):

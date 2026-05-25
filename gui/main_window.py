@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(content_widget)
 
         self.setCentralWidget(main_widget)
-        self.resize(510, 720)
+        self.resize(530, 720)
         self.setMinimumSize(400, 400) # Set a minimum size for the window
 
         self.scrcpy_session_manager_window = None

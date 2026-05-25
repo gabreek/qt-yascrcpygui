@@ -2,10 +2,12 @@
 import QtQuick 6.0
 import QtQuick.Controls 6.0
 import QtQuick.Layouts 6.0
+import QtQml 6.0
 
 Rectangle {
     id: gridRoot
 
+    // --- Theme Properties ---
     property color backgroundColor: "black"
     property color textColor: "white"
     property color buttonBgColor: "lightgray"
@@ -14,83 +16,176 @@ Rectangle {
     property color buttonBorderColor: "darkgray"
     property color highlightColor: "blue"
     property color altBaseColor: "lightgray"
-
+    property bool hoverEffectEnabled: true
 
     color: backgroundColor
 
-    property var itemsModel: []
+    // --- Layout Properties (set from Python) ---
     property int itemIconSize: 44
     property int itemFontSize: 9
     property int itemWidth: 98
     property int itemHeight: 98
-    property int itemSpacingHorizontal: -5
+    property int itemSpacingHorizontal: 0
     property int itemSpacingVertical: 15
 
-    // Rendering settings
+    readonly property int totalItemWidth: itemWidth + itemSpacingHorizontal
+    readonly property int totalItemHeight: itemHeight + itemSpacingVertical
+
+    // --- Quick Access Properties ---
+    property real quickAccessFactor: 1.0
+    property bool quickAccessVisible: false
+    property int minQuickAccessHeight: 48
+    property string launcherPkg: ""
+
+    // --- Rendering Settings ---
     property bool iconAntiAliasing: false
     property bool iconSmoothing: false
     property bool iconMipmaps: false
 
+    // --- Localization Strings (set from Python via update_strings) ---
+    property string allAppsText: ""
+    property string settingsText: ""
+    property string deleteConfigText: ""
+    property string moveToText: ""
+    property string createNewFolderText: ""
+    property string launcherText: ""
+    property string quickAccessText: ""
+
+    // --- Signals ---
+    signal launchRequested(var itemKey, var itemName)
+    signal settingsRequested(var itemKey, var itemType)
+    signal deleteConfigRequested(var itemKey, var itemType)
+    signal pinToggled(var itemKey)
+    signal iconDropped(var itemKey, var fileUrl)
+    signal sectionToggled(var sectionId, bool collapsed)
+    signal launchLauncherRequested()
+    signal folderRequested(var itemKey)
+    signal moveRequested(var itemKey, var folderName)
+    signal quickAccessRequested(var itemKey, bool checked)
+    signal quickAccessFactorUpdated(real factor)
+    signal quickAccessVisibilityChanged(bool visible)
+
+    // --- Internal Models ---
     property alias qmlInternalModel: internalModel
+    ListModel { id: internalModel }
+    ListModel { id: internalQuickAccessModel }
 
-    ListModel {
-        id: internalModel
-    }
+    property var itemsModel: []
+    property var quickAccessModel: []
+    property var folderList: []
 
-    Component {
-        id: actionButtonComponent
-        Button {
-            font.pixelSize: 16
-            display: AbstractButton.TextOnly
-            background: Rectangle {
-                color: parent.down ? gridRoot.buttonPressedColor : gridRoot.buttonBgColor
-                radius: 11
-                border.color: gridRoot.buttonBorderColor
-                border.width: 1
-            }
-            width: 23
-            height: 23
-            palette.buttonText: gridRoot.textColor
+    onItemsModelChanged: syncModel(itemsModel, internalModel, "app_")
+    onQuickAccessModelChanged: syncModel(quickAccessModel, internalQuickAccessModel, "qa_")
+
+    function syncModel(sourceData, targetModel, prefix) {
+        if (!sourceData) {
+            targetModel.clear();
+            return;
         }
+
+        var allRoles = {
+            "key": "", "name": "", "icon_path": "", "item_type": "",
+            "pinned": "", "isSeparator": false, "isHidden": false,
+            "isCollapsed": false, "sectionId": "", "text": "",
+            "ownerModel": null, "is_launcher_shortcut": false
+        };
+
+        var oldItemsMap = {};
+        for (var i = 0; i < targetModel.count; i++) {
+            var item = targetModel.get(i);
+            var id = item.isSeparator ? ("sep_" + item.sectionId) : (prefix + item.key);
+            oldItemsMap[id] = i;
+        }
+
+        for (var j = 0; j < sourceData.length; j++) {
+            var newItem = sourceData[j];
+            var newId = newItem.isSeparator ? ("sep_" + newItem.sectionId) : (prefix + newItem.key);
+            var fullItem = Object.assign({}, allRoles, newItem);
+            fullItem.ownerModel = targetModel;
+
+            if (oldItemsMap.hasOwnProperty(newId)) {
+                var oldIdx = oldItemsMap[newId];
+                if (oldIdx !== j) {
+                    targetModel.move(oldIdx, j, 1);
+                    for (var key in oldItemsMap) {
+                        var idx = oldItemsMap[key];
+                        if (oldIdx < j) { if (idx > oldIdx && idx <= j) oldItemsMap[key]--; }
+                        else { if (idx >= j && idx < oldIdx) oldItemsMap[key]++; }
+                    }
+                    oldItemsMap[newId] = j;
+                }
+                var currentItem = targetModel.get(j);
+                for (var prop in fullItem) {
+                    if (fullItem[prop] !== currentItem[prop]) {
+                        targetModel.setProperty(j, prop, fullItem[prop]);
+                    }
+                }
+                delete oldItemsMap[newId];
+            } else {
+                targetModel.insert(j, fullItem);
+                for (var keyAdd in oldItemsMap) {
+                    if (oldItemsMap[keyAdd] >= j) oldItemsMap[keyAdd]++;
+                }
+            }
+        }
+
+        var toRemove = [];
+        for (var keyRem in oldItemsMap) toRemove.push(oldItemsMap[keyRem]);
+        toRemove.sort(function(a, b) { return b - a; });
+        for (var k = 0; k < toRemove.length; k++) targetModel.remove(toRemove[k]);
     }
 
+    // --- Delegate ---
     Component {
         id: gridItemDelegate
         Item {
-            readonly property var itemData: (index < internalModel.count) ? internalModel.get(index) : undefined
-            property bool isHidden: !!(itemData && itemData.isHidden)
+            id: delegateItem
+            readonly property real effectiveFactor: (typeof model.ownerModel !== "undefined" && model.ownerModel === internalQuickAccessModel) ? gridRoot.quickAccessFactor : 1.0
+            
+            readonly property var itemData: ({
+                "key": (typeof model.key !== "undefined") ? model.key : "",
+                "name": (typeof model.name !== "undefined") ? model.name : "",
+                "icon_path": (typeof model.icon_path !== "undefined") ? model.icon_path : "",
+                "item_type": (typeof model.item_type !== "undefined") ? model.item_type : "",
+                "pinned": (typeof model.pinned !== "undefined") ? model.pinned : "",
+                "isSeparator": (typeof model.isSeparator !== "undefined") ? model.isSeparator : false,
+                "isHidden": (typeof model.isHidden !== "undefined") ? model.isHidden : false,
+                "isCollapsed": (typeof model.isCollapsed !== "undefined") ? model.isCollapsed : false,
+                "sectionId": (typeof model.sectionId !== "undefined") ? model.sectionId : "",
+                "text": (typeof model.text !== "undefined") ? model.text : "",
+                "ownerModel": (typeof model.ownerModel !== "undefined") ? model.ownerModel : null,
+                "is_launcher_shortcut": (typeof model.is_launcher_shortcut !== "undefined") ? model.is_launcher_shortcut : false
+            })
+            property bool isActuallyHidden: !!(itemData && itemData.isHidden)
 
-            visible: !!(itemData) && (!isHidden || opacity > 0)
+            visible: !!(itemData) && (!isActuallyHidden || opacity > 0)
+            width: (itemData && itemData.isSeparator) ? parent.width : (gridRoot.totalItemWidth * (0.7 + 0.3 * effectiveFactor))
+            height: isActuallyHidden ? 0 : ((itemData && itemData.isSeparator) ? 60 : (gridRoot.minQuickAccessHeight + (gridRoot.totalItemHeight - gridRoot.minQuickAccessHeight) * effectiveFactor))
+            opacity: isActuallyHidden ? 0.0 : 1.0
+            clip: false
 
             Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
-            Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+            Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
 
-            width: (itemData && itemData.isSeparator) ? flowView.width : (gridRoot.itemWidth + gridRoot.itemSpacingHorizontal)
-            height: isHidden ? 0 : ((itemData && itemData.isSeparator) ? 60 : (gridRoot.itemHeight + gridRoot.itemSpacingVertical))
-            clip: true
-
-            // 2. Feedback visual de hover e clique (Quadrado que define a célula)
+            // Hover/Click Feedback
             Rectangle {
                 id: highlightRect
                 anchors.centerIn: parent
-                width: gridRoot.itemWidth
-                height: gridRoot.itemHeight
+                width: parent.width - 4
+                height: parent.height - 4
                 color: mouseArea.pressed ? Qt.lighter(gridRoot.highlightColor, 1.4) : gridRoot.highlightColor
                 opacity: (mouseArea.pressed && !itemData.isSeparator) ? 0.4 : (mouseArea.containsMouse && !itemData.isSeparator ? 0.15 : 0)
-                radius: 12
+                radius: 12 * (0.7 + 0.3 * effectiveFactor)
                 visible: !!(itemData && !itemData.isSeparator) && gridRoot.hoverEffectEnabled
-
                 Behavior on opacity { NumberAnimation { duration: 150 } }
-
                 Behavior on color { ColorAnimation { duration: 100 } }
             }
 
-            // Separator content
+            // --- Separator Content ---
             Rectangle {
                 visible: !!(itemData && itemData.isSeparator)
                 anchors.fill: parent
                 color: gridRoot.backgroundColor
-                // ... (rest of separator content - I'll keep it via context)
 
                 RowLayout {
                     anchors.fill: parent
@@ -112,7 +207,6 @@ Rectangle {
                         text: (itemData && itemData.isCollapsed) ? "+" : "-"
                         font.pixelSize: 18
                         flat: true
-
                         contentItem: Text {
                             text: parent.text
                             font: parent.font
@@ -120,37 +214,21 @@ Rectangle {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
-
                         background: Rectangle {
                             color: parent.down ? gridRoot.buttonPressedColor : "transparent"
                             radius: 13
                             border.color: parent.hovered ? gridRoot.buttonBorderColor : "transparent"
                             border.width: 1
                         }
-
                         onClicked: {
                             var collapsed = !itemData.isCollapsed
                             var sectionId = itemData.sectionId || itemData.text
-
-                            // 1. Update the separator itself
-                            internalModel.setProperty(index, "isCollapsed", collapsed)
-
-                            // 2. Loop through following items until next separator or end of model
-                            for (var i = index + 1; i < internalModel.count; i++) {
-                                var nextItem = internalModel.get(i)
-
-                                // Robust check for separator: check both isSeparator property and text
-                                // In some versions of Winlator/Qt, isSeparator might be undefined or behave differently
-                                var isNextSeparator = nextItem.isSeparator === true
-
-                                if (isNextSeparator) {
-                                    break
-                                }
-
-                                // Apply the hidden state to the item
-                                internalModel.setProperty(i, "isHidden", collapsed)
+                            var targetModel = (typeof model.ownerModel !== "undefined" && model.ownerModel) ? model.ownerModel : internalModel
+                            targetModel.setProperty(index, "isCollapsed", collapsed)
+                            for (var i = index + 1; i < targetModel.count; i++) {
+                                if (targetModel.get(i).isSeparator === true) break;
+                                targetModel.setProperty(i, "isHidden", collapsed)
                             }
-
                             gridRoot.sectionToggled(sectionId, collapsed)
                         }
                     }
@@ -166,20 +244,18 @@ Rectangle {
                 }
             }
 
+            // --- Context Menu ---
             Menu {
                 id: contextMenu
                 modal: true
-                dim: false // Capture clicks without darkening the screen
-
+                dim: false
                 background: Rectangle {
                     implicitWidth: 150
                     color: gridRoot.backgroundColor
                     border.color: gridRoot.buttonBorderColor
                     radius: 10
                 }
-
-                // Close the menu automatically when any action is triggered
-                onClosed: { }
+                onAboutToShow: moveSubMenu.close()
 
                 MenuItem {
                     text: gridRoot.settingsText
@@ -195,10 +271,11 @@ Rectangle {
                         contextMenu.close()
                     }
                 }
+                MenuSeparator { visible: !itemData.is_launcher_shortcut }
                 Menu {
-                    title: gridRoot.moveToText
                     id: moveSubMenu
-
+                    title: gridRoot.moveToText
+                    visible: !itemData.is_launcher_shortcut
                     background: Rectangle {
                         implicitWidth: 150
                         color: gridRoot.backgroundColor
@@ -210,11 +287,22 @@ Rectangle {
                     property var filteredFolders: {
                         if (!itemData || itemData.pinned === undefined || !gridRoot.folderList) return [];
                         return gridRoot.folderList.filter(function(f) {
-                            return itemData.pinned !== f
+                            var pinnedStr = String(itemData.pinned || "")
+                            var parts = pinnedStr.split(',').map(function(s) { return s.trim() })
+                            return parts.indexOf(f) === -1
                         })
                     }
 
-                    // All Apps option
+                    MenuItem {
+                        text: gridRoot.quickAccessText
+                        checkable: true
+                        checked: (itemData && itemData.pinned) ? (String(itemData.pinned).indexOf("qqs") !== -1) : false
+                        onTriggered: {
+                            contextMenu.close()
+                            gridRoot.quickAccessRequested(itemData.key, checked)
+                        }
+                    }
+                    MenuSeparator { visible: (itemData && itemData.pinned !== undefined) || moveSubMenu.filteredFolders.length > 0 }
                     MenuItem {
                         text: gridRoot.allAppsText
                         visible: moveSubMenu.hasAllApps
@@ -223,14 +311,10 @@ Rectangle {
                             gridRoot.moveRequested(itemData.key, "all")
                         }
                     }
-
-                    MenuSeparator {
-                        visible: moveSubMenu.hasAllApps && (moveSubMenu.filteredFolders.length > 0 || true)
-                    }
-
+                    MenuSeparator { visible: moveSubMenu.hasAllApps && moveSubMenu.filteredFolders.length > 0 }
                     Repeater {
                         model: moveSubMenu.filteredFolders
-                        MenuItem {
+                        delegate: MenuItem {
                             text: modelData
                             onTriggered: {
                                 contextMenu.close()
@@ -238,11 +322,7 @@ Rectangle {
                             }
                         }
                     }
-
-                    MenuSeparator {
-                        visible: moveSubMenu.filteredFolders.length > 0
-                    }
-
+                    MenuSeparator { visible: moveSubMenu.filteredFolders.length > 0 }
                     MenuItem {
                         text: gridRoot.createNewFolderText
                         onTriggered: {
@@ -253,44 +333,33 @@ Rectangle {
                 }
             }
 
-            // App/Game Item Content (the original Column structure)
+            // --- App/Game Item Content ---
             Column {
-                visible: !!(itemData && !itemData.isSeparator) // Visible only if NOT a separator
-                anchors.centerIn: parent // Centraliza vertical e horizontalmente
+                id: contentColumn
+                visible: !!(itemData && !itemData.isSeparator)
+                anchors.centerIn: parent
                 width: parent.width - 10
-                spacing: 8
+                spacing: 8 * effectiveFactor
 
-                // Container for icon
                 Item {
                     id: iconRoot
                     anchors.horizontalCenter: parent.horizontalCenter
-                    width: gridRoot.itemIconSize
-                    height: gridRoot.itemIconSize
+                    width: gridRoot.itemIconSize * (0.8 + 0.2 * effectiveFactor)
+                    height: width
 
-                    // Container with rounded corners for masking the image
                     Rectangle {
-                        id: imageContainer
-                        anchors.centerIn: parent
-                        width: gridRoot.itemIconSize
-                        height: gridRoot.itemIconSize
-                        radius: 8
+                        anchors.fill: parent
+                        radius: 8 * (0.8 + 0.2 * effectiveFactor)
                         color: "transparent"
                         clip: true
 
                         Image {
                             id: iconImage
-                            anchors.centerIn: parent
-                            width: gridRoot.itemIconSize
-                            height: gridRoot.itemIconSize
-                            // sourceSize is CRITICAL for memory management. It limits the decoded image size in RAM.
-                            // We use a slightly larger size than the display size for better quality when scaled.
+                            anchors.fill: parent
                             sourceSize: Qt.size(gridRoot.itemIconSize * 2, gridRoot.itemIconSize * 2)
-
-                            // Query parameter is necessary to avoid "Mipmap settings changed" error when toggling HQ rendering
                             source: (itemData && itemData.icon_path)
                                     ? itemData.icon_path + "?" + (gridRoot.iconMipmaps ? "hq" : "sd")
                                     : "placeholder.png"
-
                             fillMode: Image.PreserveAspectFit
                             antialiasing: gridRoot.iconAntiAliasing
                             smooth: gridRoot.iconSmoothing
@@ -305,22 +374,23 @@ Rectangle {
 
                 Text {
                     id: nameLabel
-                    text: (itemData ? itemData.name : "") || "" // Adicionar fallback para string vazia
-                    font.pointSize: gridRoot.itemFontSize
+                    text: (itemData ? itemData.name : "") || ""
+                    font.pointSize: gridRoot.itemFontSize * (0.8 + 0.2 * effectiveFactor)
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter
                     width: parent.width
                     color: gridRoot.textColor
+                    opacity: effectiveFactor > 0.6 ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity { NumberAnimation { duration: 250 } }
                 }
             }
 
-            // MouseArea and DropArea for the normal item
+            // --- Input Handlers ---
             MouseArea {
                 id: mouseArea
                 visible: !!(itemData && !itemData.isSeparator)
-                width: gridRoot.itemWidth
-                height: gridRoot.itemHeight
-                anchors.centerIn: parent
+                anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -330,7 +400,11 @@ Rectangle {
                     if (mouse.button === Qt.RightButton) {
                         contextMenu.popup();
                     } else {
-                        gridRoot.launchRequested(itemData.key, itemData.name);
+                        if (itemData.is_launcher_shortcut) {
+                            gridRoot.launchLauncherRequested();
+                        } else {
+                            gridRoot.launchRequested(itemData.key, itemData.name);
+                        }
                     }
                 }
             }
@@ -338,13 +412,10 @@ Rectangle {
             DropArea {
                 id: dropArea
                 visible: !!(itemData && !itemData.isSeparator)
-                width: gridRoot.itemWidth
-                height: gridRoot.itemHeight
-                anchors.centerIn: parent
+                anchors.fill: parent
                 onDropped: function(drop) {
                     if (itemData && !itemData.isSeparator && drop.hasUrls) {
-                        let url = drop.urls[0] // This is the QUrl object
-                        gridRoot.iconDropped(itemData.key, url.toString()) // Pass the raw URL string to Python
+                        gridRoot.iconDropped(itemData.key, drop.urls[0].toString())
                         drop.acceptProposedAction()
                     }
                 }
@@ -352,113 +423,21 @@ Rectangle {
         }
     }
 
-
-    // Populate internalModel when itemsModel changes
-    onItemsModelChanged: {
-        if (!itemsModel || itemsModel.length === 0) {
-            internalModel.clear();
-            return;
-        }
-
-        // 1. Map existing items by ID
-        var oldItemsMap = {};
-        for (var i = 0; i < internalModel.count; i++) {
-            var item = internalModel.get(i);
-            var id = item.isSeparator ? ("sep_" + item.sectionId) : ("app_" + item.key);
-            oldItemsMap[id] = i;
-        }
-
-        // 2. Sync model with new data
-        for (var j = 0; j < itemsModel.length; j++) {
-            var newItem = itemsModel[j];
-            var newId = newItem.isSeparator ? ("sep_" + newItem.sectionId) : ("app_" + newItem.key);
-
-            if (oldItemsMap.hasOwnProperty(newId)) {
-                var oldIdx = oldItemsMap[newId];
-
-                // Move if necessary
-                if (oldIdx !== j) {
-                    internalModel.move(oldIdx, j, 1);
-                    // Update indices for all items in oldItemsMap that might have shifted
-                    for (var key in oldItemsMap) {
-                        var idx = oldItemsMap[key];
-                        if (oldIdx < j) { // Moved down
-                            if (idx > oldIdx && idx <= j) oldItemsMap[key]--;
-                        } else { // Moved up
-                            if (idx >= j && idx < oldIdx) oldItemsMap[key]++;
-                        }
-                    }
-                    oldItemsMap[newId] = j;
-                }
-
-                // Update properties
-                var currentItem = internalModel.get(j);
-                for (var prop in newItem) {
-                    if (newItem[prop] !== currentItem[prop]) {
-                        internalModel.setProperty(j, prop, newItem[prop]);
-                    }
-                }
-                // Remove from map to signal it shouldn't be deleted
-                delete oldItemsMap[newId];
-            } else {
-                // New item
-                internalModel.insert(j, newItem);
-                // Shift indices in map
-                for (var keyAdd in oldItemsMap) {
-                    if (oldItemsMap[keyAdd] >= j) oldItemsMap[keyAdd]++;
-                }
-            }
-        }
-
-        // 3. Remove what's left in oldItemsMap
-        // Sort indices descending to remove without shifting others
-        var toRemove = [];
-        for (var keyRem in oldItemsMap) {
-            toRemove.push(oldItemsMap[keyRem]);
-        }
-        toRemove.sort(function(a, b) { return b - a; });
-
-        for (var k = 0; k < toRemove.length; k++) {
-            internalModel.remove(toRemove[k]);
-        }
-    }
-
-    // Signals that bubble up from the delegate
-    signal launchRequested(var itemKey, var itemName)
-    signal settingsRequested(var itemKey, var itemType)
-    signal deleteConfigRequested(var itemKey, var itemType)
-    signal pinToggled(var itemKey)
-    signal iconDropped(var itemKey, var fileUrl)
-    signal sectionToggled(var sectionId, bool collapsed)
-    signal launchLauncherRequested()
-    signal folderRequested(var itemKey)
-    signal moveRequested(var itemKey, var folderName)
-
-    property var folderList: []
-    property string allAppsText: "All Apps"
-    property string settingsText: "Settings"
-    property string deleteConfigText: "Delete Config"
-    property string moveToText: "Move to"
-    property string createNewFolderText: "Create New Folder"
-    property string launcherText: "Launcher"
-
-    property bool hoverEffectEnabled: true
-
+    // --- Main Layout ---
     ScrollView {
         id: scrollView
         anchors.fill: parent
         clip: true
-        topPadding: overlaySection.visible ? (overlaySection.height + 15) : 0
+        // Switch padding instantly based on the intended visibility state
+        topPadding: gridRoot.quickAccessVisible ? (overlaySection.height + 15) : 0
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
         contentHeight: flowView.implicitHeight
 
         Flow {
             id: flowView
             width: scrollView.width
             clip: true
-
             Repeater {
                 model: internalModel
                 delegate: gridItemDelegate
@@ -466,64 +445,93 @@ Rectangle {
         }
     }
 
-    property string launcherPkg: ""
-
-    // Persistent Overlay Section
+    // --- Quick Access Overlay ---
     Rectangle {
         id: overlaySection
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: 10
-        height: visible ? 90 : 0
+        anchors.topMargin: 5
+
+        readonly property int itemsPerRow: Math.max(1, Math.floor((width - 20) / gridRoot.totalItemWidth))
+        readonly property int rowCount: Math.ceil((internalQuickAccessModel.count + 1) / itemsPerRow)
+        readonly property int stableFullHeight: rowCount * gridRoot.totalItemHeight + 10
+
+        // Use gridRoot.quickAccessVisible directly for layout while keeping internal animations
+        height: (internalVisible && !isClosing) ? (minQuickAccessHeight + (stableFullHeight - minQuickAccessHeight) * quickAccessFactor) : 0
+        opacity: (internalVisible && !isClosing) ? 1.0 : 0.0
+        
+        property bool internalVisible: gridRoot.quickAccessVisible
+        property bool isClosing: false
+
         color: gridRoot.backgroundColor
-        border.color: gridRoot.buttonBorderColor
+        border.color: quickAccessFactor > 0.1 ? gridRoot.buttonBorderColor : "transparent"
         border.width: 1
         radius: 10
-        visible: false
+        visible: opacity > 0
         clip: true
-        Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
 
-        Column {
-            anchors.centerIn: parent
-            spacing: 2
+        Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
+        Behavior on opacity { 
+            NumberAnimation { 
+                duration: 250; 
+                easing.type: Easing.InOutQuad
+            } 
+        }
 
-            // Launcher Icon Button
-            Item {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: gridRoot.itemIconSize
-                height: gridRoot.itemIconSize
-
-                Image {
-                    id: launcherImage
-                    source: "launcher.png"
-                    width: gridRoot.itemIconSize
-                    height: gridRoot.itemIconSize
-                    fillMode: Image.PreserveAspectFit
-
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.RightButton) {
-                                launcherMenu.popup();
-                            } else {
-                                gridRoot.launchLauncherRequested()
-                            }
-                        }
-                    }
-                }
-            }
-            Text {
-                text: gridRoot.launcherText
-                color: gridRoot.textColor
-                font.pointSize: gridRoot.itemFontSize
-                anchors.horizontalCenter: parent.horizontalCenter
+        Flow {
+            id: quickAccessFlow
+            anchors.fill: parent
+            anchors.margins: 0
+            spacing: 0
+            Repeater {
+                model: internalQuickAccessModel
+                delegate: gridItemDelegate
             }
         }
 
+        Item {
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 80
+            height: 16
+            z: 10
+            visible: overlaySection.opacity > 0.5
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 40
+                height: 4
+                radius: 2
+                // Use a color that contrasts with the background
+                color: (gridRoot.backgroundColor.r + gridRoot.backgroundColor.g + gridRoot.backgroundColor.b) / 3 < 0.5 ? "white" : "black"
+                
+                // Logic: Always visible (low opacity) if factor is 1.0 (default/max).
+                // If factor < 1.0, it hides completely unless hovered.
+                opacity: resizeMouseArea.containsMouse ? 0.8 : (gridRoot.quickAccessFactor > 0.99 ? 0.3 : 0.0)
+                
+                Behavior on opacity { NumberAnimation { duration: 250 } }
+            }
+            MouseArea {
+                id: resizeMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.SizeVerCursor
+                onPositionChanged: function(mouse) {
+                    if (pressed) {
+                        var globalY = mapToItem(gridRoot, mouse.x, mouse.y).y
+                        var localY = globalY - overlaySection.y
+                        var factor = (localY - minQuickAccessHeight) / (overlaySection.stableFullHeight - minQuickAccessHeight)
+                        gridRoot.quickAccessFactor = Math.max(0, Math.min(1, factor))
+                        gridRoot.quickAccessFactorUpdated(gridRoot.quickAccessFactor)
+                    }
+                }
+            }
+        }
     }
 
+    // --- Launcher Specific UI ---
     Menu {
         id: launcherMenu
         MenuItem {
@@ -532,21 +540,47 @@ Rectangle {
         }
     }
 
-    // Discrete Toggle Handle
     Rectangle {
         id: toggleHandle
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: 2
+        anchors.topMargin: 4
         width: 60
-        height: 6
-        radius: 3
-        color: gridRoot.buttonBorderColor
-        opacity: 0.5
+        height: 8
+        radius: 4
+        color: handleMouseArea.containsMouse ? gridRoot.highlightColor : gridRoot.buttonBorderColor
+        opacity: handleMouseArea.containsMouse ? 0.8 : 0.4
+        
+        Behavior on color { ColorAnimation { duration: 200 } }
+        Behavior on opacity { NumberAnimation { duration: 200 } }
 
         MouseArea {
+            id: handleMouseArea
             anchors.fill: parent
-            onClicked: overlaySection.visible = !overlaySection.visible
+            hoverEnabled: true
+            onClicked: function(mouse) {
+                gridRoot.quickAccessVisible = !gridRoot.quickAccessVisible
+                gridRoot.quickAccessVisibilityChanged(gridRoot.quickAccessVisible)
+            }
+        }
+        
+        Timer {
+            id: closeTimer
+            interval: 300 // Matches height animation duration
+            onTriggered: {
+                overlaySection.internalVisible = false
+                overlaySection.isClosing = false
+            }
+        }
+    }
+
+    onQuickAccessVisibleChanged: {
+        if (quickAccessVisible) {
+            overlaySection.isClosing = false
+            overlaySection.internalVisible = true
+        } else {
+            overlaySection.isClosing = true
+            closeTimer.start()
         }
     }
 }

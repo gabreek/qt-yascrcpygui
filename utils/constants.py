@@ -61,6 +61,9 @@ CONF_WINLATOR_GAME_CONFIGS = 'winlator_game_configs'
 CONF_ENCODER_CACHE = 'encoder_cache'
 CONF_APP_LIST_CACHE = 'app_list_cache'
 CONF_CUSTOM_SESSIONS = 'custom_sessions'
+CONF_QUICK_ACCESS = 'qqs'
+CONF_QUICK_ACCESS_FACTOR = 'quick_access_factor'
+CONF_QUICK_ACCESS_VISIBLE = 'quick_access_visible'
 
 # --- Translations ---
 TRANSLATIONS = {
@@ -159,6 +162,7 @@ TRANSLATIONS = {
             'all_section': 'All Apps',
             'move_to': 'Move to',
             'launcher_label': 'Launcher',
+            'quick_access_label': 'Quick Access',
             'delete_config_title': 'Delete Configuration',
             'delete_config_msg': 'Are you sure you want to delete the specific configuration for<br><b>{name}</b>?',
             'delete_success': 'Specific configuration for {name} has been deleted.',
@@ -368,6 +372,7 @@ TRANSLATIONS = {
             'all_section': 'Todos os Aplicativos',
             'move_to': 'Mover para',
             'launcher_label': 'Launcher',
+            'quick_access_label': 'Acesso Rápido',
             'delete_config_title': 'Excluir Configuração',
             'delete_config_msg': 'Tem certeza que deseja excluir a configuração específica para<br><b>{name}</b>?',
             'delete_success': 'Configuração específica para {name} foi excluída.',

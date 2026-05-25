@@ -55,9 +55,11 @@ class AppConfig:
         CONF_START_WEB_SERVER_ON_LAUNCH: False,
         CONF_FORCE_ADB_FORWARD: False,
         CONF_WEB_HOVER_EFFECT: True,
+        CONF_QUICK_ACCESS_FACTOR: 1.0,
+        CONF_QUICK_ACCESS_VISIBLE: False,
 
     }
-    GLOBAL_KEYS = {CONF_THEME, CONF_LANGUAGE, CONF_SHOW_SYSTEM_APPS, CONF_START_WEB_SERVER_ON_LAUNCH, CONF_HQ_ICON_RENDERING, CONF_WEB_USERNAME, CONF_WEB_PASSWORD, CONF_WEB_PORT, CONF_WEB_HOVER_EFFECT}
+    GLOBAL_KEYS = {CONF_THEME, CONF_LANGUAGE, CONF_SHOW_SYSTEM_APPS, CONF_START_WEB_SERVER_ON_LAUNCH, CONF_HQ_ICON_RENDERING, CONF_WEB_USERNAME, CONF_WEB_PASSWORD, CONF_WEB_PORT, CONF_WEB_HOVER_EFFECT, CONF_QUICK_ACCESS_FACTOR, CONF_QUICK_ACCESS_VISIBLE}
     PROFILE_TYPES = {'app': CONF_APP_METADATA, 'winlator': CONF_WINLATOR_GAME_CONFIGS}
 
 
@@ -371,11 +373,16 @@ class AppConfig:
         with self._config_lock:
             if CONF_CUSTOM_SESSIONS in self.config_data and name in self.config_data[CONF_CUSTOM_SESSIONS]:
                 del self.config_data[CONF_CUSTOM_SESSIONS][name]
-                # Also reset all apps that were in this session
+                # Also reset all apps that were in this session, preserving 'qqs' if present
                 app_metadata = self.config_data.get(CONF_APP_METADATA, {})
                 for pkg, data in app_metadata.items():
-                    if data.get('pinned') == name:
+                    pinned_val = data.get('pinned')
+                    if pinned_val == name:
                         data['pinned'] = False
+                    elif isinstance(pinned_val, str) and name in pinned_val.split(','):
+                        # Remove only the deleted session name from the list
+                        parts = [p.strip() for p in pinned_val.split(',') if p.strip() and p.strip() != name]
+                        data['pinned'] = ",".join(parts) if parts else False
                 self._save_json(self.config_data, self.CONFIG_FILE)
                 return True
             return False
