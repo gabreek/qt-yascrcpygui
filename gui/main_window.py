@@ -1,6 +1,7 @@
 import os
-import asyncio # New import for uvicorn server management
-import uvicorn # New import for uvicorn server management
+import asyncio
+import uvicorn
+import logging
 import time
 from PySide6.QtCore import Qt, QTimer, QThreadPool, Signal, QThread, QEvent
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -34,6 +35,11 @@ class WebServerThread(QThread):
 
     def run(self):
         try:
+            # Suppress all uvicorn logging
+            logging.getLogger("uvicorn").disabled = True
+            logging.getLogger("uvicorn.access").disabled = True
+            logging.getLogger("uvicorn.error").disabled = True
+
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
 
@@ -41,7 +47,7 @@ class WebServerThread(QThread):
             web_server.set_thread_instance(self)
 
             port = int(self.app_config.get('web_port', 8000))
-            config = uvicorn.Config(web_server.app, host="0.0.0.0", port=port, log_level="info", loop="asyncio")
+            config = uvicorn.Config(web_server.app, host="0.0.0.0", port=port, log_level="warning", access_log=False, loop="asyncio")
             self.server = uvicorn.Server(config)
 
             self._loop.run_until_complete(self.server.serve())
@@ -60,8 +66,6 @@ class WebServerThread(QThread):
         if self.server and self.isRunning():
             print("Requesting web server shutdown...")
             self.server.should_exit = True
-
-            # Give the thread up to 5 seconds to terminate gracefully.
             if not self.wait(5000):
                 print("Web server thread did not terminate gracefully within 5 seconds.")
                 # We do not call terminate() here as it can lead to resource leaks.

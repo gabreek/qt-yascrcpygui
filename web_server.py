@@ -1,7 +1,7 @@
 import uvicorn
-from fastapi import FastAPI, Query, Body, HTTPException, Security, Depends
+from fastapi import FastAPI, Query, Body, HTTPException, Security, Depends, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List
@@ -9,11 +9,13 @@ from utils import adb_handler, scrcpy_handler
 from utils.constants import *
 from app_config import AppConfig
 import os
+import json
 import shlex
 import sys
 import base64
 import logging
 import secrets
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,11 +24,24 @@ logger = logging.getLogger(__name__)
 # --- Security Setup ---
 AUTH_TOKEN = secrets.token_urlsafe(32)
 security = HTTPBearer()
+_sessions: Dict[str, bool] = {}
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
     if credentials.credentials != AUTH_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid or missing API token")
     return credentials.credentials
+
+def _check_credentials(username: str, password: str) -> bool:
+    app_config = AppConfig(None)
+    correct_username = app_config.get(CONF_WEB_USERNAME, "")
+    encoded_pass = app_config.get(CONF_WEB_PASSWORD, "")
+    correct_password = ""
+    if encoded_pass:
+        try:
+            correct_password = base64.b64decode(encoded_pass.encode()).decode()
+        except Exception:
+            pass
+    return bool(correct_username and username == correct_username and password == correct_password)
 
 app = FastAPI()
 web_thread = None
@@ -51,7 +66,7 @@ try:
     if os.path.exists(icon_cache_dir):
         app.mount("/icons", StaticFiles(directory=icon_cache_dir), name="icons")
 except Exception as e:
-    print(f"Could not mount icon cache directory: {e}")
+    logger.warning("Could not mount icon cache directory: %s", e)
 
 # Mount the gui directory for placeholder images
 try:
@@ -59,18 +74,20 @@ try:
     if os.path.exists(gui_assets_dir):
         app.mount("/gui_assets", StaticFiles(directory=gui_assets_dir), name="gui_assets")
 except Exception as e:
-    print(f"Could not mount GUI assets directory: {e}")
+    logger.warning("Could not mount GUI assets directory: %s", e)
 
 class LaunchRequest(BaseModel):
     device_id: str
     pkg_name: str
     app_name: str
+    never_turn_screen_off: bool = False
 
 class WinlatorLaunchRequest(BaseModel):
     device_id: str
     shortcut_path: str
     app_name: str
     pkg_name: str
+    never_turn_screen_off: bool = False
 
 class ConfigRequest(BaseModel):
     device_id: str
@@ -179,6 +196,19 @@ async def key_event(request: KeyEventRequest):
         logger.exception("Error in key_event")
         app_config = get_config_for_device(request.device_id)
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_key_event'))
+
+@app.get("/api/folders", summary="List custom session folders with ordering", dependencies=[Depends(verify_token)])
+async def list_folders(device_id: str):
+    """Returns custom session folders (pinned sections) and their display order."""
+    try:
+        app_config = get_config_for_device(device_id)
+        custom_sessions = app_config.get_custom_sessions()
+        order = app_config.get_custom_sessions_order()
+        existing = [k for k in order if k in custom_sessions and k != 'all']
+        remaining = sorted([k for k in custom_sessions if k != 'all' and k not in order], key=lambda x: x.lower())
+        return {"folders": existing + remaining}
+    except Exception:
+        return {"folders": []}
 
 @app.get("/api/config", dependencies=[Depends(verify_token)])
 async def get_config(device_id: str, profile_key: str, b64: bool = False):
@@ -379,6 +409,9 @@ async def launch_app(request: LaunchRequest):
         config_to_use['start_app'] = request.pkg_name
         perform_alt_launch = config_to_use.get(ALTERNATE_LAUNCH_METHOD, False)
 
+        if request.never_turn_screen_off:
+            config_to_use['turn_screen_off'] = False
+
         icon_cache_dir = app_config.get_icon_cache_dir()
         icon_path = os.path.join(icon_cache_dir, f"{request.pkg_name}.png")
 
@@ -419,6 +452,9 @@ async def launch_winlator_app(request: WinlatorLaunchRequest):
         # This is for the alternate launch logic inside scrcpy_handler
         config_to_use['package_name_for_alt_launch'] = request.pkg_name
         config_to_use['shortcut_path'] = request.shortcut_path
+        
+        if request.never_turn_screen_off:
+            config_to_use['turn_screen_off'] = False
         
         icon_cache_dir = app_config.get_icon_cache_dir()
         icon_path = os.path.join(icon_cache_dir, f"{os.path.basename(request.shortcut_path)}.png")
@@ -474,7 +510,13 @@ async def list_encoders(device_id: str = None):
 async def get_active_sessions():
     """Returns a list of active (running) scrcpy sessions."""
     try:
-        return scrcpy_handler.get_active_scrcpy_sessions()
+        sessions = scrcpy_handler.get_active_scrcpy_sessions()
+        for s in sessions:
+            if s.get('icon_path'):
+                s['icon_url'] = f"/icons/{os.path.basename(s['icon_path'])}"
+            else:
+                s['icon_url'] = None
+        return sessions
     except Exception as e:
         logger.exception("Error in get_active_sessions")
         raise HTTPException(status_code=500, detail="Internal error while listing scrcpy sessions.")
@@ -495,57 +537,156 @@ async def kill_session(pid: int, device_id: str = None):
         app_config = get_config_for_device(device_id) if device_id else AppConfig(None)
         raise HTTPException(status_code=500, detail=app_config.tr('api', 'error_kill_session'))
 
+_LOGIN_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>yaScrcpy - Login</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#1e1e1e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="yaScrcpy">
+  <link rel="apple-touch-icon" href="/static/icon.png">
+  <style id="theme-vars">:root { --bg: #1e1e1e; --text: #d4d4d4; --primary: #007acc; --primary-hover: #005a9e; --panel: #2a2a2a; --border: #444; --input-bg: #1e1e1e; --input-border: #555; --muted: #9ca3af; --danger: #ef4444; --danger-hover: #dc2626; }</style>
+  <!--THEME_CSS-->
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--bg); color: var(--text); }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 32px; width: 320px; }
+    h1 { text-align: center; margin-bottom: 24px; font-size: 20px; }
+    label { display: block; margin-bottom: 4px; font-size: 13px; color: var(--muted); }
+    input { width: 100%; padding: 10px; margin-bottom: 16px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text); font-size: 14px; }
+    button { width: 100%; padding: 10px; border: none; border-radius: 6px; background: var(--primary); color: #fff; font-size: 14px; cursor: pointer; }
+    button:hover { background: var(--primary-hover); }
+    .error { color: var(--danger); font-size: 13px; text-align: center; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>yaScrcpy Web</h1>
+    <form method="post" action="/login">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+      <button type="submit">Sign In</button>
+    </form>
+  </div>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>"""
 
-# --- Path resolution for PyInstaller ---
-# (Removed duplicate get_resource_path definition)
+_THEME_COLORS_FILE = os.path.expanduser("~/.config/yaScrcpy/current_theme.json")
 
-from fastapi.responses import HTMLResponse
+def _get_web_theme_css():
+    """Returns a :root CSS block with the app's current theme colors."""
+    # Default dark fallback
+    colors = {
+        'bg': '#1e1e1e', 'text': '#d4d4d4', 'primary': '#007acc',
+        'primary_hover': '#005a9e', 'panel': '#2a2a2a', 'border': '#444',
+        'input_bg': '#1e1e1e', 'input_border': '#555', 'muted': '#9ca3af',
+        'danger': '#ef4444', 'danger_hover': '#dc2626',
+    }
 
-from fastapi import FastAPI, Query, Body, HTTPException, Security, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-import secrets
+    # Read colors saved by themes.py at theme-change time (works for ALL themes, including System)
+    try:
+        with open(_THEME_COLORS_FILE) as f:
+            saved = json.load(f)
+            colors.update(saved)
+    except Exception:
+        pass
 
-# ... (código existente) ...
+    return f"""<style id="theme-vars">:root {{
+  --bg: {colors['bg']};
+  --text: {colors['text']};
+  --primary: {colors['primary']};
+  --primary-hover: {colors['primary_hover']};
+  --panel: {colors['panel']};
+  --border: {colors['border']};
+  --input-bg: {colors['input_bg']};
+  --input-border: {colors['input_border']};
+  --muted: {colors['muted']};
+  --danger: {colors['danger']};
+  --danger-hover: {colors['danger_hover']};
+}}</style>"""
 
-security_basic = HTTPBasic()
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    return _LOGIN_PAGE.replace('<!--THEME_CSS-->', _get_web_theme_css())
 
-def check_web_auth(credentials: HTTPBasicCredentials = Depends(security_basic)):
-    app_config = AppConfig(None)
-    
-    correct_username = app_config.get(CONF_WEB_USERNAME, "")
-    encoded_pass = app_config.get(CONF_WEB_PASSWORD, "")
-    correct_password = ""
-    if encoded_pass:
-        try:
-            correct_password = base64.b64decode(encoded_pass.encode()).decode()
-        except:
-            pass
+@app.post("/login")
+async def do_login(request: Request):
+    form = await request.form()
+    username = form.get('username', '')
+    password = form.get('password', '')
+    if _check_credentials(username, password):
+        session_id = str(uuid.uuid4())
+        _sessions[session_id] = True
+        resp = RedirectResponse(url='/', status_code=303)
+        resp.set_cookie(key='session', value=session_id, max_age=86400*30, path='/', httponly=True, samesite='lax')
+        return resp
+    return HTMLResponse(content=_LOGIN_PAGE.replace('<!--THEME_CSS-->', _get_web_theme_css()).replace('</form>', '</form><p class="error">Invalid credentials</p>'), status_code=401)
 
-    if not correct_username or not correct_password:
-        raise HTTPException(status_code=401, detail="Authentication not configured", headers={"WWW-Authenticate": "Basic"})
-    
-    if credentials.username != correct_username or credentials.password != correct_password:
-        raise HTTPException(status_code=401, detail="Invalid credentials", headers={"WWW-Authenticate": "Basic"})
-    return True
-
-# Serve index.html with the injected API token
+# Serve index.html with the injected API token and theme.
+# If not authenticated, serve the login page inline (no redirect — keeps PWA standalone).
 @app.get("/", response_class=HTMLResponse, summary="Serve the web interface with auth token")
-async def serve_index(authenticated: bool = Depends(check_web_auth)):
+async def serve_index(request: Request):
+    session_id = request.cookies.get('session')
+    if not session_id or session_id not in _sessions:
+        return HTMLResponse(content=_LOGIN_PAGE)
     index_path = get_resource_path('web/index.html')
     with open(index_path, 'r') as f:
         content = f.read()
-    # Injeta o token diretamente no script do HTML
+    # Inject theme colors (replaces placeholder)
+    content = content.replace('<!--THEME_CSS-->', _get_web_theme_css())
+    # Inject the API token
     content = content.replace('{{API_TOKEN}}', AUTH_TOKEN)
     return content
+
+# Serve service worker at root scope (no auth — browser fetches it without credentials)
+@app.get("/sw.js", response_class=HTMLResponse)
+async def serve_sw():
+    sw_path = get_resource_path('web/sw.js')
+    with open(sw_path, 'r') as f:
+        return f.read()
 
 # Mount the static web assets (excluding index.html)
 web_dir = get_resource_path('web')
 if os.path.exists(web_dir):
     app.mount("/static", StaticFiles(directory=web_dir), name="web_static")
 else:
-    print(f"CRITICAL: Web directory '{web_dir}' not found.")
+    logger.error("CRITICAL: Web directory '%s' not found.", web_dir)
 
+
+def _ensure_ssl_cert():
+    """Generate a self-signed cert for HTTPS if it doesn't exist. Returns (certfile, keyfile) or (None, None)."""
+    cert_dir = os.path.expanduser("~/.config/yaScrcpy")
+    cert_path = os.path.join(cert_dir, "server.crt")
+    key_path = os.path.join(cert_dir, "server.key")
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        return cert_path, key_path
+    os.makedirs(cert_dir, exist_ok=True)
+    try:
+        import subprocess
+        subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048",
+            "-keyout", key_path, "-out", cert_path,
+            "-days", "3650", "-nodes",
+            "-subj", "/CN=yaScrcpy"
+        ], check=True, capture_output=True)
+        os.chmod(key_path, 0o600)
+        logger.info("Self-signed SSL certificate generated at %s", cert_path)
+        return cert_path, key_path
+    except Exception as e:
+        logger.warning("Could not generate SSL certificate (install openssl or use HTTP): %s", e)
+        return None, None
 
 def set_thread_instance(thread):
     """This function is called by the QThread to set the global thread instance."""
@@ -555,4 +696,10 @@ def set_thread_instance(thread):
 if __name__ == "__main__":
     app_config = AppConfig(None)
     port = int(app_config.get(CONF_WEB_PORT, 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    certfile, keyfile = _ensure_ssl_cert()
+    if certfile and keyfile:
+        logger.info("Starting HTTPS on port %d", port)
+        uvicorn.run(app, host="0.0.0.0", port=port, access_log=False, ssl_certfile=certfile, ssl_keyfile=keyfile)
+    else:
+        logger.info("Starting HTTP on port %d", port)
+        uvicorn.run(app, host="0.0.0.0", port=port, access_log=False)

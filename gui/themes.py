@@ -432,6 +432,49 @@ def _get_json_colors(theme_name):
                 return data['colors']
     return None
 
+_THEME_COLORS_FILE = os.path.join(
+    os.path.expanduser("~/.config/yaScrcpy"), "current_theme.json"
+)
+
+def _extract_web_colors(palette):
+    w = palette.color(QPalette.ColorRole.Window)
+    is_dark = w.value() < 128
+    tc = palette.color(QPalette.ColorRole.WindowText)
+    if is_dark:
+        muted = QColor(
+            min(255, int(tc.red() * 0.65)),
+            min(255, int(tc.green() * 0.65)),
+            min(255, int(tc.blue() * 0.65))
+        ).name()
+    else:
+        muted = QColor(
+            min(255, tc.red() + 100),
+            min(255, tc.green() + 100),
+            min(255, tc.blue() + 100)
+        ).name()
+    return {
+        'bg': w.name(),
+        'text': tc.name(),
+        'primary': palette.color(QPalette.ColorRole.Highlight).name(),
+        'primary_hover': palette.color(QPalette.ColorRole.Highlight).darker(120).name(),
+        'panel': palette.color(QPalette.ColorRole.Base).name(),
+        'border': w.darker(140).name() if not is_dark else w.lighter(170).name(),
+        'input_bg': palette.color(QPalette.ColorRole.Base).name(),
+        'input_border': w.darker(140).name() if not is_dark else w.lighter(170).name(),
+        'muted': muted,
+        'danger': '#ef4444',
+        'danger_hover': '#dc2626',
+    }
+
+def _save_theme_colors_for_web(palette):
+    try:
+        os.makedirs(os.path.dirname(_THEME_COLORS_FILE), exist_ok=True)
+        colors = _extract_web_colors(palette)
+        with open(_THEME_COLORS_FILE, 'w') as f:
+            json.dump(colors, f)
+    except Exception:
+        pass
+
 def apply_theme(app, theme_name):
     """Applies a theme to the entire application."""
     global _current_theme, _original_system_palette
@@ -455,6 +498,7 @@ def apply_theme(app, theme_name):
     app.setPalette(palette)
     stylesheet = generator(palette)
     app.setStyleSheet(stylesheet)
+    _save_theme_colors_for_web(palette)
     return palette
 
 def apply_stylesheet_to_window(window, theme_name=None):

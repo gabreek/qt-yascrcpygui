@@ -4,97 +4,322 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>yaScrcpy GUI - Web</title>
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="yaScrcpy">
+    <link rel="apple-touch-icon" href="/static/icon.png">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!--THEME_CSS-->
     <style>
-        :root {
-            --bg-color: #1e1e1e;
-            --text-color: #d4d4d4;
-            --primary-color: #007acc;
-            --hover-color: #005a9e;
-            --panel-bg: #2a2a2a;
-            --border-color: #444;
-            --input-bg: #1e1e1e;
-            --input-border: #555;
-        }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 1em; background-color: var(--bg-color); color: var(--text-color); }
-        h1, h2 { border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
-        ul { list-style-type: none; padding: 0; }
-        li.device-li { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background-color: var(--panel-bg); border-radius: 4px; cursor: pointer; }
-        .device-li.selected { background-color: var(--primary-color); }
-        .device-li:not(.selected):hover { background-color: #3a3a3a; }
-        button { cursor: pointer; margin-left: 5px; background-color: var(--primary-color); color: white; border: none; border-radius: 4px; padding: 8px 12px; font-size: 14px; }
-        button:hover { background-color: var(--hover-color); }
-        .modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); }
-        .modal-content { background-color: var(--panel-bg); position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; border: 1px solid var(--input-border); width: 80%; max-width: 600px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
-        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
-        .close-btn:hover, .close-btn:focus { color: white; text-decoration: none; cursor: pointer; }
-        textarea, input[type="text"], input[type="number"], select { width: 95%; padding: 8px; margin-bottom: 10px; background-color: var(--input-bg); color: var(--text-color); border: 1px solid var(--input-border); border-radius: 4px; }
-        .device-selector-container { display: flex; align-items: flex-start; margin-bottom: 1em; }
-
-        /* Tabs */
-        .tab { overflow: hidden; border-bottom: 1px solid var(--border-color); margin-bottom: 1em; }
-        .tab button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; font-size: 17px; color: var(--text-color); }
-        .tab button:hover { background-color: #3a3a3a; }
-        .tab button.active { background-color: var(--primary-color); color: white; }
-        .tabcontent { display: none; padding: 0; border-top: none; animation: fadeEffect 0.5s; }
-        @keyframes fadeEffect { from {opacity: 0;} to {opacity: 1;} }
-
-        /* Grid */
+        [x-cloak] { display: none !important; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 1em; background-color: var(--bg); color: var(--text); }
+        h2 { border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+        .tab { display: flex; gap: 4px; padding: 4px; background-color: var(--panel); border-radius: 9999px; margin-bottom: 1em; width: fit-content; }
+        .tab button { background: none; border: none; outline: none; cursor: pointer; padding: 8px 20px; border-radius: 9999px; font-size: 14px; font-weight: 500; color: var(--text); transition: 0.2s; white-space: nowrap; }
+        .tab button:hover { background-color: color-mix(in srgb, var(--text) 10%, transparent); }
+        .tab button.active { background-color: var(--primary); color: #fff; }
         .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 1em; }
-        .grid-item { display: flex; flex-direction: column; align-items: center; text-align: center; background-color: transparent; padding: 0.5em; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; height: 120px; }
-        .grid-item:hover { background-color: #3a3a3a; }
-        .icon-container { display: flex; justify-content: center; align-items: center; width: 48px; height: 48px; background-color: #363636; border-radius: 12px; margin-bottom: 0.5em; }
+        .grid-item { display: flex; flex-direction: column; align-items: center; text-align: center; background: none; padding: 0.5em; border-radius: 8px; cursor: pointer; transition: background 0.2s; height: 120px; }
+        .grid-item:hover { background-color: var(--panel); }
+        .icon-container { display: flex; justify-content: center; align-items: center; width: 48px; height: 48px; background-color: var(--border); border-radius: 12px; margin-bottom: 0.5em; }
         .grid-item img { width: 36px; height: 36px; border-radius: 8px; }
-        .grid-item span { word-break: break-word; font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; }
-        .grid-item .pkg-name { display: none; }
-        .grid-section-title { font-size: 16px; margin-bottom: 0.5em; padding-bottom: 5px; text-align: left; border-bottom: 1px solid var(--border-color); }
-        .app-section-wrapper { display: block; width: 100%; }
-
-        /* Config Tab Styles */
-        #Config { display: flex; flex-wrap: wrap; gap: 20px; }
-        .config-group { background-color: var(--panel-bg); border-radius: 8px; padding: 15px; flex: 1 1 300px; min-width: 300px; }
-        .config-group h3 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        .grid-item span { word-break: break-word; font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .grid-section-title { font-size: 16px; margin-bottom: 0.5em; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+        .app-section-wrapper { width: 100%; padding: 0 16px 16px; }
+        .tab-content { background-color: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+        .tab-content-pad { padding: 16px; }
+        .quick-access-wrapper { position: sticky; top: 0; z-index: 1; background-color: var(--panel); padding: 8px 16px; display: flex; justify-content: center; border-bottom: 1px solid var(--border); }
+        .quick-access-wrapper .grid-container { display: flex; flex-direction: row; gap: 6px; }
+        .quick-access-wrapper .grid-item { height: 40px; width: 40px; padding: 0; background: none; }
+        .quick-access-wrapper .grid-item .icon-container { width: 36px; height: 36px; border-radius: 8px; margin: 0; }
+        .quick-access-wrapper .grid-item img { width: 28px; height: 28px; border-radius: 6px; }
+        .quick-access-wrapper .grid-item span { display: none; }
+        .config-group { background-color: var(--panel); border-radius: 8px; padding: 15px; flex: 1 1 300px; min-width: 300px; }
+        .config-group h3 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
         .config-item { display: flex; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-        .config-item label { width: 120px; flex-shrink: 0; margin-bottom: 5px; }
-        .config-item select, .config-item input { flex-grow: 1; min-width: 150px;}
+        .config-item > label { width: 120px; flex-shrink: 0; }
+        .config-item select, .config-item input { flex: 1; min-width: 150px; padding: 8px; background-color: var(--input-bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 4px; }
+        .sessions-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+        .session-card { background-color: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; align-items: center; gap: 12px; flex: 1 1 280px; min-width: 280px; }
+        .session-card img { width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0; }
+        .session-card-info { flex: 1; min-width: 0; }
+        .session-card-name { font-size: 14px; color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .session-card-meta { font-size: 12px; color: var(--text); margin-top: 2px; }
+        .session-card-kill { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 22px; font-weight: bold; padding: 4px 8px; border-radius: 4px; line-height: 1; flex-shrink: 0; }
+        .session-card-kill:hover { background-color: color-mix(in srgb, var(--danger) 10%, transparent); }
         .config-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .config-options-grid div { display: flex; align-items: center; }
-        .config-options-grid label { width: auto; margin-left: 5px; }
+        .config-options-grid > label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+        .config-options-grid input[type="checkbox"] { width: auto; margin: 0; }
+        /* Utility classes for themed colors */
+        .bg-panel { background-color: var(--panel); }
+        .bg-primary { background-color: var(--primary); }
+        .bg-primary-hover:hover { background-color: var(--primary-hover); }
+        .bg-input { background-color: var(--input-bg); }
+        .text-theme { color: var(--text); }
+        .text-muted { color: var(--muted); }
+        .text-danger { color: var(--danger); }
+        .border-panel { border-color: var(--border); }
+        .border-input { border-color: var(--input-border); }
+        .border-primary { border-color: var(--primary); }
+        .btn-primary { background-color: var(--primary); color: #fff; }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+        .btn-kill { color: var(--danger); }
+        .btn-kill:hover { background-color: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger-hover); }
     </style>
 </head>
-<body>
-    <h1>yaScrcpy Web</h1>
-    <div id="devices"></div>
-    <hr>
+<body x-data="appState()" x-cloak>
+    <h1 class="text-2xl font-bold border-b border-panel pb-3 mb-6">yaScrcpy Web</h1>
 
-    <div class="tab">
-        <button class="tablinks active" onclick="openTab(event, 'Apps')">Apps</button>
-        <button class="tablinks" onclick="openTab(event, 'Winlator')">Winlator</button>
-        <button class="tablinks" onclick="openTab(event, 'Config')">Config</button>
-    </div>
-
-    <div id="Apps" class="tabcontent"><div id="apps-grid"></div></div>
-    <div id="Winlator" class="tabcontent"><div id="winlator-grid"></div></div>
-    <div id="Config" class="tabcontent">
-        <!-- Configuration UI will be built here by JS -->
-    </div>
-
-    <div id="wifi-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" id="wifi-close-btn">&times;</span>
-            <h2>ADB WiFi Connect</h2>
-            <input type="text" id="wifi-address-input" placeholder="IP:Port">
-            <button id="wifi-connect-submit-btn">Connect</button>
-            <p id="wifi-status"></p>
+    <!-- Action Buttons -->
+    <div class="mb-4">
+        <div class="flex gap-2">
+            <button @click="showWifiModal = true"
+                    class="btn-primary px-3 py-2 rounded text-sm">
+                + ADB WiFi
+            </button>
+            <button @click="showDeviceModal = true"
+                    class="bg-panel hover:bg-[#3a3a3a] text-theme px-3 py-2 rounded text-sm border border-input">
+                Select Device
+            </button>
+            <button @click="showOverrideModal = true"
+                    class="bg-panel hover:bg-[#3a3a3a] text-theme px-3 py-2 rounded text-sm border border-input">
+                Override Config
+            </button>
         </div>
     </div>
 
+    <!-- Running Sessions -->
+    <div class="mb-4">
+        <h2 class="text-base font-semibold text-theme border-b border-panel pb-1 mb-2">Running Sessions</h2>
+        <template x-if="!sessions.length">
+            <p class="text-theme text-sm">No active sessions.</p>
+        </template>
+        <div class="sessions-grid">
+            <template x-for="s in sessions" :key="s.pid">
+                <div class="session-card">
+                    <img :src="s.icon_url || '/gui_assets/placeholder.png'" alt=""
+                         @error.once="$event.target.src = '/gui_assets/placeholder.png'">
+                    <div class="session-card-info">
+                        <p class="session-card-name" x-text="s.app_name"></p>
+                        <p class="session-card-meta" x-text="'PID: ' + s.pid + ' · ' + (s.session_type || 'app')"></p>
+                    </div>
+                    <button @click="killSession(s.pid)"
+                            class="session-card-kill"
+                            title="Kill session">&times;</button>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <hr class="border-gray-700 my-4">
+
+    <!-- Tabs -->
+    <div class="tab">
+        <button :class="activeTab === 'Apps' ? 'active' : ''" @click="switchTab('Apps')">Apps</button>
+        <button :class="activeTab === 'Winlator' ? 'active' : ''" @click="switchTab('Winlator')">Winlator</button>
+        <button :class="activeTab === 'Config' ? 'active' : ''" @click="switchTab('Config')">Config</button>
+    </div>
+
+    <!-- Apps Tab -->
+    <div x-show="activeTab === 'Apps'" x-cloak class="tab-content">
+        <template x-if="appsLoading"><p>Loading apps...</p></template>
+        <template x-if="!appsLoading && apps.length === 0"><p>No apps found.</p></template>
+        <template x-for="section in appSections" :key="section.title || 'qqs'">
+            <div class="app-section-wrapper" :class="section.isQuickAccess ? 'quick-access-wrapper' : ''">
+                <h2 x-show="!section.isQuickAccess" class="grid-section-title" x-text="section.title"></h2>
+                <div class="grid-container">
+                    <template x-for="item in section.items" :key="item.pkg_name">
+                        <div class="grid-item" @click="launchApp(item.pkg_name, item.name)">
+                            <div class="icon-container">
+                                <img :src="item.icon ? '/icons/' + item.icon : '/gui_assets/placeholder.png'"
+                                     @error.once="$event.target.src = '/gui_assets/placeholder.png'">
+                            </div>
+                            <span x-text="item.name"></span>
+                        </div>
+                    </template>
+            </div>
+        </div>
+    </template>
+
+    <!-- Override Config Modal -->
+    <template x-teleport="body">
+        <div x-show="showOverrideModal"
+             class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+             @click.self="showOverrideModal = false">
+            <div class="bg-panel border border-input rounded-lg p-6 w-full max-w-md shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-theme m-0">Override Config</h2>
+                    <button @click="showOverrideModal = false" class="text-muted hover:text-theme text-2xl leading-none">&times;</button>
+                </div>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" x-model="neverTurnScreenOff"
+                           class="w-5 h-5 accent-[var(--primary)]">
+                    <span class="text-theme text-sm">Never Turn Screen Off</span>
+                </label>
+                <p class="text-xs text-muted mt-2">When enabled, the screen will never be turned off during scrcpy sessions, regardless of app or global configuration.</p>
+            </div>
+        </div>
+    </template>
+    </div>
+
+    <!-- Winlator Tab -->
+    <div x-show="activeTab === 'Winlator'" x-cloak class="tab-content tab-content-pad">
+        <template x-if="winlatorLoading"><p>Loading Winlator games...</p></template>
+        <template x-if="!winlatorLoading && winlatorApps.length === 0"><p>No Winlator games found.</p></template>
+        <div class="grid-container">
+            <template x-for="item in winlatorApps" :key="item.path">
+                <div class="grid-item" @click="launchWinlatorApp(item)">
+                    <div class="icon-container">
+                        <img :src="item.icon ? '/icons/' + item.icon : '/gui_assets/winlator_placeholder.png'"
+                             @error.once="$event.target.src = '/gui_assets/winlator_placeholder.png'">
+                    </div>
+                    <span x-text="item.name"></span>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Config Tab -->
+    <div x-show="activeTab === 'Config'" x-cloak class="tab-content tab-content-pad"
+         style="display: flex; flex-wrap: wrap; gap: 20px; width: 100%;">
+        <template x-if="configLoading || !configData"><p>Loading configuration...</p></template>
+        <template x-if="!configLoading && configData">
+            <form @submit.prevent style="display: contents;">
+                <!-- Profile selector -->
+                <div class="config-group" style="width: 100%;">
+                    <h3>Configuration Profile</h3>
+                    <div class="config-item">
+                        <label for="profile_combo">Profile</label>
+                        <select id="profile_combo" x-model="selectedProfile" @change="loadProfileConfig()">
+                            <option value="__global__">Global Config</option>
+                            <template x-for="group in configProfileGroups" :key="group.label">
+                                <optgroup :label="group.label">
+                                    <template x-for="p in group.items" :key="p.key">
+                                        <option :value="p.key" x-text="p.name"></option>
+                                    </template>
+                                </optgroup>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- General Settings -->
+                <div class="config-group">
+                    <h3>General Settings</h3>
+                    <div class="config-item"><label for="windowing_mode">Window Mode</label><select id="windowing_mode" x-model="configData.windowing_mode" @change="saveConfigDelayed('windowing_mode')"><option>Fullscreen</option><option>Freeform</option></select></div>
+                    <div class="config-item"><label for="mouse_mode">Mouse Mode</label><select id="mouse_mode" x-model="configData.mouse_mode" @change="saveConfigDelayed('mouse_mode')"><option>sdk</option><option>uhid</option><option>aoa</option></select></div>
+                    <div class="config-item"><label for="gamepad_mode">Gamepad Mode</label><select id="gamepad_mode" x-model="configData.gamepad_mode" @change="saveConfigDelayed('gamepad_mode')"><option>disabled</option><option>uhid</option><option>aoa</option></select></div>
+                    <div class="config-item"><label for="keyboard_mode">Keyboard Mode</label><select id="keyboard_mode" x-model="configData.keyboard_mode" @change="saveConfigDelayed('keyboard_mode')"><option>disabled</option><option>sdk</option><option>uhid</option><option>aoa</option></select></div>
+                    <div class="config-item"><label for="mouse_bind">Mouse Bind</label><input list="mouse_bind_opts" id="mouse_bind" x-model="configData.mouse_bind" @change="saveConfigDelayed('mouse_bind')" style="min-width:120px"><datalist id="mouse_bind_opts"><option value="bhsn:++++"><option value="++++:bhsn"></datalist></div>
+                    <div class="config-item"><label for="max_fps">Max FPS</label><input list="max_fps_opts" id="max_fps" type="number" x-model="configData.max_fps" @change="saveConfigDelayed('max_fps')"><datalist id="max_fps_opts"><option value="20"><option value="25"><option value="30"><option value="45"><option value="60"></datalist></div>
+                    <div class="config-item"><label for="new_display">Virtual Display</label><input list="new_display_opts" id="new_display" x-model="configData.new_display" @change="saveConfigDelayed('new_display')" style="min-width:150px"><datalist id="new_display_opts"><option value="Disabled"><option value="640x360/120"><option value="854x480/120"><option value="960x550/120"><option value="1280x720/140"><option value="1366x768/140"><option value="1920x1080/140"></datalist></div>
+                    <div class="config-item"><label for="max_size">Max Size</label><input list="max_size_opts" id="max_size" type="number" x-model="configData.max_size" @change="saveConfigDelayed('max_size')"><datalist id="max_size_opts"><option value="0"><option value="640"><option value="854"><option value="960"><option value="1280"><option value="1366"><option value="1080"></datalist></div>
+                    <div class="config-item"><label for="extraargs">Extra Args</label><input id="extraargs" type="text" x-model="configData.extraargs" @change="saveConfigDelayed('extraargs')"></div>
+                </div>
+
+                <!-- Video Settings -->
+                <div class="config-group">
+                    <h3>Video Settings</h3>
+                    <div class="config-item"><label for="video_codec">Video Codec</label><select id="video_codec" x-model="configData.video_codec" @change="updateCodec('video'); saveConfigDelayed('video_codec')"><option value="Auto">Auto</option><template x-for="opt in videoCodecOptions" :key="opt.value"><option :value="opt.value" x-text="opt.text"></option></template></select></div>
+                    <div class="config-item"><label for="video_encoder">Video Encoder</label><select id="video_encoder" x-model="configData.video_encoder" @change="saveConfigDelayed('video_encoder')"><option value="Auto">Auto</option><template x-for="opt in encoderOptions('video')" :key="opt"><option :value="opt" x-text="opt"></option></template></select></div>
+                    <div class="config-item"><label for="render_driver">Render Driver</label><select id="render_driver" x-model="configData.render_driver" @change="saveConfigDelayed('render_driver')"><option>opengles2</option><option>opengles</option><option>opengl</option><option>direct3d</option><option>metal</option><option>software</option></select></div>
+                    <div class="config-item"><label for="color_range">Color Range</label><select id="color_range" x-model="configData.color_range" @change="saveConfigDelayed('color_range')"><option>Auto</option><option>Full</option><option>Limited</option></select></div>
+                    <div class="config-item"><label for="allow_frame_drop">Frame Drop</label><select id="allow_frame_drop" x-model="configData.allow_frame_drop" @change="saveConfigDelayed('allow_frame_drop')"><option>Enabled</option><option>Disabled</option></select></div>
+                    <div class="config-item"><label for="low_latency">Low Latency</label><select id="low_latency" x-model="configData.low_latency" @change="saveConfigDelayed('low_latency')"><option>Enabled</option><option>Disabled</option></select></div>
+                    <div class="config-item"><label for="priority_mode">Priority</label><select id="priority_mode" x-model="configData.priority_mode" @change="saveConfigDelayed('priority_mode')"><option>Realtime</option><option>Normal</option></select></div>
+                    <div class="config-item"><label for="bitrate_mode">Bitrate Mode</label><select id="bitrate_mode" x-model="configData.bitrate_mode" @change="saveConfigDelayed('bitrate_mode')"><option>Constant</option><option>Variable</option></select></div>
+                    <div class="config-item"><label for="iframe_interval">I-frame Interval</label><input id="iframe_interval" type="number" placeholder="0 for Auto" x-model="configData.iframe_interval" @change="saveConfigDelayed('iframe_interval')"></div>
+                    <div class="config-item"><label for="video_buffer">Video Buffer</label><input id="video_buffer" type="number" x-model="configData.video_buffer" @change="saveConfigDelayed('video_buffer')"></div>
+                    <div class="config-item"><label for="video_bitrate_slider">Video Bitrate</label><input id="video_bitrate_slider" type="number" x-model="configData.video_bitrate_slider" @change="saveConfigDelayed('video_bitrate_slider')"></div>
+                </div>
+
+                <!-- Audio Settings -->
+                <div class="config-group">
+                    <h3>Audio Settings</h3>
+                    <div class="config-item"><label for="audio_codec">Audio Codec</label><select id="audio_codec" x-model="configData.audio_codec" @change="updateCodec('audio'); saveConfigDelayed('audio_codec')"><option value="Auto">Auto</option><template x-for="opt in audioCodecOptions" :key="opt.value"><option :value="opt.value" x-text="opt.text"></option></template></select></div>
+                    <div class="config-item"><label for="audio_encoder">Audio Encoder</label><select id="audio_encoder" x-model="configData.audio_encoder" @change="saveConfigDelayed('audio_encoder')"><option value="Auto">Auto</option><template x-for="opt in encoderOptions('audio')" :key="opt"><option :value="opt" x-text="opt"></option></template></select></div>
+                    <div class="config-item"><label for="audio_buffer">Audio Buffer</label><input id="audio_buffer" type="number" x-model="configData.audio_buffer" @change="saveConfigDelayed('audio_buffer')"></div>
+                    <div class="config-item"><label for="audio_bitrate_slider">Audio Bitrate</label><input id="audio_bitrate_slider" type="number" x-model="configData.audio_bitrate_slider" @change="saveConfigDelayed('audio_bitrate_slider')"></div>
+                </div>
+
+                <!-- Options -->
+                <div class="config-group">
+                    <h3>Options</h3>
+                    <div class="config-options-grid">
+                        <label><input type="checkbox" x-model="configData.fullscreen" @change="saveConfigDelayed('fullscreen')"><span>Fullscreen</span></label>
+                        <label><input type="checkbox" x-model="configData.turn_screen_off" @change="saveConfigDelayed('turn_screen_off')"><span>Turn Screen Off</span></label>
+                        <label><input type="checkbox" x-model="configData.stay_awake" @change="saveConfigDelayed('stay_awake')"><span>Stay Awake</span></label>
+                        <label><input type="checkbox" x-model="configData.mipmaps" @change="saveConfigDelayed('mipmaps')"><span>Mipmaps</span></label>
+                        <label><input type="checkbox" x-model="configData.no_audio" @change="saveConfigDelayed('no_audio')"><span>No Audio</span></label>
+                        <label><input type="checkbox" x-model="configData.no_video" @change="saveConfigDelayed('no_video')"><span>No Video</span></label>
+                        <label><input type="checkbox" x-model="configData.try_unlock" @change="saveConfigDelayed('try_unlock')"><span>Unlock Device</span></label>
+                        <label><input type="checkbox" x-model="configData.force_adb_forward" @change="saveConfigDelayed('force_adb_forward')"><span>Force ADB Forward</span></label>
+                        <label><input type="checkbox" x-model="configData.alternate_launch_method" @change="saveConfigDelayed('alternate_launch_method')"><span>Alternate Launch Method</span></label>
+                    </div>
+                </div>
+            </form>
+        </template>
+    </div>
+
+    <!-- WiFi Modal -->
+    <template x-teleport="body">
+        <div x-show="showWifiModal"
+             class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+             @click.self="showWifiModal = false">
+            <div class="bg-panel border border-input rounded-lg p-6 w-full max-w-md shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-theme m-0">ADB WiFi Connect</h2>
+                    <button @click="showWifiModal = false" class="text-muted hover:text-theme text-2xl leading-none">&times;</button>
+                </div>
+                <input type="text" x-model="wifiAddress" placeholder="IP:Port"
+                       class="w-full px-3 py-2 rounded bg-input text-theme border border-input mb-4">
+                <button @click="connectWifi()"
+                        class="w-full btn-primary py-2 rounded font-medium">
+                    Connect
+                </button>
+                <p x-text="wifiStatus" class="mt-3 text-sm"
+                   :class="wifiOk ? 'text-green-400' : 'text-danger'"></p>
+            </div>
+        </div>
+    </template>
+
+    <!-- Device Selector Modal -->
+    <template x-teleport="body">
+        <div x-show="showDeviceModal"
+             class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+             @click.self="showDeviceModal = false">
+            <div class="bg-panel border border-input rounded-lg p-6 w-full max-w-md shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-theme m-0">Select Device</h2>
+                    <button @click="showDeviceModal = false" class="text-muted hover:text-theme text-2xl leading-none">&times;</button>
+                </div>
+                <template x-if="!devices.length">
+                    <p class="text-muted text-sm">No devices found.</p>
+                </template>
+                <template x-for="d in devices" :key="d.id">
+                    <div @click="selectDevice(d.id); showDeviceModal = false"
+                         :class="selectedId === d.id
+                            ? 'bg-primary text-white'
+                            : 'bg-input text-theme hover:bg-panel'"
+                         class="flex items-center justify-between px-4 py-3 mt-1 rounded cursor-pointer border border-panel">
+                        <div>
+                            <p class="text-sm font-medium" x-text="d.name"></p>
+                            <p class="text-xs text-muted" x-text="d.id"></p>
+                        </div>
+                        <span class="text-xs text-muted" x-text="'🔋 ' + (d.battery || '?')"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </template>
+
     <script>
-        // Injetado pelo servidor no momento da carga da página
         const API_TOKEN = "{{API_TOKEN}}";
-        
+
         async function authorizedFetch(url, options = {}) {
             options.headers = {
                 ...options.headers,
@@ -104,558 +329,364 @@
             return await fetch(url, options);
         }
 
-        const devicesContainer = document.getElementById('devices');
-        const appsGrid = document.getElementById('apps-grid');
-        const winlatorGrid = document.getElementById('winlator-grid');
-        const configTab = document.getElementById('Config');
-        const wifiModal = document.getElementById('wifi-modal');
-        const wifiCloseBtn = document.getElementById('wifi-close-btn');
-        const wifiConnectSubmitBtn = document.getElementById('wifi-connect-submit-btn');
-        let currentDeviceId = null;
-        let videoEncoders = {};
-        let audioEncoders = {};
-        let cachedApps = {}; // Cache for apps
-        let cachedWinlatorApps = {}; // Cache for Winlator apps
+        function appState() {
+            return {
+                // ---- State ----
+                devices: [],
+                selectedId: null,
+                activeTab: 'Apps',
 
-        const placeholderIcon = "/gui_assets/placeholder.png";
-        const winlatorPlaceholderIcon = "/gui_assets/winlator_placeholder.png";
+                apps: [],
+                appsLoading: false,
+                _appsCache: {},
+                folders: [],
+                _foldersCache: {},
 
-        wifiCloseBtn.onclick = () => wifiModal.style.display = "none";
+                winlatorApps: [],
+                winlatorLoading: false,
+                _winlatorCache: {},
 
-        wifiConnectSubmitBtn.onclick = async () => {
-            const address = document.getElementById('wifi-address-input').value;
-            const statusP = document.getElementById('wifi-status');
-            if (!address) {
-                statusP.textContent = 'Please enter an IP:Port address.';
-                return;
-            }
-            statusP.textContent = 'Connecting...';
-            try {
-                const response = await authorizedFetch('/api/adb/connect', {
-                    method: 'POST',
-                    body: JSON.stringify({ address: address })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    statusP.textContent = `Success: ${result.message}`;
-                    setTimeout(() => {
-                        wifiModal.style.display = "none";
-                        fetchDevices();
-                    }, 1000);
-                } else {
-                    statusP.textContent = `Error: ${result.detail || 'Failed to connect.'}`;
-                }
-            } catch (error) {
-                statusP.textContent = 'An unexpected error occurred while trying to connect.';
-                console.error('ADB WiFi Connect Error:', error);
-            }
-        };
+                // Modals
+                showWifiModal: false,
+                showDeviceModal: false,
+                wifiAddress: '',
+                wifiStatus: '',
+                wifiOk: false,
 
-        window.onclick = (event) => { if (event.target == wifiModal) wifiModal.style.display = "none"; };
+                // Override Config
+                showOverrideModal: false,
+                neverTurnScreenOff: localStorage.getItem('never_turn_screen_off') === 'true',
 
-        function openTab(evt, tabName) {
-            document.querySelectorAll(".tabcontent").forEach(tc => tc.style.display = "none");
-            document.querySelectorAll(".tablinks").forEach(tl => tl.classList.remove("active"));
-            document.getElementById(tabName).style.display = tabName === 'Config' ? "flex" : "block";
-            evt.currentTarget.classList.add("active");
+                // Config
+                configLoading: false,
+                selectedProfile: '__global__',
+                configData: null,
+                videoEncoders: {},
+                audioEncoders: {},
+                configProfiles: [],
 
-            if (currentDeviceId) {
-                if (tabName === 'Apps') fetchApps(currentDeviceId);
-                if (tabName === 'Winlator') fetchWinlatorApps(currentDeviceId);
-                if (tabName === 'Config') loadConfigUI();
-            }
-        }
+                // ---- Init ----
+                async init() {
+                    await this.fetchDevices();
+                    this.fetchSessions();
+                    this._sessionTimer = setInterval(() => this.fetchSessions(), 3000);
+                    this.$watch('neverTurnScreenOff', val => {
+                        localStorage.setItem('never_turn_screen_off', val);
+                    });
+                },
 
-        async function fetchDevices() {
-            devicesContainer.innerHTML = '<h2>Connected Devices:</h2>';
-            
-            const wifiContainer = document.createElement('div');
-            wifiContainer.style.marginBottom = "1em";
-            const wifiBtn = document.createElement('button');
-            wifiBtn.textContent = 'ADB WiFi Connect';
-            wifiBtn.title = 'ADB over WiFi';
-            wifiBtn.onclick = () => { wifiModal.style.display = 'block'; };
-            wifiContainer.appendChild(wifiBtn);
-            devicesContainer.appendChild(wifiContainer);
+                // ---- Sessions ----
+                sessions: [],
+                showDeviceModal: false,
+                _sessionTimer: null,
 
-            const deviceListContainer = document.createElement('div');
-            devicesContainer.appendChild(deviceListContainer);
+                async fetchSessions() {
+                    try {
+                        const res = await authorizedFetch('/api/scrcpy/sessions');
+                        this.sessions = await res.json();
+                    } catch { this.sessions = []; }
+                },
 
-            try {
-                const response = await authorizedFetch('/api/devices');
-                const devices = await response.json();
-                if (devices.length === 0) {
-                    deviceListContainer.innerHTML = '<p>No devices found.</p>';
-                    return;
-                }
+                async killSession(pid) {
+                    try {
+                        await authorizedFetch(`/api/scrcpy/sessions/${pid}`, { method: 'DELETE' });
+                        this.sessions = this.sessions.filter(s => s.pid !== pid);
+                    } catch { /* ignore */ }
+                },
 
-                const ul = document.createElement('ul');
-                devices.forEach(device => {
-                    const li = document.createElement('li');
-                    li.className = 'device-li';
-                    li.dataset.deviceId = device.id;
-                    li.textContent = `${device.name} (${device.id})`;
-                    li.onclick = () => selectDevice(device.id, li);
-                    ul.appendChild(li);
-                });
-                deviceListContainer.innerHTML = '';
-                deviceListContainer.appendChild(ul);
+                // ---- Device ----
+                async fetchDevices() {
+                    try {
+                        const res = await authorizedFetch('/api/devices');
+                        this.devices = await res.json();
+                        if (this.devices.length > 0) this.selectDevice(this.devices[0].id);
+                    } catch { this.devices = []; }
+                },
 
-                selectDevice(devices[0].id, ul.firstChild);
+                selectDevice(id) {
+                    this.selectedId = id;
+                    const tab = this.activeTab;
+                    if (tab === 'Apps') this.fetchApps();
+                    else if (tab === 'Winlator') this.fetchWinlatorApps();
+                    else if (tab === 'Config') this.loadConfigUI();
+                },
 
-            } catch (error) {
-                deviceListContainer.innerHTML = '<p>Error fetching devices.</p>';
-            }
-        }
-
-        function selectDevice(deviceId, liElement) {
-            currentDeviceId = deviceId;
-            document.querySelectorAll('.device-li').forEach(item => item.classList.remove('selected'));
-            liElement.classList.add('selected');
-            const activeTab = document.querySelector('.tablinks.active').textContent;
-            openTab({ currentTarget: document.querySelector('.tablinks.active') }, activeTab);
-        }
-
-        function renderGrid(container, items, placeholder, launchFn) {
-             container.innerHTML = '';
-            if (items.length === 0) {
-                container.innerHTML = '<p>No items found.</p>';
-                return;
-            }
-
-            const pinnedApps = items.filter(item => item.pinned).sort((a, b) => a.name.localeCompare(b.name));
-            const unpinnedApps = items.filter(item => !item.pinned).sort((a, b) => a.name.localeCompare(b.name));
-
-            const renderSection = (title, appList) => {
-                if (appList.length === 0) return;
-
-                const sectionWrapper = document.createElement('div');
-                sectionWrapper.className = 'app-section-wrapper';
-
-                const sectionTitle = document.createElement('h2');
-                sectionTitle.textContent = title;
-                sectionTitle.className = 'grid-section-title';
-                sectionWrapper.appendChild(sectionTitle);
-
-                const sectionGrid = document.createElement('div');
-                sectionGrid.className = 'grid-container';
-
-                appList.forEach(item => {
-                    const gridItem = document.createElement('div');
-                    gridItem.className = 'grid-item';
-                    gridItem.onclick = () => launchFn(item);
-                    gridItem.dataset.pkgName = item.pkg_name || item.path;
-
-                    const img = document.createElement('img');
-                    img.src = item.icon ? `/icons/${item.icon}` : placeholder;
-                    img.onerror = () => { img.onerror = null; img.src = placeholder; };
-
-                    const iconContainer = document.createElement('div');
-                    iconContainer.className = 'icon-container';
-                    iconContainer.appendChild(img);
-
-                    const nameSpan = document.createElement('span');
-                    nameSpan.textContent = item.name;
-
-                    gridItem.appendChild(iconContainer);
-                    gridItem.appendChild(nameSpan);
-                    sectionGrid.appendChild(gridItem);
-                });
-                sectionWrapper.appendChild(sectionGrid);
-                container.appendChild(sectionWrapper);
-            };
-
-            renderSection('Pinned Apps', pinnedApps);
-            renderSection('All Apps', unpinnedApps);
-        }
-
-        async function fetchApps(deviceId) {
-            appsGrid.innerHTML = '<p>Loading apps...</p>';
-            if (cachedApps[deviceId]) {
-                renderGrid(appsGrid, cachedApps[deviceId], placeholderIcon, (item) => launchApp(item.pkg_name, item.name));
-                return;
-            }
-            try {
-                const response = await authorizedFetch(`/api/apps?device_id=${deviceId}&include_system_apps=true`);
-                const apps = await response.json();
-                if (apps.error) throw new Error(apps.error);
-                cachedApps[deviceId] = apps; // Cache the fetched data
-                renderGrid(appsGrid, apps, placeholderIcon, (item) => launchApp(item.pkg_name, item.name));
-            } catch (error) { appsGrid.innerHTML = `<p>Error fetching apps: ${error.message}</p>`; }
-        }
-
-        async function fetchWinlatorApps(deviceId) {
-            winlatorGrid.innerHTML = '<p>Loading Winlator games...</p>';
-            if (cachedWinlatorApps[deviceId]) {
-                renderGrid(winlatorGrid, cachedWinlatorApps[deviceId], winlatorPlaceholderIcon, launchWinlatorApp);
-                return;
-            }
-            try {
-                const response = await authorizedFetch(`/api/winlator/apps?device_id=${deviceId}`);
-                const games = await response.json();
-                if (games.error) throw new Error(games.error);
-                cachedWinlatorApps[deviceId] = games; // Cache the fetched data
-                renderGrid(winlatorGrid, games, winlatorPlaceholderIcon, launchWinlatorApp);
-            } catch (error) { winlatorGrid.innerHTML = `<p>Error fetching games: ${error.message}</p>`; }
-        }
-
-        async function launchApp(pkgName, appName) {
-            if (!currentDeviceId) { alert('Please select a device first.'); return; }
-            try {
-                await authorizedFetch('/api/launch', {
-                    method: 'POST',
-                    body: JSON.stringify({ device_id: currentDeviceId, pkg_name: pkgName, app_name: appName })
-                });
-            } catch (error) { alert('Failed to send launch command.'); }
-        }
-
-        async function launchWinlatorApp(item) {
-            if (!currentDeviceId) { alert('Please select a device first.'); return; }
-            try {
-                await authorizedFetch('/api/winlator/launch', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        device_id: currentDeviceId,
-                        shortcut_path: item.path,
-                        app_name: item.name,
-                        pkg_name: item.pkg // server needs this for the am start command
-                    })
-                });
-            } catch (error) { alert('Failed to send Winlator launch command.'); }
-        }
-
-        // --- Config Tab Logic ---
-        async function loadConfigUI() {
-            configTab.innerHTML = '<p>Loading configuration...</p>';
-            if (!currentDeviceId) { configTab.innerHTML = '<p>Please select a device.</p>'; return; }
-
-            const [profilesRes, encodersRes] = await Promise.all([
-                authorizedFetch(`/api/profiles?device_id=${currentDeviceId}`),
-                authorizedFetch(`/api/scrcpy/encoders?device_id=${currentDeviceId}`)
-            ]);
-            const profiles = await profilesRes.json();
-            const encoders = await encodersRes.json();
-            videoEncoders = encoders.video_encoders || {};
-            audioEncoders = encoders.audio_encoders || {};
-
-            buildConfigForm();
-
-            const profileSelect = document.getElementById('profile_combo');
-            profileSelect.innerHTML = '<option value="__global__">Global Config</option>';
-            
-            const appProfiles = profiles.apps || [];
-            if (appProfiles.length > 0) {
-                const optgroup = document.createElement('optgroup');
-                optgroup.label = 'Apps';
-                appProfiles.forEach(app => {
-                    const option = document.createElement('option');
-                    option.value = app.key;
-                    option.textContent = app.name;
-                    optgroup.appendChild(option);
-                });
-                profileSelect.appendChild(optgroup);
-            }
-            
-            const winlatorProfiles = profiles.winlator || [];
-            if (winlatorProfiles.length > 0) {
-                const optgroup = document.createElement('optgroup');
-                optgroup.label = 'Winlator';
-                winlatorProfiles.forEach(app => {
-                    const option = document.createElement('option');
-                    option.value = app.key;
-                    option.textContent = app.name;
-                    optgroup.appendChild(option);
-                });
-                profileSelect.appendChild(optgroup);
-            }
-
-            profileSelect.onchange = () => loadProfileConfig(profileSelect.value);
-            loadProfileConfig("__global__");
-        }
-
-        // Helper function for robustly encoding a string to Base64, supporting Unicode.
-        function safe_btoa(str) {
-            // See: https://developer.mozilla.org/en-US/docs/Glossary/Base64#the_unicode_problem
-            return btoa(unescape(encodeURIComponent(str)));
-        }
-
-        async function loadProfileConfig(profileKey) {
-            let queryParams = `device_id=${currentDeviceId}`;
-
-            if (profileKey === '__global__') {
-                queryParams += `&profile_key=placeholder`;
-            } else if (profileKey.includes('/')) { // It's a Winlator path, Base64 encode it.
-                queryParams += `&profile_key=${safe_btoa(profileKey)}&b64=true`;
-            } else { // It's a regular app package name.
-                queryParams += `&profile_key=${encodeURIComponent(profileKey)}`;
-            }
-
-            const response = await authorizedFetch(`/api/config?${queryParams}`);
-            const config = await response.json();
-            populateConfigForm(config);
-        }
-
-        function populateConfigForm(config) {
-            // Populate all non-dynamic fields first
-            document.querySelectorAll('#config-form [data-config-key]').forEach(el => {
-                const key = el.dataset.configKey;
-                if (key === 'video_encoder' || key === 'audio_encoder' || key === 'video_codec' || key === 'audio_codec') return;
-                
-                const value = config[key];
-                if (el.type === 'checkbox') {
-                    el.checked = !!value;
-                } else if (value !== undefined) {
-                    if (el.tagName === 'SELECT') {
-                        if ([...el.options].some(opt => opt.value === value)) el.value = value;
-                    } else {
-                        el.value = value;
-                    }
-                }
-            });
-
-            // --- Handle codec/encoder chain manually and in order ---
-
-            // 1. Set Video Codec
-            const videoCodecSelect = document.getElementById('video_codec');
-            if (config['video_codec'] && [...videoCodecSelect.options].some(opt => opt.value === config['video_codec'])) {
-                videoCodecSelect.value = config['video_codec'];
-            } else {
-                videoCodecSelect.selectedIndex = 0;
-            }
-            // 2. Manually trigger update of Video Encoder options
-            updateEncoderOptions('video');
-            // 3. Set Video Encoder
-            const videoEncoderSelect = document.getElementById('video_encoder');
-            if (config['video_encoder'] && [...videoEncoderSelect.options].some(opt => opt.value === config['video_encoder'])) {
-                videoEncoderSelect.value = config['video_encoder'];
-            }
-
-            // 4. Set Audio Codec
-            const audioCodecSelect = document.getElementById('audio_codec');
-            if (config['audio_codec'] && [...audioCodecSelect.options].some(opt => opt.value === config['audio_codec'])) {
-                audioCodecSelect.value = config['audio_codec'];
-            } else {
-                audioCodecSelect.selectedIndex = 0;
-            }
-            // 5. Manually trigger update of Audio Encoder options
-            updateEncoderOptions('audio');
-            // 6. Set Audio Encoder
-            const audioEncoderSelect = document.getElementById('audio_encoder');
-            if (config['audio_encoder'] && [...audioEncoderSelect.options].some(opt => opt.value === config['audio_encoder'])) {
-                audioEncoderSelect.value = config['audio_encoder'];
-            }
-        }
-
-
-        async function saveConfig() {
-            const profileKey = document.getElementById('profile_combo').value;
-            if (!profileKey) return;
-            const form = document.getElementById('config-form');
-            const data = {};
-
-            form.querySelectorAll('[data-config-key]').forEach(el => {
-                const key = el.dataset.configKey; // Use data-config-key as the source of truth
-                if (el.type === 'checkbox') {
-                    data[key] = el.checked;
-                } else if (el.type === 'number' || el.dataset.isNumber) {
-                    data[key] = el.value === '' ? null : Number(el.value);
-                } else {
-                    data[key] = el.value;
-                }
-            });
-
-            await authorizedFetch('/api/config', {
-                method: 'POST',
-                body: JSON.stringify({
-                    device_id: currentDeviceId,
-                    pkg_name: profileKey,
-                    config_data: data
-                })
-            });
-        }
-
-        function buildConfigItem(label, key, element) {
-            const div = document.createElement('div');
-            div.className = 'config-item';
-            const labelEl = document.createElement('label');
-            labelEl.textContent = label;
-            labelEl.htmlFor = key;
-            element.id = key;
-            element.name = key;
-            if (key !== 'profile_combo') {
-                element.dataset.configKey = key;
-            }
-            element.onchange = saveConfig;
-            div.appendChild(labelEl);
-            div.appendChild(element);
-            return div;
-        }
-
-        function createSelect(options) {
-            const select = document.createElement('select');
-            options.forEach(opt => {
-                const option = new Option(typeof opt === 'object' ? opt.text : opt, typeof opt === 'object' ? opt.value : opt);
-                select.add(option);
-            });
-            return select;
-        }
-
-        function createTextInput(isNumber = false) {
-             const input = document.createElement('input');
-             if (isNumber) {
-                input.type = 'number';
-                input.dataset.isNumber = true;
-             } else {
-                input.type = 'text';
-             }
-             return input;
-        }
-
-        function updateEncoderOptions(type) {
-            const codecMap = type === 'video' ? videoEncoders : audioEncoders;
-            const codecSelect = document.getElementById(`${type}_codec`);
-            const encoderSelect = document.getElementById(`${type}_encoder`);
-            const selectedCodecText = codecSelect.value;
-
-            const previouslySelectedEncoder = encoderSelect.value;
-            encoderSelect.innerHTML = '<option value="Auto">Auto</option>';
-
-            if (selectedCodecText !== 'Auto' && selectedCodecText.includes(' - ')) {
-                const parts = selectedCodecText.split(' - ');
-                if (parts.length === 2) {
-                    const mode = parts[0].trim();
-                    const codec = parts[1].trim();
-                    if (codecMap[codec]) {
-                        const filteredEncoders = codecMap[codec].filter(e => e[1] === mode.toLowerCase());
-                        const encoderNames = [...new Set(filteredEncoders.map(e => e[0]))].sort();
-
-                        encoderNames.forEach(encName => {
-                            const optionText = `${encName} (${mode.toLowerCase()})`;
-                            const option = new Option(optionText, optionText);
-                            encoderSelect.add(option);
+                // ---- WiFi ----
+                async connectWifi() {
+                    if (!this.wifiAddress) { this.wifiStatus = 'Please enter an IP:Port address.'; this.wifiOk = false; return; }
+                    this.wifiStatus = 'Connecting...';
+                    this.wifiOk = false;
+                    try {
+                        const res = await authorizedFetch('/api/adb/connect', {
+                            method: 'POST',
+                            body: JSON.stringify({ address: this.wifiAddress })
                         });
+                        const result = await res.json();
+                        if (res.ok) {
+                            this.wifiStatus = `Success: ${result.message}`;
+                            this.wifiOk = true;
+                            setTimeout(() => { this.showWifiModal = false; this.fetchDevices(); }, 1000);
+                        } else {
+                            this.wifiStatus = `Error: ${result.detail || 'Failed to connect.'}`;
+                        }
+                    } catch { this.wifiStatus = 'An unexpected error occurred.'; }
+                },
+
+                // ---- Tab ----
+                switchTab(tab) {
+                    this.activeTab = tab;
+                    if (!this.selectedId) return;
+                    if (tab === 'Apps') this.fetchApps();
+                    else if (tab === 'Winlator') this.fetchWinlatorApps();
+                    else if (tab === 'Config') this.loadConfigUI();
+                },
+
+                // ---- Apps ----
+                get appSections() {
+                    const sections = [];
+                    const folderMap = {};
+                    const unpinned = [];
+                    for (const a of this.apps) {
+                        const pinnedVal = a.pinned;
+                        if (pinnedVal && typeof pinnedVal === 'string') {
+                            const folderNames = pinnedVal.split(',').map(s => s.trim()).filter(Boolean);
+                            if (folderNames.length) {
+                                for (const f of folderNames) {
+                                    if (!folderMap[f]) folderMap[f] = [];
+                                    folderMap[f].push(a);
+                                }
+                                continue;
+                            }
+                        }
+                        unpinned.push(a);
                     }
+                    for (const folderName of this.folders) {
+                        if (folderMap[folderName]) {
+                            folderMap[folderName].sort((a, b) => a.name.localeCompare(b.name));
+                            sections.push({ title: folderName, items: folderMap[folderName] });
+                            delete folderMap[folderName];
+                        }
+                    }
+                    const remaining = Object.keys(folderMap).sort((a, b) => a.localeCompare(b));
+                    for (const name of remaining) {
+                        folderMap[name].sort((a, b) => a.name.localeCompare(b.name));
+                        sections.push({ title: name, items: folderMap[name] });
+                    }
+                    if (unpinned.length) {
+                        unpinned.sort((a, b) => a.name.localeCompare(b.name));
+                        sections.push({ title: 'All Apps', items: unpinned });
+                    }
+                    // Extract qqs section and put it first, unstyled
+                    const qqsIdx = sections.findIndex(s => s.title === 'qqs');
+                    let qqsSection = null;
+                    if (qqsIdx >= 0) {
+                        qqsSection = sections.splice(qqsIdx, 1)[0];
+                        qqsSection.isQuickAccess = true;
+                        qqsSection.title = '';
+                    }
+                    if (qqsSection) sections.unshift(qqsSection);
+                    return sections;
+                },
+
+                async fetchApps() {
+                    if (!this.selectedId) return;
+                    this.appsLoading = true;
+                    if (this._appsCache[this.selectedId]) {
+                        this.apps = this._appsCache[this.selectedId];
+                        this.folders = this._foldersCache[this.selectedId] || [];
+                        this.appsLoading = false;
+                        return;
+                    }
+                    try {
+                        const [appsRes, foldersRes] = await Promise.all([
+                            authorizedFetch(`/api/apps?device_id=${this.selectedId}&include_system_apps=true`),
+                            authorizedFetch(`/api/folders?device_id=${this.selectedId}`)
+                        ]);
+                        const data = await appsRes.json();
+                        if (data.error) throw new Error(data.error);
+                        this._appsCache[this.selectedId] = data;
+                        this.apps = data;
+                        const folderData = await foldersRes.json();
+                        this._foldersCache[this.selectedId] = folderData.folders || [];
+                        this.folders = folderData.folders || [];
+                    } catch { this.apps = []; this.folders = []; }
+                    this.appsLoading = false;
+                },
+
+                async launchApp(pkgName, appName) {
+                    if (!this.selectedId) return;
+                    try {
+                        await authorizedFetch('/api/launch', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                device_id: this.selectedId,
+                                pkg_name: pkgName,
+                                app_name: appName,
+                                never_turn_screen_off: this.neverTurnScreenOff
+                            })
+                        });
+                    } catch { /* ignore */ }
+                },
+
+                // ---- Winlator ----
+                async fetchWinlatorApps() {
+                    if (!this.selectedId) return;
+                    this.winlatorLoading = true;
+                    if (this._winlatorCache[this.selectedId]) {
+                        this.winlatorApps = this._winlatorCache[this.selectedId];
+                        this.winlatorLoading = false;
+                        return;
+                    }
+                    try {
+                        const res = await authorizedFetch(`/api/winlator/apps?device_id=${this.selectedId}`);
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+                        this._winlatorCache[this.selectedId] = data;
+                        this.winlatorApps = data;
+                    } catch { this.winlatorApps = []; }
+                    this.winlatorLoading = false;
+                },
+
+                async launchWinlatorApp(item) {
+                    if (!this.selectedId) return;
+                    try {
+                        await authorizedFetch('/api/winlator/launch', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                device_id: this.selectedId,
+                                shortcut_path: item.path,
+                                app_name: item.name,
+                                pkg_name: item.pkg,
+                                never_turn_screen_off: this.neverTurnScreenOff
+                            })
+                        });
+                    } catch { /* ignore */ }
+                },
+
+                // ---- Config ----
+                safe_btoa(str) {
+                    return btoa(unescape(encodeURIComponent(str)));
+                },
+
+                get configProfileGroups() {
+                    const groups = [];
+                    const apps = (this.configProfiles.apps || []).sort((a, b) => a.name.localeCompare(b.name));
+                    const winlator = (this.configProfiles.winlator || []).sort((a, b) => a.name.localeCompare(b.name));
+                    if (apps.length) groups.push({ label: 'Apps', items: apps });
+                    if (winlator.length) groups.push({ label: 'Winlator', items: winlator });
+                    return groups;
+                },
+
+                async loadConfigUI() {
+                    if (!this.selectedId) return;
+                    this.configLoading = true;
+                    this.configData = null;
+                    try {
+                        const [profilesRes, encodersRes] = await Promise.all([
+                            authorizedFetch(`/api/profiles?device_id=${this.selectedId}`),
+                            authorizedFetch(`/api/scrcpy/encoders?device_id=${this.selectedId}`)
+                        ]);
+                        this.configProfiles = await profilesRes.json();
+                        const encoders = await encodersRes.json();
+                        this.videoEncoders = encoders.video_encoders || {};
+                        this.audioEncoders = encoders.audio_encoders || {};
+                        this.selectedProfile = '__global__';
+                        await this.loadProfileConfig();
+                    } catch { /* ignore */ }
+                    this.configLoading = false;
+                },
+
+                async loadProfileConfig() {
+                    if (!this.selectedId) return;
+                    const key = this.selectedProfile;
+                    let params = `device_id=${this.selectedId}`;
+                    if (key === '__global__') {
+                        params += '&profile_key=placeholder';
+                    } else if (key.includes('/')) {
+                        params += `&profile_key=${this.safe_btoa(key)}&b64=true`;
+                    } else {
+                        params += `&profile_key=${encodeURIComponent(key)}`;
+                    }
+                    try {
+                        const res = await authorizedFetch(`/api/config?${params}`);
+                        this.configData = await res.json();
+                    } catch { this.configData = null; }
+                },
+
+                async saveConfigDelayed(key) {
+                    clearTimeout(this._saveTimer);
+                    this._saveTimer = setTimeout(() => this.saveConfig(), 300);
+                },
+
+                async saveConfig() {
+                    const profileKey = this.selectedProfile;
+                    if (!profileKey) return;
+                    const data = {};
+                    for (const k in this.configData) {
+                        data[k] = this.configData[k];
+                    }
+                    await authorizedFetch('/api/config', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            device_id: this.selectedId,
+                            pkg_name: profileKey,
+                            config_data: data
+                        })
+                    });
+                },
+
+                updateCodec(type) {
+                    // Force encoder options to recompute by touching a reactive prop
+                    this._codecVersion = (this._codecVersion || 0) + 1;
+                    this.saveConfigDelayed(type + '_codec');
+                },
+
+                encoderOptions(type) {
+                    // Read _codecVersion just to make this reactive on codec changes
+                    void this._codecVersion;
+                    const codecMap = type === 'video' ? this.videoEncoders : this.audioEncoders;
+                    const selectedCodec = this.configData[type + '_codec'] || 'Auto';
+                    if (selectedCodec === 'Auto' || !selectedCodec.includes(' - ')) return [];
+                    const parts = selectedCodec.split(' - ');
+                    if (parts.length !== 2) return [];
+                    const mode = parts[0].trim().toLowerCase();
+                    const codec = parts[1].trim();
+                    if (!codecMap[codec]) return [];
+                    const filtered = codecMap[codec].filter(e => e[1] === mode);
+                    return [...new Set(filtered.map(e => e[0]))].sort().map(n => `${n} (${mode})`);
+                },
+
+                // ---- Codec options (reactive getters) ----
+                get videoCodecOptions() {
+                    const opts = [];
+                    if (this.videoEncoders) {
+                        for (const codec of Object.keys(this.videoEncoders).sort()) {
+                            const modes = [...new Set(this.videoEncoders[codec].map(e => e[1]))].sort();
+                            for (const mode of modes)
+                                opts.push({ value: `${mode.toUpperCase()} - ${codec}`, text: `${mode.toUpperCase()} - ${codec}` });
+                        }
+                    }
+                    return opts;
+                },
+
+                get audioCodecOptions() {
+                    const opts = [];
+                    if (this.audioEncoders) {
+                        for (const codec of Object.keys(this.audioEncoders).sort()) {
+                            const modes = [...new Set(this.audioEncoders[codec].map(e => e[1]))].sort();
+                            for (const mode of modes)
+                                opts.push({ value: `${mode.toUpperCase()} - ${codec}`, text: `${mode.toUpperCase()} - ${codec}` });
+                        }
+                    }
+                    return opts;
                 }
-            }
-            
-            if ([...encoderSelect.options].some(opt => opt.value === previouslySelectedEncoder)) {
-                encoderSelect.value = previouslySelectedEncoder;
-            }
-        }
-
-        function buildConfigForm() {
-            configTab.innerHTML = '';
-            const form = document.createElement('form');
-            form.id = 'config-form';
-            form.onsubmit = (e) => {e.preventDefault(); return false;};
-
-            const topSection = document.createElement('div');
-            topSection.className = 'config-group';
-            topSection.innerHTML = '<h3>Configuration Profile</h3>';
-            topSection.appendChild(buildConfigItem('Profile', 'profile_combo', document.createElement('select')));
-            form.appendChild(topSection);
-
-            const settingsContainer = document.createElement('div');
-            settingsContainer.style.cssText = 'display:flex; flex-wrap:wrap; gap:20px; width:100%;';
-
-            const groups = {
-                general: { title: 'General Settings', parent: settingsContainer },
-                video:   { title: 'Video Settings', parent: settingsContainer },
-                audio:   { title: 'Audio Settings', parent: settingsContainer },
-                options: { title: 'Options', parent: settingsContainer }
             };
-            Object.values(groups).forEach(g => {
-                const el = document.createElement('div');
-                el.className = 'config-group';
-                el.innerHTML = `<h3>${g.title}</h3>`;
-                g.element = el;
-                g.parent.appendChild(el);
-            });
-
-            // General
-            groups.general.element.appendChild(buildConfigItem('Window Mode', 'windowing_mode', createSelect(["Fullscreen", "Freeform"])));
-            groups.general.element.appendChild(buildConfigItem('Mouse Mode', 'mouse_mode', createSelect(["sdk","uhid","aoa"])));
-            groups.general.element.appendChild(buildConfigItem('Gamepad Mode', 'gamepad_mode', createSelect(["disabled","uhid","aoa"])));
-            groups.general.element.appendChild(buildConfigItem('Keyboard Mode', 'keyboard_mode', createSelect(["disabled","sdk","uhid","aoa"])));
-            groups.general.element.appendChild(buildConfigItem('Mouse Bind', 'mouse_bind', createSelect(["bhsn:++++","++++:bhsn"])));
-            groups.general.element.appendChild(buildConfigItem('Max FPS', 'max_fps', createTextInput(true)));
-            groups.general.element.appendChild(buildConfigItem('Virtual Display', 'new_display', createSelect(["Disabled", "640x360/120", "854x480/120", "960x550/120", "1280x720/140", "1366x768/140", "1920x1080/140"])));
-            groups.general.element.appendChild(buildConfigItem('Max Size', 'max_size', createTextInput(true)));
-            groups.general.element.appendChild(buildConfigItem('Extra Args', 'extraargs', createTextInput()));
-
-            // Video
-            const videoCodecOpts = [{ value: 'Auto', text: 'Auto' }];
-            if (videoEncoders) {
-                for (const codec of Object.keys(videoEncoders).sort()) {
-                    const entries = videoEncoders[codec];
-                    const modes = [...new Set(entries.map(e => e[1]))].sort();
-                    for (const mode of modes) {
-                        videoCodecOpts.push({ value: `${mode.toUpperCase()} - ${codec}`, text: `${mode.toUpperCase()} - ${codec}` });
-                    }
-                }
-            }
-            const videoCodecSelect = createSelect(videoCodecOpts);
-            videoCodecSelect.onchange = () => { updateEncoderOptions('video'); saveConfig(); };
-            groups.video.element.appendChild(buildConfigItem('Video Codec', 'video_codec', videoCodecSelect));
-            groups.video.element.appendChild(buildConfigItem('Video Encoder', 'video_encoder', createSelect(['Auto'])));
-            groups.video.element.appendChild(buildConfigItem('Render Driver', 'render_driver', createSelect(["opengles2", "opengles", "opengl", "direct3d", "metal", "software"])));
-            groups.video.element.appendChild(buildConfigItem('Color Range', 'color_range', createSelect(["Auto", "Full", "Limited"])));
-            groups.video.element.appendChild(buildConfigItem('Frame Drop', 'allow_frame_drop', createSelect(["Enabled", "Disabled"])));
-            groups.video.element.appendChild(buildConfigItem('Low Latency', 'low_latency', createSelect(["Enabled", "Disabled"])));
-            groups.video.element.appendChild(buildConfigItem('Priority', 'priority_mode', createSelect(["Realtime", "Normal"])));
-            groups.video.element.appendChild(buildConfigItem('Bitrate Mode', 'bitrate_mode', createSelect(["Constant", "Variable"])));
-            const iframeIntervalInput = createTextInput(true);
-            iframeIntervalInput.placeholder = '0 for Auto';
-            groups.video.element.appendChild(buildConfigItem('I-frame Interval', 'iframe_interval', iframeIntervalInput));
-            groups.video.element.appendChild(buildConfigItem('Video Buffer', 'video_buffer', createTextInput(true)));
-            groups.video.element.appendChild(buildConfigItem('Video Bitrate', 'video_bitrate_slider', createTextInput(true)));
-
-            // Audio
-            const audioCodecOpts = [{ value: 'Auto', text: 'Auto' }];
-            if (audioEncoders) {
-                for (const codec of Object.keys(audioEncoders).sort()) {
-                    const entries = audioEncoders[codec];
-                    const modes = [...new Set(entries.map(e => e[1]))].sort();
-                    for (const mode of modes) {
-                        audioCodecOpts.push({ value: `${mode.toUpperCase()} - ${codec}`, text: `${mode.toUpperCase()} - ${codec}` });
-                    }
-                }
-            }
-            const audioCodecSelect = createSelect(audioCodecOpts);
-            audioCodecSelect.onchange = () => { updateEncoderOptions('audio'); saveConfig(); };
-            groups.audio.element.appendChild(buildConfigItem('Audio Codec', 'audio_codec', audioCodecSelect));
-            groups.audio.element.appendChild(buildConfigItem('Audio Encoder', 'audio_encoder', createSelect(['Auto'])));
-            groups.audio.element.appendChild(buildConfigItem('Audio Buffer', 'audio_buffer', createTextInput(true)));
-            groups.audio.element.appendChild(buildConfigItem('Audio Bitrate', 'audio_bitrate_slider', createTextInput(true)));
-
-            // Options
-            const optionsGrid = document.createElement('div');
-            optionsGrid.className = 'config-options-grid';
-            ["fullscreen", "turn_screen_off", "stay_awake", "mipmaps", "no_audio", "no_video", "try_unlock", "alternate_launch_method"]
-            .forEach(key => {
-                 const item = document.createElement('div');
-                 const checkbox = document.createElement('input');
-                 checkbox.type = 'checkbox';
-                 checkbox.id = key;
-                 checkbox.name = key;
-                 checkbox.dataset.configKey = key;
-                 checkbox.onchange = saveConfig;
-                 const label = document.createElement('label');
-                 label.htmlFor = key;
-                 label.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                 item.appendChild(checkbox);
-                 item.appendChild(label);
-                 optionsGrid.appendChild(item);
-            });
-            groups.options.element.appendChild(optionsGrid);
-
-            form.appendChild(settingsContainer);
-            configTab.appendChild(form);
         }
-
-        // Initial calls
-        document.querySelector('.tablinks.active').click();
-        fetchDevices();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
     </script>
 </body>
 </html>
