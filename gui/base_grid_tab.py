@@ -72,6 +72,7 @@ class BaseGridTab(QWidget):
             root.setProperty("buttonPressedColor", palette.color(QPalette.ColorRole.Button).darker(120).name()) # A darker shade for pressed state
             root.setProperty("buttonBorderColor", border_color)
             root.setProperty("highlightColor", highlight_color)
+            root.setProperty("highlightedTextColor", palette.color(QPalette.ColorRole.HighlightedText).name())
             root.setProperty("altBaseColor", alt_base_color)
 
             # Pass rendering settings

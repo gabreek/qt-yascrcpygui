@@ -1,0 +1,15 @@
+{
+  "name": "Numix",
+  "colors": {
+    "main_bg": "#f2f2f2",
+    "title_text": "#333333",
+    "border": "#adadad",
+    "base_bg": "#f2f2f2",
+    "button_bg": "#f2f2f2",
+    "button_text": "#333333",
+    "highlight": "#f0544c",
+    "highlighted_text": "#ffffff",
+    "alt_base": "#e2e2e2",
+    "mid": "#ffffff"
+  }
+}

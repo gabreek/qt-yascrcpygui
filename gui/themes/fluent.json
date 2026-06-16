@@ -1,0 +1,15 @@
+{
+  "name": "Fluent",
+  "colors": {
+    "main_bg": "#f2f2f2",
+    "title_text": "#000000",
+    "border": "#adadad",
+    "base_bg": "#f2f2f2",
+    "button_bg": "#f2f2f2",
+    "button_text": "#000000",
+    "highlight": "#1a73e8",
+    "highlighted_text": "#ffffff",
+    "alt_base": "#e2e2e2",
+    "mid": "#ffffff"
+  }
+}

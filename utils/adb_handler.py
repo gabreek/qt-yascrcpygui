@@ -291,6 +291,12 @@ def disconnect_wifi(address):
     """Disconnects from a Wi-Fi device."""
     return _run_adb_command(['disconnect', address], print_command=True)
 
+def disconnect_device(device_id):
+    """Disconnects a device. For WiFi devices, runs 'adb disconnect'. For USB, returns a message."""
+    if ':' in device_id:
+        return _run_adb_command(['disconnect', device_id], print_command=True)
+    return "USB devices cannot be disconnected via ADB. Unplug the device."
+
 def get_device_ip(device_id):
     """Gets the IP address of the device from wlan0 interface."""
     output = _run_adb_command(['shell', 'ip', 'addr', 'show', 'wlan0'], device_id=device_id, ignore_errors=True)
@@ -308,20 +314,26 @@ def get_serial_from_wifi_device(device_id):
 
 def get_connected_device_id():
     """Retorna o ID do primeiro dispositivo ADB conectado que está online."""
+    devices = get_all_connected_devices()
+    return devices[0] if devices else None
+
+def get_all_connected_devices():
+    """Retorna uma lista com IDs de todos os dispositivos ADB conectados (estado 'device')."""
     try:
         output = _run_adb_command(['devices'], ignore_errors=True)
         lines = output.strip().split('\n')
+        devices = []
         if len(lines) > 1:
             for line in lines[1:]:
                 parts = line.split('\t')
                 if len(parts) == 2:
                     device_id = parts[0].strip()
                     state = parts[1].strip()
-                    if device_id and state == 'device': # Only return 'device' state, ignore 'offline', 'unauthorized', etc.
-                        return device_id
-        return None
+                    if device_id and state == 'device':
+                        devices.append(device_id)
+        return devices
     except Exception:
-        return None
+        return []
 
 def get_default_launcher(device_id=None):
     """Obtém o pacote do launcher padrão do Android."""

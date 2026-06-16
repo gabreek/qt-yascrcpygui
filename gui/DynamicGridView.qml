@@ -15,6 +15,7 @@ Rectangle {
     property color buttonPressedColor: "gray"
     property color buttonBorderColor: "darkgray"
     property color highlightColor: "blue"
+    property color highlightedTextColor: "white"
     property color altBaseColor: "lightgray"
     property bool hoverEffectEnabled: true
 
@@ -259,6 +260,18 @@ Rectangle {
 
                 MenuItem {
                     text: gridRoot.settingsText
+                    contentItem: Text {
+                        text: parent.text
+                        font: parent.font
+                        color: gridRoot.textColor
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 10
+                    }
+                    background: Rectangle {
+                        implicitHeight: 28
+                        color: parent.hovered ? Qt.rgba(gridRoot.highlightColor.r, gridRoot.highlightColor.g, gridRoot.highlightColor.b, 0.25) : "transparent"
+                        radius: 4
+                    }
                     onTriggered: {
                         if (itemData) gridRoot.settingsRequested(itemData.key, itemData.item_type)
                         contextMenu.close()
@@ -266,6 +279,18 @@ Rectangle {
                 }
                 MenuItem {
                     text: gridRoot.deleteConfigText
+                    contentItem: Text {
+                        text: parent.text
+                        font: parent.font
+                        color: gridRoot.textColor
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 10
+                    }
+                    background: Rectangle {
+                        implicitHeight: 28
+                        color: parent.hovered ? Qt.rgba(gridRoot.highlightColor.r, gridRoot.highlightColor.g, gridRoot.highlightColor.b, 0.25) : "transparent"
+                        radius: 4
+                    }
                     onTriggered: {
                         if (itemData) gridRoot.deleteConfigRequested(itemData.key, itemData.item_type)
                         contextMenu.close()
@@ -297,6 +322,35 @@ Rectangle {
                         text: gridRoot.quickAccessText
                         checkable: true
                         checked: (itemData && itemData.pinned) ? (String(itemData.pinned).indexOf("qqs") !== -1) : false
+                        indicator: Rectangle {
+                            implicitWidth: 18
+                            implicitHeight: 18
+                            x: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            radius: 4
+                            border.color: parent.checked ? gridRoot.highlightColor : gridRoot.buttonBorderColor
+                            border.width: 1
+                            color: "transparent"
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 3
+                                radius: 2
+                                visible: parent.parent.checked
+                                color: gridRoot.highlightColor
+                            }
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: gridRoot.textColor
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 34
+                        }
+                        background: Rectangle {
+                            implicitHeight: 28
+                            color: parent.hovered ? Qt.rgba(gridRoot.highlightColor.r, gridRoot.highlightColor.g, gridRoot.highlightColor.b, 0.25) : "transparent"
+                            radius: 4
+                        }
                         onTriggered: {
                             contextMenu.close()
                             gridRoot.quickAccessRequested(itemData.key, checked)
@@ -306,6 +360,18 @@ Rectangle {
                     MenuItem {
                         text: gridRoot.allAppsText
                         visible: moveSubMenu.hasAllApps
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: gridRoot.textColor
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 10
+                        }
+                        background: Rectangle {
+                            implicitHeight: 28
+                            color: parent.hovered ? Qt.rgba(gridRoot.highlightColor.r, gridRoot.highlightColor.g, gridRoot.highlightColor.b, 0.25) : "transparent"
+                            radius: 4
+                        }
                         onTriggered: {
                             contextMenu.close()
                             gridRoot.moveRequested(itemData.key, "all")
@@ -316,6 +382,18 @@ Rectangle {
                         model: moveSubMenu.filteredFolders
                         delegate: MenuItem {
                             text: modelData
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: gridRoot.textColor
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 10
+                            }
+                            background: Rectangle {
+                                implicitHeight: 28
+                                color: parent.hovered ? Qt.rgba(gridRoot.highlightColor.r, gridRoot.highlightColor.g, gridRoot.highlightColor.b, 0.25) : "transparent"
+                                radius: 4
+                            }
                             onTriggered: {
                                 contextMenu.close()
                                 gridRoot.moveRequested(itemData.key, modelData)
@@ -325,6 +403,18 @@ Rectangle {
                     MenuSeparator { visible: moveSubMenu.filteredFolders.length > 0 }
                     MenuItem {
                         text: gridRoot.createNewFolderText
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: gridRoot.textColor
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 10
+                        }
+                        background: Rectangle {
+                            implicitHeight: 28
+                            color: parent.hovered ? Qt.rgba(gridRoot.highlightColor.r, gridRoot.highlightColor.g, gridRoot.highlightColor.b, 0.25) : "transparent"
+                            radius: 4
+                        }
                         onTriggered: {
                             contextMenu.close()
                             gridRoot.folderRequested(itemData.key)
@@ -534,8 +624,26 @@ Rectangle {
     // --- Launcher Specific UI ---
     Menu {
         id: launcherMenu
+        background: Rectangle {
+            implicitWidth: 150
+            color: gridRoot.backgroundColor
+            border.color: gridRoot.buttonBorderColor
+            radius: 10
+        }
         MenuItem {
             text: gridRoot.settingsText
+            contentItem: Text {
+                text: parent.text
+                font: parent.font
+                color: gridRoot.textColor
+                verticalAlignment: Text.AlignVCenter
+                leftPadding: 10
+            }
+            background: Rectangle {
+                implicitHeight: 28
+                color: parent.hovered ? Qt.rgba(gridRoot.highlightColor.r, gridRoot.highlightColor.g, gridRoot.highlightColor.b, 0.25) : "transparent"
+                radius: 4
+            }
             onTriggered: gridRoot.settingsRequested(gridRoot.launcherPkg, "app")
         }
     }

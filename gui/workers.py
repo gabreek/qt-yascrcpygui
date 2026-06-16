@@ -417,26 +417,25 @@ class BatchIconDownloadWorker(QRunnable):
 class DeviceMonitor(QThread):
     """
     Persistent thread to monitor connected ADB devices.
-    Replaces the previous QTimer + QRunnable approach for better stability.
+    Emits a list of all connected device IDs whenever the list changes.
     """
-    device_changed = Signal(str)
+    device_changed = Signal(list)
 
     def __init__(self, interval_ms=2000):
         super().__init__()
         self.interval_ms = interval_ms
         self._running = True
         self._paused = False
-        self._last_device_id = None
+        self._last_devices = []
 
     def run(self):
         while self._running:
             if not self._paused:
                 try:
-                    # Uses the adb_handler with timeout protection
-                    device_id = adb_handler.get_connected_device_id()
-                    if device_id != self._last_device_id:
-                        self._last_device_id = device_id
-                        self.device_changed.emit(device_id)
+                    devices = adb_handler.get_all_connected_devices()
+                    if devices != self._last_devices:
+                        self._last_devices = devices
+                        self.device_changed.emit(devices)
                 except Exception as e:
                     print(f"DeviceMonitor error: {e}")
 

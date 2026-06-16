@@ -1,0 +1,15 @@
+{
+  "name": "Desert Teal",
+  "colors": {
+    "main_bg": "#d2d0cb",
+    "title_text": "#524b41",
+    "border": "#969591",
+    "base_bg": "#d2d0cb",
+    "button_bg": "#d2d0cb",
+    "button_text": "#524b41",
+    "highlight": "#5b8089",
+    "highlighted_text": "#e2e0db",
+    "alt_base": "#c4c2be",
+    "mid": "#edebe5"
+  }
+}

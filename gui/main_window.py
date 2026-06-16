@@ -2,9 +2,10 @@ import os
 import asyncio # New import for uvicorn server management
 import uvicorn # New import for uvicorn server management
 import time
-from PySide6.QtCore import Qt, QTimer, QThreadPool, Signal, QThread
+from PySide6.QtCore import Qt, QTimer, QThreadPool, Signal, QThread, QEvent
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                                QPushButton, QLabel, QTabWidget, QInputDialog, QLineEdit, QMessageBox)
+from .common_widgets import DeviceSelectorDialog
 from PySide6.QtGui import QIcon
 
 from .scrcpy_tab import ScrcpyTab
@@ -95,6 +96,9 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "icon.png")))
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setMouseTracking(True)
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().installEventFilter(self)
 
         main_widget = QWidget()
         main_widget.setObjectName("main_widget")
@@ -130,6 +134,11 @@ class MainWindow(QMainWindow):
         self.scrcpy_tab.theme_changed.connect(self.update_theme)
         self.scrcpy_tab.config_updated_on_worker.connect(self._on_scrcpy_tab_config_ready)
 
+        self.device_btn = QPushButton(self.app_config.tr('main', 'no_device_msg'))
+        self.device_btn.setObjectName("device_selector_btn")
+        self.device_btn.setToolTip(self.app_config.tr('main', 'device_selector_tooltip'))
+        self.device_btn.clicked.connect(self._open_device_selector)
+
         self.wifi_button = QPushButton("🛜")
         self.wifi_button.setObjectName("wifi_button")
         self.wifi_button.setFixedSize(25, 25)
@@ -145,6 +154,7 @@ class MainWindow(QMainWindow):
         button_container = QWidget()
         button_layout = QHBoxLayout(button_container)
         button_layout.setContentsMargins(0, 2, 5, 0)
+        button_layout.addWidget(self.device_btn)
         button_layout.addWidget(self.wifi_button)
         button_layout.addWidget(self.session_manager_button)
         self.tabs.setCornerWidget(button_container)
@@ -162,10 +172,12 @@ class MainWindow(QMainWindow):
 
         self.update_theme()
 
+        self.connected_devices = []
         self.last_known_device_id = None
-        # Persistent device monitor thread (replaces QTimer + QRunnable)
+        self._pending_config_loader = None
+        # Persistent device monitor thread
         self.device_monitor = DeviceMonitor(interval_ms=2000)
-        self.device_monitor.device_changed.connect(self._handle_device_status_update)
+        self.device_monitor.device_changed.connect(self._handle_device_list_update)
         self.device_monitor.start()
 
         # Web server is now lazily initialized only when requested
@@ -182,6 +194,7 @@ class MainWindow(QMainWindow):
         self.tabs.setTabText(2, self.app_config.tr('main', 'tabs', key='config'))
         self.wifi_button.setToolTip(self.app_config.tr('main', 'wifi_btn_tooltip'))
         self.session_manager_button.setToolTip(self.app_config.tr('main', 'session_manager_tooltip'))
+        self.device_btn.setToolTip(self.app_config.tr('main', 'device_selector_tooltip'))
 
         # Retranslate tabs content
         self.apps_tab.retranslate_ui()
@@ -227,44 +240,60 @@ class MainWindow(QMainWindow):
             else:
                 super().mousePressEvent(event)
 
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseMove and not self._resizing:
+            w = obj
+            while w:
+                if w is self:
+                    self._set_edge_cursor(self.mapFromGlobal(event.globalPosition().toPoint()))
+                    break
+                w = w.parentWidget() if hasattr(w, 'parentWidget') else None
+        return super().eventFilter(obj, event)
+
+    def _set_edge_cursor(self, pos):
+        edges = self.get_resize_edges(pos)
+        if not edges:
+            self.unsetCursor()
+        elif edges in (Qt.LeftEdge | Qt.TopEdge, Qt.RightEdge | Qt.BottomEdge):
+            self.setCursor(Qt.SizeFDiagCursor)
+        elif edges in (Qt.RightEdge | Qt.TopEdge, Qt.LeftEdge | Qt.BottomEdge):
+            self.setCursor(Qt.SizeBDiagCursor)
+        elif edges & (Qt.LeftEdge | Qt.RightEdge):
+            self.setCursor(Qt.SizeHorCursor)
+        else:
+            self.setCursor(Qt.SizeVerCursor)
+
     def mouseMoveEvent(self, event):
-        if self._resizing: # We are in a resizing state
+        if self._resizing:
             global_pos = event.globalPosition().toPoint()
             delta = global_pos - self._resize_start_pos
-            rect = self._resize_start_geometry # Original geometry when resize started
+            rect = self._resize_start_geometry
 
             temp_x, temp_y, temp_w, temp_h = rect.x(), rect.y(), rect.width(), rect.height()
 
-            # --- Horizontal Resizing ---
             if self._resize_edges & Qt.LeftEdge:
                 temp_x = rect.x() + delta.x()
                 temp_w = rect.width() - delta.x()
             if self._resize_edges & Qt.RightEdge:
                 temp_w = rect.width() + delta.x()
 
-            # --- Vertical Resizing ---
             if self._resize_edges & Qt.TopEdge:
                 temp_y = rect.y() + delta.y()
                 temp_h = rect.height() - delta.y()
             if self._resize_edges & Qt.BottomEdge:
                 temp_h = rect.height() + delta.y()
 
-            # Apply minimum size constraints for width
             if temp_w < self.minimumWidth():
                 if self._resize_edges & Qt.LeftEdge:
-                    # If shrinking from left, adjust x to keep width at min (pin right edge)
                     temp_x = rect.x() + rect.width() - self.minimumWidth()
                 temp_w = self.minimumWidth()
-
-            # Apply minimum size constraints for height
             if temp_h < self.minimumHeight():
                 if self._resize_edges & Qt.TopEdge:
-                    # If shrinking from top, adjust y to keep height at min (pin bottom edge)
                     temp_y = rect.y() + rect.height() - self.minimumHeight()
                 temp_h = self.minimumHeight()
 
             self.setGeometry(temp_x, temp_y, temp_w, temp_h)
-        elif event.buttons() == Qt.MouseButton.LeftButton and self._resize_start_pos: # Dragging
+        elif event.buttons() == Qt.MouseButton.LeftButton and self._resize_start_pos:
             diff = event.globalPosition().toPoint() - self._resize_start_pos
             self.move(self.pos() + diff)
         super().mouseMoveEvent(event)
@@ -287,7 +316,11 @@ class MainWindow(QMainWindow):
         # path = QPainterPath()
         # path.addRoundedRect(self.rect(), 15, 15) # Assuming 15px radius from CSS
         # self.setMask(QRegion(path.toFillPolygon().toPolygon()))
-        super().resizeEvent(event)
+        pass
+
+    def leaveEvent(self, event):
+        self.unsetCursor()
+        super().leaveEvent(event)
 
     def start_web_server(self):
         if self.is_web_server_running():
@@ -379,13 +412,15 @@ class MainWindow(QMainWindow):
             self.winlator_tab.execute_launch(item_key, item_name)
 
     def update_theme(self):
-        themes.apply_stylesheet_to_window(self)
+        from PySide6.QtWidgets import QApplication
+        theme_name = self.app_config.get('theme', 'System')
+        themes.apply_theme(QApplication.instance(), theme_name)
+        themes.apply_stylesheet_to_window(self, theme_name)
         if self.adb_wifi_window and self.adb_wifi_window.isVisible():
             self.adb_wifi_window.update_theme()
         if self.scrcpy_session_manager_window and self.scrcpy_session_manager_window.isVisible():
             self.scrcpy_session_manager_window.update_theme()
 
-        # Propagate theme change to tabs with QML content
         self.apps_tab.update_theme()
         self.winlator_tab.update_theme()
 
@@ -451,29 +486,86 @@ class MainWindow(QMainWindow):
             self.apps_tab.on_device_changed()
             self.winlator_tab.on_device_changed()
 
-    def _handle_device_status_update(self, current_device_id):
-        if current_device_id != self.last_known_device_id:
-            self.last_known_device_id = current_device_id
-            if current_device_id:
-                self._update_all_tabs_status(self.app_config.tr('main', 'loading_msg'))
-                self.pause_device_check()
-                config_loader_worker = DeviceConfigLoaderWorker(current_device_id, self.app_config)
-                config_loader_worker.signals.result.connect(self._on_device_config_loaded)
-                config_loader_worker.signals.error.connect(self._on_device_load_error)
-                config_loader_worker.signals.finished.connect(self.resume_device_check)
-                self.active_workers.append(config_loader_worker)
-                self.thread_pool.start(config_loader_worker)
-            else:
-                self.app_config.load_config_for_device(None)
-                self._update_all_tabs_status()
+    def _handle_device_list_update(self, devices):
+        """Called when the list of connected ADB devices changes."""
+        self.connected_devices = list(devices)
+
+        old_selected = self.last_known_device_id
+        current_id = devices[0] if devices else None
+
+        if current_id and current_id != old_selected:
+            self._update_device_btn_text(current_id)
+            self._load_device_config(current_id)
+        elif not current_id and old_selected is not None:
+            self.last_known_device_id = None
+            self.app_config.load_config_for_device(None)
+            self._update_device_btn_text(None)
+            self._update_all_tabs_status()
+        elif current_id:
+            self._update_device_btn_text(current_id)
+        else:
+            self._update_device_btn_text(None)
+
+    def _update_device_btn_text(self, device_id=None):
+        """Updates the device button text to show the device name or 'No device'."""
+        if not device_id:
+            self.device_btn.setText(self.app_config.tr('main', 'no_device_msg'))
+            self.device_btn.setStyleSheet("")
+            return
+        commercial_name = self.app_config.get(CONF_DEVICE_COMMERCIAL_NAME, "")
+        if commercial_name and commercial_name != 'Unknown Device':
+            self.device_btn.setText(f"📱 {commercial_name}")
+        else:
+            self.device_btn.setText(f"📱 {device_id}")
+
+    def _open_device_selector(self):
+        """Opens the DeviceSelectorDialog modal."""
+        if not self.connected_devices:
+            return
+        dialog = DeviceSelectorDialog(
+            self.connected_devices,
+            self.last_known_device_id,
+            self
+        )
+        if dialog.exec():
+            result = dialog.get_result()
+            if result:
+                action, device_id = result
+                if action == DeviceSelectorDialog.DEVICE_SELECTED and device_id != self.last_known_device_id:
+                    self._load_device_config(device_id)
+                elif action == DeviceSelectorDialog.DEVICE_DISCONNECTED:
+                    # Device was disconnected, the monitor will detect this on next poll
+                    pass
+
+    def _load_device_config(self, device_id):
+        """Loads configuration for the given device ID."""
+        self.last_known_device_id = device_id
+        self._update_all_tabs_status(self.app_config.tr('main', 'loading_msg'))
+        self.pause_device_check()
+        # Cancel any pending config loader
+        if self._pending_config_loader:
+            self._pending_config_loader.signals.finished.disconnect()
+            if self._pending_config_loader in self.active_workers:
+                self.active_workers.remove(self._pending_config_loader)
+        config_loader_worker = DeviceConfigLoaderWorker(device_id, self.app_config)
+        config_loader_worker.signals.result.connect(self._on_device_config_loaded)
+        config_loader_worker.signals.error.connect(self._on_device_load_error)
+        config_loader_worker.signals.finished.connect(self.resume_device_check)
+        self._pending_config_loader = config_loader_worker
+        self.active_workers.append(config_loader_worker)
+        self.thread_pool.start(config_loader_worker)
 
     def _on_device_config_loaded(self, result_data, installed_apps_packages, winlator_shortcuts_on_device):
-        self.last_known_device_id = result_data["device_id"]
+        self._pending_config_loader = None
         self.app_config.device_app_cache['installed_apps'] = installed_apps_packages
         self.app_config.device_app_cache['winlator_shortcuts'] = winlator_shortcuts_on_device
+        device_id = result_data.get("device_id")
+        if device_id:
+            self._update_device_btn_text(device_id)
         self._update_all_tabs_status()
 
     def _on_device_load_error(self, error_message):
+        self._pending_config_loader = None
         self._update_all_tabs_status(f"Error: {error_message}")
 
     def _on_scrcpy_tab_config_ready(self):

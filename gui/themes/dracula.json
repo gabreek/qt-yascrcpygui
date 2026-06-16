@@ -1,0 +1,15 @@
+{
+  "name": "Dracula",
+  "colors": {
+    "main_bg": "#22232e",
+    "title_text": "#f8f8f2",
+    "border": "#3a3b4e",
+    "base_bg": "#22232e",
+    "button_bg": "#22232e",
+    "button_text": "#f8f8f2",
+    "highlight": "#bd93f9",
+    "highlighted_text": "#f8f8f2",
+    "alt_base": "#20212b",
+    "mid": "#262834"
+  }
+}

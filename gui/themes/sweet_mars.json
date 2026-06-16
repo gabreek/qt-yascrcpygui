@@ -1,0 +1,15 @@
+{
+  "name": "Sweet Mars",
+  "colors": {
+    "main_bg": "#1b1f22",
+    "title_text": "#b6b7b9",
+    "border": "#2e353a",
+    "base_bg": "#1b1f22",
+    "button_bg": "#1b1f22",
+    "button_text": "#b6b7b9",
+    "highlight": "#f67e7d",
+    "highlighted_text": "#f7f7f7",
+    "alt_base": "#191d20",
+    "mid": "#1f2326"
+  }
+}

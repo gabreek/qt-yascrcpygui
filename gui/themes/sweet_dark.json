@@ -1,0 +1,15 @@
+{
+  "name": "Sweet Dark",
+  "colors": {
+    "main_bg": "#171a26",
+    "title_text": "#c3c7d1",
+    "border": "#272c41",
+    "base_bg": "#171a26",
+    "button_bg": "#171a26",
+    "button_text": "#c3c7d1",
+    "highlight": "#c50ed2",
+    "highlighted_text": "#fefefe",
+    "alt_base": "#151824",
+    "mid": "#1a1d2b"
+  }
+}
