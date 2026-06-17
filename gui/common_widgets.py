@@ -1,5 +1,4 @@
 from PySide6.QtCore import Qt, QPoint, Signal, QEvent, QThread
-from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QDialog, QProgressBar, QLineEdit, QSizePolicy,
                                QScrollArea, QFrame) # Added QProgressBar
@@ -10,11 +9,11 @@ from utils import adb_handler
 
 class CustomTitleBar(QWidget):
     """Custom title bar for frameless windows."""
-    def __init__(self, parent_window, title="Window"): # Renamed parent to parent_window for clarity
+    def __init__(self, parent_window, title="Window"):
         super().__init__(parent_window)
         self.parent_window = parent_window
         self.setObjectName("CustomTitleBar")
-        self.setFixedHeight(35) # Based on main_window.py
+        self.setFixedHeight(35)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -25,12 +24,12 @@ class CustomTitleBar(QWidget):
         self.close_button = QPushButton("✕", self)
         self.close_button.setObjectName("close_button")
         self.close_button.setFixedSize(40, 35)
-        self.close_button.clicked.connect(self.parent_window.close) # Connect to parent_window's close
+        self.close_button.clicked.connect(self.parent_window.close)
 
         self.minimize_button = QPushButton("-", self)
         self.minimize_button.setObjectName("minimize_button")
         self.minimize_button.setFixedSize(40, 35)
-        self.minimize_button.clicked.connect(self.parent_window.showMinimized) # Connect to parent_window's showMinimized
+        self.minimize_button.clicked.connect(self.parent_window.showMinimized)
 
         layout.addWidget(self.title_label)
         layout.addStretch()
@@ -42,12 +41,6 @@ class CustomTitleBar(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # If within resize border of the top edge, start resize on parent directly
-            if event.position().y() < getattr(self.parent_window, 'RESIZE_BORDER', 5):
-                parent = self.parent_window
-                if hasattr(parent, 'resize_border_start'):
-                    parent.resize_border_start(self.mapToParent(event.position().toPoint()))
-                return
             if event.type() == QEvent.Type.MouseButtonDblClick:
                 if self.parent_window.isMaximized():
                     self.parent_window.showNormal()
@@ -62,38 +55,22 @@ class CustomTitleBar(QWidget):
         if self.pressing:
             self.parent_window.move(event.globalPosition().toPoint() - self.start_pos)
             event.accept()
-        elif hasattr(self.parent_window, '_set_edge_cursor'):
-            self.parent_window._set_edge_cursor(self.mapToParent(event.position().toPoint()))
 
     def mouseReleaseEvent(self, event):
         self.pressing = False
         event.accept()
 
-    def leaveEvent(self, event):
-        if hasattr(self.parent_window, 'unsetCursor'):
-            self.parent_window.unsetCursor()
-        super().leaveEvent(event)
-
 
 class CustomThemedDialog(QDialog):
-    """A frameless, themed QDialog with a custom title bar and edge resize."""
-    RESIZE_BORDER = 5
-
+    """A frameless, themed QDialog with a custom title bar."""
     def __init__(self, parent=None, title="Dialog", auto_delete=True):
         super().__init__(parent)
         self.app_config = getattr(parent, 'app_config', None) if parent else None
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMouseTracking(True)
-        QApplication.instance().installEventFilter(self)
         if auto_delete:
             self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-
-        self._resizing = False
-        self._resize_start_pos = None
-        self._resize_start_geometry = None
-        self._resize_edges = Qt.Edges()
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -130,105 +107,6 @@ class CustomThemedDialog(QDialog):
 
     def update_theme(self):
         themes.apply_stylesheet_to_window(self)
-
-    def resize_border_start(self, pos):
-        """Called by title bar when click is on the top resize edge."""
-        edges = self.get_resize_edges(pos)
-        if edges:
-            self._resizing = True
-            self._resize_edges = edges
-            self._resize_start_pos = self.mapToGlobal(pos)
-            self._resize_start_geometry = self.geometry()
-
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.MouseMove and not self._resizing:
-            w = obj
-            while w:
-                if w is self:
-                    self._set_edge_cursor(self.mapFromGlobal(event.globalPosition().toPoint()))
-                    break
-                w = w.parentWidget() if hasattr(w, 'parentWidget') else None
-        return super().eventFilter(obj, event)
-
-    def get_resize_edges(self, pos):
-        edges = Qt.Edges()
-        if pos.x() < self.RESIZE_BORDER:
-            edges |= Qt.LeftEdge
-        if pos.x() > self.width() - self.RESIZE_BORDER:
-            edges |= Qt.RightEdge
-        if pos.y() < self.RESIZE_BORDER:
-            edges |= Qt.TopEdge
-        if pos.y() > self.height() - self.RESIZE_BORDER:
-            edges |= Qt.BottomEdge
-        return edges
-
-    def _set_edge_cursor(self, pos):
-        edges = self.get_resize_edges(pos)
-        if not edges:
-            self.unsetCursor()
-        elif edges in (Qt.LeftEdge | Qt.TopEdge, Qt.RightEdge | Qt.BottomEdge):
-            self.setCursor(Qt.SizeFDiagCursor)
-        elif edges in (Qt.RightEdge | Qt.TopEdge, Qt.LeftEdge | Qt.BottomEdge):
-            self.setCursor(Qt.SizeBDiagCursor)
-        elif edges & (Qt.LeftEdge | Qt.RightEdge):
-            self.setCursor(Qt.SizeHorCursor)
-        else:
-            self.setCursor(Qt.SizeVerCursor)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            edges = self.get_resize_edges(event.position().toPoint())
-            if edges:
-                self._resizing = True
-                self._resize_edges = edges
-                self._resize_start_pos = event.globalPosition().toPoint()
-                self._resize_start_geometry = self.geometry()
-                return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._resizing:
-            global_pos = event.globalPosition().toPoint()
-            delta = global_pos - self._resize_start_pos
-            rect = self._resize_start_geometry
-
-            x, y, w, h = rect.x(), rect.y(), rect.width(), rect.height()
-
-            if self._resize_edges & Qt.LeftEdge:
-                x = rect.x() + delta.x()
-                w = rect.width() - delta.x()
-            if self._resize_edges & Qt.RightEdge:
-                w = rect.width() + delta.x()
-            if self._resize_edges & Qt.TopEdge:
-                y = rect.y() + delta.y()
-                h = rect.height() - delta.y()
-            if self._resize_edges & Qt.BottomEdge:
-                h = rect.height() + delta.y()
-
-            if w < self.minimumWidth():
-                if self._resize_edges & Qt.LeftEdge:
-                    x = rect.x() + rect.width() - self.minimumWidth()
-                w = self.minimumWidth()
-            if h < self.minimumHeight():
-                if self._resize_edges & Qt.TopEdge:
-                    y = rect.y() + rect.height() - self.minimumHeight()
-                h = self.minimumHeight()
-
-            self.setGeometry(x, y, w, h)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self._resizing:
-            self._resizing = False
-            self._resize_edges = Qt.Edges()
-            self._resize_start_pos = None
-            self._resize_start_geometry = None
-            self.unsetCursor()
-        super().mouseReleaseEvent(event)
-
-    def leaveEvent(self, event):
-        self.unsetCursor()
-        super().leaveEvent(event)
 
 
 class CustomThemedInputDialog(CustomThemedDialog):

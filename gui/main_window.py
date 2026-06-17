@@ -95,6 +95,7 @@ class MainWindow(QMainWindow):
         self._resize_start_pos = None
         self._resize_start_geometry = None
         self._resize_edges = Qt.Edges()
+        self._cursor_set_by_resize = False
 
         self.setWindowTitle("yaScrcpy")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "icon.png")))
@@ -249,16 +250,20 @@ class MainWindow(QMainWindow):
             w = obj
             while w:
                 if w is self:
-                    self._set_edge_cursor(self.mapFromGlobal(event.globalPosition().toPoint()))
+                    pos = self.mapFromGlobal(event.globalPosition().toPoint())
+                    edges = self.get_resize_edges(pos)
+                    if edges:
+                        self._apply_resize_cursor(edges)
+                        self._cursor_set_by_resize = True
+                    elif self._cursor_set_by_resize:
+                        self._cursor_set_by_resize = False
+                        self.unsetCursor()
                     break
                 w = w.parentWidget() if hasattr(w, 'parentWidget') else None
         return super().eventFilter(obj, event)
 
-    def _set_edge_cursor(self, pos):
-        edges = self.get_resize_edges(pos)
-        if not edges:
-            self.unsetCursor()
-        elif edges in (Qt.LeftEdge | Qt.TopEdge, Qt.RightEdge | Qt.BottomEdge):
+    def _apply_resize_cursor(self, edges):
+        if edges in (Qt.LeftEdge | Qt.TopEdge, Qt.RightEdge | Qt.BottomEdge):
             self.setCursor(Qt.SizeFDiagCursor)
         elif edges in (Qt.RightEdge | Qt.TopEdge, Qt.LeftEdge | Qt.BottomEdge):
             self.setCursor(Qt.SizeBDiagCursor)
@@ -266,6 +271,14 @@ class MainWindow(QMainWindow):
             self.setCursor(Qt.SizeHorCursor)
         else:
             self.setCursor(Qt.SizeVerCursor)
+
+    def _set_edge_cursor(self, pos):
+        edges = self.get_resize_edges(pos)
+        if edges:
+            self._apply_resize_cursor(edges)
+        elif self._cursor_set_by_resize:
+            self._cursor_set_by_resize = False
+            self.unsetCursor()
 
     def mouseMoveEvent(self, event):
         if self._resizing:
