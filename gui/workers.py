@@ -1,5 +1,4 @@
 from PySide6.QtCore import QObject, Signal, QRunnable, QThread
-from PySide6.QtGui import QPixmap
 from utils import scrcpy_handler, icon_scraper, adb_handler
 import re
 import os

@@ -1,10 +1,10 @@
 import uvicorn
-from fastapi import FastAPI, Query, Body, HTTPException, Security, Depends, Request, Response
+from fastapi import FastAPI, HTTPException, Security, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-from typing import Dict, Any, List
+from pydantic import BaseModel
+from typing import Dict, Any
 from utils import adb_handler, scrcpy_handler
 from utils.constants import *
 from app_config import AppConfig

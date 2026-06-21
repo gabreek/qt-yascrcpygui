@@ -7,7 +7,6 @@ import sys
 import json
 import multiprocessing
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QThread, Signal
 from utils.dependencies import check_dependencies
 from app_config import AppConfig
 from gui.main_window import MainWindow

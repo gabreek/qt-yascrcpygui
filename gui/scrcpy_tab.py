@@ -1,15 +1,14 @@
-from PySide6.QtCore import Qt, QThreadPool, Signal, QRect, QPoint, QSize
+from PySide6.QtCore import Qt, QThreadPool, Signal, QRect, QPoint
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
                                QLineEdit, QCheckBox, QSlider, QMessageBox,
                                QScrollArea, QSizePolicy, QPushButton, QGridLayout,
-                               QListView, QScrollBar, QStyle, QGroupBox, QStyleOptionComboBox)
+                               QListView, QScrollBar, QStyle, QGroupBox)
 from PySide6.QtGui import QPainter, QPalette, QPolygonF, QPen, QBrush, QColor
 
 from .flow_layout import FlowLayout
 
 from .workers import DeviceInfoWorker, EncoderListWorker, DeviceConfigLoaderWorker
 from . import themes
-from utils import scrcpy_handler, adb_handler
 from utils.constants import *
 from .web_server_config_window import WebServerConfigWindow
 from .common_widgets import CustomThemedConfirmationDialog

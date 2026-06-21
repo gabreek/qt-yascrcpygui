@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem,
-    QLabel, QMessageBox, QTextEdit
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem,
+    QMessageBox, QTextEdit
 )
 from PySide6.QtGui import QPixmap, QImage, QIcon
-from PySide6.QtCore import Qt, QTimer, Signal, QObject, QEvent
+from PySide6.QtCore import Qt, QTimer, Signal, QEvent
 
 import os
 import shlex

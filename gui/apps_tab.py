@@ -1,16 +1,13 @@
 import os
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
-                               QPushButton, QScrollArea, QGridLayout, QLabel,
-                               QMessageBox)
+from PySide6.QtWidgets import (QHBoxLayout, QLineEdit,
+                               QPushButton, QMessageBox)
 from PySide6.QtCore import Qt, Signal, Slot, QTimer, QUrl
-from PySide6.QtGui import QPixmap
 import sys
-import time
 import queue # Added for managing download queue
 import gc
 
 from .base_grid_tab import BaseGridTab
-from .workers import (AppListWorker, IconWorker, ScrcpyLaunchWorker, AppLaunchWorker, 
+from .workers import (AppListWorker, ScrcpyLaunchWorker, AppLaunchWorker,
                       IconSaveWorker, BatchIconDownloadWorker, BatchSaveWorker)
 from .dialogs import show_message_box
 from .session_dialogs import CreateSessionDialog, FoldersManagerDialog

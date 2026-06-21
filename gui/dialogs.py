@@ -1,5 +1,5 @@
-from PySide6.QtWidgets import (QApplication, QMessageBox, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QWidget, QStyle)
-from PySide6.QtGui import QPixmap, QColor, QPainter, QPalette
+from PySide6.QtWidgets import (QApplication, QMessageBox, QHBoxLayout, QLabel, QPushButton, QStyle)
+from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QSize
 import os
 from .common_widgets import CustomThemedDialog # Import the custom themed dialog

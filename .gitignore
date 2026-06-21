@@ -13,3 +13,12 @@ __pycache__/
 # PyInstaller
 build/
 dist/
+
+# Runtime artifacts
+temp_shortcut.desktop
+
+# Pi apps installer
+pi-apps/
+
+# Agent instructions (project-specific, not committed)
+AGENTS.md

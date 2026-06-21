@@ -344,7 +344,7 @@ def list_installed_apps(device_id=None, timeout=15):
             stdout, stderr = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             process.kill()
-            raise RuntimeError(f"Scrcpy --list-apps timed out after {timeout}s")
+            raise RuntimeError(f"scrcpy --list-apps timed out after {timeout}s")
 
         user_apps = {}
         system_apps = {}

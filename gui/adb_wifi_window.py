@@ -1,12 +1,10 @@
-from PySide6.QtCore import Qt, QPoint, Signal, QRunnable, QObject, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QLineEdit, QTabWidget)
-from PySide6.QtGui import QPalette
 
-from utils import adb_handler
 from . import themes
 from .common_widgets import CustomTitleBar
-from .workers import AdbConnectWorker, AdbPairWorker, AdbWorkerSignals
+from .workers import AdbConnectWorker, AdbPairWorker
 
 class AdbWifiWindow(QWidget):
     def __init__(self, app_config, parent=None):

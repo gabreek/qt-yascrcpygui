@@ -1,5 +1,5 @@
 import base64
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton,
                                QLabel, QLineEdit, QSpinBox, QGroupBox)
 from .common_widgets import CustomThemedDialog

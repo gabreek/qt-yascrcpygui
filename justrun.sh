@@ -7,4 +7,4 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "$DIR/.venv/bin/activate"
 
 # Executa o seu programa Python
-python3 "$DIR/main.py" --theme
+python3 "$DIR/main.py"

@@ -3,9 +3,9 @@ import asyncio
 import uvicorn
 import logging
 import time
-from PySide6.QtCore import Qt, QTimer, QThreadPool, Signal, QThread, QEvent
+from PySide6.QtCore import Qt, QThreadPool, Signal, QThread, QEvent
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                               QPushButton, QLabel, QTabWidget, QInputDialog, QLineEdit, QMessageBox)
+                               QPushButton, QTabWidget, QLineEdit, QMessageBox)
 from .common_widgets import DeviceSelectorDialog
 from PySide6.QtGui import QIcon
 
@@ -271,14 +271,6 @@ class MainWindow(QMainWindow):
             self.setCursor(Qt.SizeHorCursor)
         else:
             self.setCursor(Qt.SizeVerCursor)
-
-    def _set_edge_cursor(self, pos):
-        edges = self.get_resize_edges(pos)
-        if edges:
-            self._apply_resize_cursor(edges)
-        elif self._cursor_set_by_resize:
-            self._cursor_set_by_resize = False
-            self.unsetCursor()
 
     def mouseMoveEvent(self, event):
         if self._resizing:

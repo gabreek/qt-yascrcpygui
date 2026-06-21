@@ -1,16 +1,13 @@
 import os
 import tempfile
 import queue
-from PIL import Image
 
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QGridLayout, QLabel, QMessageBox) # Removed QProgressDialog
+from PySide6.QtWidgets import (QHBoxLayout, QPushButton, QMessageBox)
 from PySide6.QtCore import Qt, Signal, Slot, QUrl, QTimer
-from PySide6.QtGui import QPixmap
 import sys
 import time
 import gc
 
-from utils import scrcpy_handler
 from utils.constants import *
 from .workers import GameListWorker, IconExtractorWorker, WinlatorLaunchWorker, ScrcpyLaunchWorker, IconSaveWorker
 from .dialogs import show_message_box

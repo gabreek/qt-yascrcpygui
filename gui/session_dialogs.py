@@ -1,9 +1,8 @@
 import os
-from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLineEdit, 
-                               QPushButton, QListWidget, QListWidgetItem, 
+from PySide6.QtWidgets import (QHBoxLayout, QLineEdit,
+                               QPushButton, QListWidget, QListWidgetItem,
                                QCheckBox, QLabel, QWidget, QMessageBox)
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import Qt
 
 from .common_widgets import CustomThemedDialog
 

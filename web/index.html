@@ -16,44 +16,60 @@
     <!--THEME_CSS-->
     <style>
         [x-cloak] { display: none !important; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 1em; background-color: var(--bg); color: var(--text); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 1em 1.5em; background-color: var(--bg); color: var(--text); padding-left: 5px; padding-right: 5px;  }
+        h1 { padding-left: 16px; }
         h2 { border-bottom: 1px solid var(--border); padding-bottom: 5px; }
-        .tab { display: flex; gap: 4px; padding: 4px; background-color: var(--panel); border-radius: 9999px; margin-bottom: 1em; width: fit-content; }
-        .tab button { background: none; border: none; outline: none; cursor: pointer; padding: 8px 20px; border-radius: 9999px; font-size: 14px; font-weight: 500; color: var(--text); transition: 0.2s; white-space: nowrap; }
-        .tab button:hover { background-color: color-mix(in srgb, var(--text) 10%, transparent); }
-        .tab button.active { background-color: var(--primary); color: #fff; }
-        .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 1em; }
-        .grid-item { display: flex; flex-direction: column; align-items: center; text-align: center; background: none; padding: 0.5em; border-radius: 8px; cursor: pointer; transition: background 0.2s; height: 120px; }
+
+        /* Tabs */
+        .tab { display: flex; gap: 4px; padding: 4px; background-color: var(--panel); border-radius: 9999px; margin-bottom: 1.5em; width: fit-content; }
+        .tab button { background: none; border: none; outline: none; cursor: pointer; padding: 8px 20px; border-radius: 9999px; font-size: 14px; font-weight: 500; color: rgba(255,255,255,.6); transition: 0.2s; white-space: nowrap; }
+        .tab button:hover { background-color: color-mix(in srgb, var(--text) 10%, transparent); opacity: 1; }
+        .tab button.active { background-color: var(--primary); color: #fff; opacity: 1; }
+
+        /* Apps Grid */
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(73px, 1fr)); gap: .75em; }
+        .grid-item { display: flex; flex-direction: column; align-items: center; text-align: center; background: none; padding: .5em .25em; border-radius: 10px; cursor: pointer; transition: background .2s; }
         .grid-item:hover { background-color: var(--panel); }
-        .icon-container { display: flex; justify-content: center; align-items: center; width: 48px; height: 48px; background-color: var(--border); border-radius: 12px; margin-bottom: 0.5em; }
-        .grid-item img { width: 36px; height: 36px; border-radius: 8px; }
-        .grid-item span { word-break: break-word; font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .grid-section-title { font-size: 16px; margin-bottom: 0.5em; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
-        .app-section-wrapper { width: 100%; padding: 0 16px 16px; }
-        .tab-content { background-color: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
-        .tab-content-pad { padding: 16px; }
+        .icon-container { display: flex; justify-content: center; align-items: center; width: 48px; height: 48px; background-color: var(--border); border-radius: 12px; margin-bottom: .35em; }
+        .grid-item img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; }
+        .grid-item span { word-break: break-word; font-size: 12px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .grid-section-title { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 1em; padding-bottom: 5px; border-bottom: 1px solid var(--border); color: var(--muted); }
+        .app-section-wrapper { width: 100%; padding: 0 16px 16px; margin-top: .75em; }
+
+        /* Tab Content */
+        .tab-content { background-color: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+        .tab-content-pad { padding: 20px; }
+
+        /* Quick Access */
         .quick-access-wrapper { position: sticky; top: 0; z-index: 1; background-color: var(--panel); padding: 8px 16px; display: flex; justify-content: center; border-bottom: 1px solid var(--border); }
         .quick-access-wrapper .grid-container { display: flex; flex-direction: row; gap: 6px; }
-        .quick-access-wrapper .grid-item { height: 40px; width: 40px; padding: 0; background: none; }
-        .quick-access-wrapper .grid-item .icon-container { width: 36px; height: 36px; border-radius: 8px; margin: 0; }
-        .quick-access-wrapper .grid-item img { width: 28px; height: 28px; border-radius: 6px; }
+        .quick-access-wrapper .grid-item { width: 48px; padding: 4px; background: none; }
+        .quick-access-wrapper .grid-item .icon-container { width: 38px; height: 38px; border-radius: 10px; margin: 0; }
+        .quick-access-wrapper .grid-item img { width: 28px; height: 28px; border-radius: 7px; }
         .quick-access-wrapper .grid-item span { display: none; }
-        .config-group { background-color: var(--panel); border-radius: 8px; padding: 15px; flex: 1 1 300px; min-width: 300px; }
+
+        /* Config */
+        .config-group { background-color: var(--panel); border-radius: 12px; padding: 20px; flex: 1 1 300px; min-width: 300px; }
         .config-group h3 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-        .config-item { display: flex; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+        .config-item { display: flex; align-items: center; margin: 10px 0; flex-wrap: wrap; }
         .config-item > label { width: 120px; flex-shrink: 0; }
-        .config-item select, .config-item input { flex: 1; min-width: 150px; padding: 8px; background-color: var(--input-bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 4px; }
+        .config-item select, .config-item input { flex: 1; min-width: 150px; padding: 10px; background-color: var(--input-bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 6px; }
+
+        /* Sessions */
         .sessions-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-        .session-card { background-color: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; align-items: center; gap: 12px; flex: 1 1 280px; min-width: 280px; }
-        .session-card img { width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0; }
+        .session-card { background-color: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; flex: 1 1 280px; min-width: 280px; }
+        .session-card img { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; object-fit: contain; }
         .session-card-info { flex: 1; min-width: 0; }
         .session-card-name { font-size: 14px; color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .session-card-meta { font-size: 12px; color: var(--text); margin-top: 2px; }
-        .session-card-kill { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 22px; font-weight: bold; padding: 4px 8px; border-radius: 4px; line-height: 1; flex-shrink: 0; }
+        .session-card-kill { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 22px; font-weight: bold; padding: 4px 8px; border-radius: 8px; line-height: 1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
         .session-card-kill:hover { background-color: color-mix(in srgb, var(--danger) 10%, transparent); }
+
+        /* Config Options */
         .config-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .config-options-grid > label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
         .config-options-grid input[type="checkbox"] { width: auto; margin: 0; }
+
         /* Utility classes for themed colors */
         .bg-panel { background-color: var(--panel); }
         .bg-primary { background-color: var(--primary); }
@@ -65,8 +81,10 @@
         .border-panel { border-color: var(--border); }
         .border-input { border-color: var(--input-border); }
         .border-primary { border-color: var(--primary); }
-        .btn-primary { background-color: var(--primary); color: #fff; }
+        .btn-primary { background-color: var(--primary); color: #fff; padding: 7px 16px; border-radius: 8px; font-weight: 500; font-size: 13px; border: none; cursor: pointer; transition: background .2s; }
         .btn-primary:hover { background-color: var(--primary-hover); }
+        .btn-secondary { background-color: transparent; color: var(--text); padding: 7px 16px; border-radius: 8px; font-weight: 500; font-size: 13px; border: 1px solid var(--border); cursor: pointer; transition: background .2s; }
+        .btn-secondary:hover { background-color: color-mix(in srgb, var(--text) 10%, transparent); }
         .btn-kill { color: var(--danger); }
         .btn-kill:hover { background-color: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger-hover); }
     </style>
@@ -78,15 +96,15 @@
     <div class="mb-4">
         <div class="flex gap-2">
             <button @click="showWifiModal = true"
-                    class="btn-primary px-3 py-2 rounded text-sm">
+                    class="btn-primary text-sm">
                 + ADB WiFi
             </button>
             <button @click="showDeviceModal = true"
-                    class="bg-panel hover:bg-[#3a3a3a] text-theme px-3 py-2 rounded text-sm border border-input">
+                    class="btn-secondary">
                 Select Device
             </button>
             <button @click="showOverrideModal = true"
-                    class="bg-panel hover:bg-[#3a3a3a] text-theme px-3 py-2 rounded text-sm border border-input">
+                    class="btn-secondary">
                 Override Config
             </button>
         </div>
