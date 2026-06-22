@@ -518,12 +518,11 @@ Rectangle {
         }
     }
 
-    // --- Main Layout ---
+    // --- Main Layout (Flow + Repeater) ---
     ScrollView {
         id: scrollView
         anchors.fill: parent
         clip: true
-        // Switch padding instantly based on the intended visibility state
         topPadding: gridRoot.quickAccessVisible ? (overlaySection.height + 15) : 0
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff

@@ -190,9 +190,6 @@ class MainWindow(QMainWindow):
         self.device_monitor.device_changed.connect(self._handle_device_list_update)
         self.device_monitor.start()
 
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, self._dump_memory)
-
         # Web server is now lazily initialized only when requested
         self.web_server_thread = None
 
@@ -547,7 +544,6 @@ class MainWindow(QMainWindow):
             self._update_device_btn_text(None)
             self._update_all_tabs_status()
             gc.collect()
-            self._dump_memory()
         elif current_id:
             self._update_device_btn_text(current_id)
         else:
@@ -621,31 +617,4 @@ class MainWindow(QMainWindow):
         self.scrcpy_tab._update_all_widgets_from_config()
         self.apps_tab._update_display()
 
-    def _dump_memory(self):
-        import sys, collections
-        gc.collect()
-        active = self.thread_pool.activeThreadCount()
-        print(f"\n--- Memory Dump (gc objects: {len(gc.get_objects())}) ---")
-        print(f"  QThreadPool active threads: {active}")
-        ac = self.app_config
-        print(f"  config_data keys:   {len(ac.config_data)}")
-        print(f"  values keys:        {len(ac.values)}")
-        print(f"  device_app_cache:   installed={len(ac.device_app_cache.get('installed_apps',[]))}  winlator={len(ac.device_app_cache.get('winlator_shortcuts',[]))}")
-        print(f"  active_workers:     {len(self.active_workers)}")
-        a = self.apps_tab
-        print(f"  apps_tab:")
-        print(f"    all_apps_data:        {len(a.all_apps_data)}")
-        print(f"    items:                {len(a.items)}")
-        print(f"    _qa_items_cache:      {len(a._qa_items_cache)}")
-        print(f"    pending_icon_downloads:{len(a.pending_icon_downloads)}")
-        print(f"    quick_widget:         {a.quick_widget}")
-        w = self.winlator_tab
-        print(f"  winlator_tab:")
-        print(f"    game_items:           {len(w.game_items)}")
-        print(f"    _qa_items_cache:      {len(w._qa_items_cache)}")
-        print(f"    quick_widget:         {w.quick_widget}")
-        cnt = collections.Counter(type(o).__name__ for o in gc.get_objects())
-        print(f"  Top object types:")
-        for name, c in cnt.most_common(20):
-            print(f"    {name}: {c}")
-        print("---")
+

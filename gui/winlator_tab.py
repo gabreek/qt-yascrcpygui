@@ -84,9 +84,16 @@ class WinlatorTab(BaseGridTab):
         self.populate_games_grid_model(list(self.game_items.values()))
 
     def _connect_qml_signals(self):
+        if self.quick_widget is None:
+            QTimer.singleShot(100, self._connect_qml_signals)
+            return
         root = self.quick_widget.rootObject()
         if not root:
             QTimer.singleShot(100, self._connect_qml_signals)
+            return
+
+        # Skip if already connected to this root object
+        if getattr(self, '_connected_root', None) is root:
             return
 
         root.launchRequested.connect(self._on_qml_launch_requested)
@@ -95,11 +102,14 @@ class WinlatorTab(BaseGridTab):
         root.iconDropped.connect(self.on_icon_dropped)
         root.sectionToggled.connect(self.on_section_toggled)
         root.quickAccessRequested.connect(self.on_quick_access_requested)
-        
+        self._connected_root = root
+
         self._update_qml_properties(root)
 
     def _update_qml_properties(self, root=None):
-        if not root: root = self.quick_widget.rootObject()
+        if not root:
+            if self.quick_widget is None: return
+            root = self.quick_widget.rootObject()
         if root:
             root.setProperty("settingsText", self.app_config.tr('common', 'settings'))
             root.setProperty("deleteConfigText", self.app_config.tr('apps_tab', 'delete_config_title'))
@@ -225,22 +235,22 @@ class WinlatorTab(BaseGridTab):
         for pkg in sorted_packages:
             games_in_pkg = sorted(grouped_games[pkg], key=lambda x: x.get('name', '').lower())
             
-            # Add a separator for each Winlator version
             display_name = pkg.replace('com.winlator.', '').replace('cmod', 'CMOD ').replace('custom', 'Custom ')
             if pkg == 'com.ludashi.benchmark':
                 display_name = 'Winlator CMOD Ludashi'
-            elif display_name == 'CMOD': # Catch for base CMOD package
+            elif display_name == 'CMOD':
                 display_name = 'Winlator CMOD'
-            else: # If there's a version suffix, format it nicely
+            else:
                 display_name = f"Winlator {display_name}"
 
             is_collapsed = display_name in self.collapsed_sections
+
             qml_model_data.append({
                 'isSeparator': True, 
                 'text': display_name,
                 'sectionId': display_name,
                 'isCollapsed': is_collapsed,
-                'isHidden': False
+                'key': f"sep_{display_name}"
             })
 
             for game_info in games_in_pkg:
@@ -263,17 +273,16 @@ class WinlatorTab(BaseGridTab):
                     'name': game_name,
                     'item_type': "winlator_game",
                     'icon_path': QUrl.fromLocalFile(icon_path).toString(),
-                    'pkg': pkg, # Store pkg for launch worker
-                    'isSeparator': False,
-                    'isHidden': is_collapsed,
-                    'pinned': pinned_val
+                    'pkg': pkg,
+                    'pinned': pinned_val,
+                    'isHidden': is_collapsed
                 }
                 
                 if CONF_QUICK_ACCESS in pinned_val.split(','):
                     quick_access_items.append(game_data)
 
                 qml_model_data.append(game_data)
-                self.game_items[game_path] = game_data # Update game_items for icon extraction/config
+                self.game_items[game_path] = game_data
 
         # Cache QA items and refresh shared model
         self._qa_items_cache = sorted(quick_access_items, key=lambda x: x['name'].lower())

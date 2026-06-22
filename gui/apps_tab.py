@@ -136,9 +136,16 @@ class AppsTab(BaseGridTab):
         self.filter_apps()
 
     def _connect_qml_signals(self):
+        if self.quick_widget is None:
+            QTimer.singleShot(100, self._connect_qml_signals)
+            return
         root = self.quick_widget.rootObject()
         if not root:
             QTimer.singleShot(100, self._connect_qml_signals)
+            return
+
+        # Skip if already connected to this root object
+        if getattr(self, '_connected_root', None) is root:
             return
 
         root.launchRequested.connect(self._on_qml_launch_requested)
@@ -150,12 +157,15 @@ class AppsTab(BaseGridTab):
         root.folderRequested.connect(self.open_create_session_dialog)
         root.moveRequested.connect(self.on_move_to_folder)
         root.quickAccessRequested.connect(self.on_quick_access_requested)
+        self._connected_root = root
 
         # Initialize folder list in QML
         self._update_folder_list_in_qml(root)
 
     def _update_folder_list_in_qml(self, root=None):
-        if not root: root = self.quick_widget.rootObject()
+        if not root:
+            if self.quick_widget is None: return
+            root = self.quick_widget.rootObject()
         if root:
             # Refresh from app_config and filter out 'all'
             folders = [f for f in self.app_config.get_custom_sessions().keys() if f != 'all']
@@ -576,25 +586,21 @@ class AppsTab(BaseGridTab):
             if search_text in app['name'].lower()
         ]
 
-        sessions = {} # folder_name -> list of apps
+        sessions = {}
         unassigned_apps = []
         quick_access_items = []
 
-        # Get custom sessions configuration
         session_order = self.app_config.get_custom_sessions_order()
 
         for app in filtered_apps:
-            pkg_name = app['key']
-            # Fetch the most up-to-date folder assignment from AppConfig
-            metadata = self.app_config.get_app_metadata(pkg_name)
-            pinned_val = metadata.get('pinned', "")
-            if not isinstance(pinned_val, str): pinned_val = ""
-            
+            pinned_val = app.get('pinned', "")
+            if not isinstance(pinned_val, str):
+                pinned_val = ""
+
             parts = [p.strip() for p in pinned_val.split(',') if p.strip()]
             folder = next((p for p in parts if p != CONF_QUICK_ACCESS), "")
-            
+
             if app.get('is_launcher_shortcut'):
-                launcher_item = app
                 quick_access_items.append(app)
             elif CONF_QUICK_ACCESS in parts:
                 quick_access_items.append(app)
@@ -613,37 +619,33 @@ class AppsTab(BaseGridTab):
         remaining_folders = sorted([f for f in existing_folders if f not in sorted_folders], key=lambda x: x.lower())
 
         for folder_name in (sorted_folders + remaining_folders):
-            # If searching, force expand. Otherwise, use saved state.
             is_collapsed = (folder_name in self.collapsed_sections) and not is_searching
 
             qml_model_data.append({
-                'isSeparator': True, 
+                'isSeparator': True,
                 'text': folder_name,
                 'sectionId': folder_name,
                 'isCollapsed': is_collapsed,
-                'key': f"sep_{folder_name}" # Unique key for separators too
+                'key': f"sep_{folder_name}"
             })
             for app in sorted(sessions[folder_name], key=lambda x: x['name'].lower()):
                 app_copy = app.copy()
-                app_copy['is_pinned'] = False
                 app_copy['isHidden'] = is_collapsed
                 qml_model_data.append(app_copy)
 
         # 2. All Apps (Unassigned)
         if unassigned_apps:
-            # If searching, force expand. Otherwise, use saved state.
             is_collapsed = ("all" in self.collapsed_sections) and not is_searching
 
             qml_model_data.append({
-                'isSeparator': True, 
+                'isSeparator': True,
                 'text': self.app_config.tr('apps_tab', 'all_section'),
                 'sectionId': 'all',
                 'isCollapsed': is_collapsed,
-                'key': "sep_all" # Unique key
+                'key': "sep_all"
             })
             for app in sorted(unassigned_apps, key=lambda x: x['name'].lower()):
                 app_copy = app.copy()
-                app_copy['is_pinned'] = False
                 app_copy['isHidden'] = is_collapsed
                 qml_model_data.append(app_copy)
 
@@ -652,14 +654,13 @@ class AppsTab(BaseGridTab):
         if self.main_window:
             self.main_window._refresh_qa_model()
 
-        # 8. Fingerprint optimization
+        # Fingerprint optimization
         model_fingerprint = hash(str(qml_model_data))
         if model_fingerprint == self._last_model_fingerprint:
             return
         self._last_model_fingerprint = model_fingerprint
 
         self._update_grid_model(qml_model_data)
-        gc.collect()
 
     def _start_batch_icon_download(self):
         if self._icon_download_in_progress:

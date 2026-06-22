@@ -97,10 +97,12 @@ class BaseGridTab(QWidget):
             # Update strings
             self.update_strings()
             
-            # Connect custom update signals
-            root.quickAccessFactorUpdated.connect(self.on_quick_access_factor_changed)
-            root.quickAccessVisibilityChanged.connect(self.on_quick_access_visibility_changed)
-            root.qaLaunchRequested.connect(self._on_qa_launch_requested)
+            # Connect signals once per root to avoid duplicates
+            if getattr(self, '_qa_connected_root', None) is not root:
+                root.quickAccessFactorUpdated.connect(self.on_quick_access_factor_changed)
+                root.quickAccessVisibilityChanged.connect(self.on_quick_access_visibility_changed)
+                root.qaLaunchRequested.connect(self._on_qa_launch_requested)
+                self._qa_connected_root = root
 
     def update_strings(self):
         """Passes localized strings to the QML component."""
