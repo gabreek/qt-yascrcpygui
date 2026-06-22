@@ -26,7 +26,7 @@ def get_icon(app_name, package_name, cache_dir, app_config, download_if_missing=
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
         url = f"https://play.google.com/store/apps/details?id={package_name}&hl=en&gl=US"
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
 
         # Regex mais robusta que busca pela meta tag og:image.
@@ -37,7 +37,7 @@ def get_icon(app_name, package_name, cache_dir, app_config, download_if_missing=
 
         icon_url = match.group(1).replace('=s180-rw', '=s128-rw')
 
-        icon_response = requests.get(icon_url, stream=True)
+        icon_response = requests.get(icon_url, stream=True, timeout=10)
         icon_response.raise_for_status()
 
         with open(icon_path, 'wb') as f:

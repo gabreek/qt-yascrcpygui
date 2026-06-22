@@ -35,6 +35,7 @@ class AppsTab(BaseGridTab):
         self.total_icon_tasks = 0
         self.completed_icon_tasks = 0
         self.NUM_ICON_WORKERS = 5 # Number of concurrent icon download workers
+        self._icon_download_in_progress = False
 
         # Determine the base path for resources
         base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -77,6 +78,8 @@ class AppsTab(BaseGridTab):
     def trigger_icon_redownload(self):
         """Deletes existing icon files and clears failure flags to force a complete re-download."""
         print("Forcing icon redownload for all apps...")
+        self._icon_download_in_progress = False
+        self.stop_all_workers()
         for app_data in self.all_apps_data:
             pkg_name = app_data['key']
             if not app_data.get('is_launcher_shortcut'):
@@ -111,6 +114,8 @@ class AppsTab(BaseGridTab):
         # Add sentinel values for each possible worker to ensure they stop
         for _ in range(self.NUM_ICON_WORKERS):
             self.download_queue.put(None)
+
+        self._icon_download_in_progress = False
 
         print("AppsTab workers signaled to stop.")
 
@@ -273,8 +278,10 @@ class AppsTab(BaseGridTab):
             cached_data = self.app_config.get_app_list_cache()
             if cached_data and cached_data.get('user_apps'):
                 self.load_apps_from_cache_and_update_display()
-            else:
+            elif self.app_config.get(CONF_UPDATE_APPS_ON_STARTUP, True):
                 self.refresh_apps_list()
+            else:
+                self.show_message(self.app_config.tr('apps_tab', 'empty_list'))
 
     def refresh_apps_list(self):
         if self.main_window and hasattr(self.main_window, 'pause_device_check'):
@@ -350,6 +357,7 @@ class AppsTab(BaseGridTab):
 
     def _populate_grid_model(self, apps_from_cache):
         self.all_apps_data = [] # Reset
+        self.pending_icon_downloads.clear()
 
         launcher_pkg = self.app_config.get(CONF_DEFAULT_LAUNCHER)
 
@@ -642,10 +650,14 @@ class AppsTab(BaseGridTab):
         self._update_grid_model(qml_model_data)
 
     def _start_batch_icon_download(self):
+        if self._icon_download_in_progress:
+            return
+
         self.total_icon_tasks = len(self.pending_icon_downloads)
         if not self.total_icon_tasks:
             return
 
+        self._icon_download_in_progress = True
         self.completed_icon_tasks = 0
         self.progress_dialog = CustomThemedProgressDialog(
             self.app_config.tr('apps_tab', 'downloading_icons'),
@@ -684,8 +696,9 @@ class AppsTab(BaseGridTab):
     @Slot(str, str) # pkg_name, icon_path_string
     def _on_icon_batch_finished(self, pkg_name, icon_path_string):
         self.completed_icon_tasks += 1
-        self.progress_dialog.setValue(self.completed_icon_tasks)
-        self.progress_dialog.setLabelText(f"{self.app_config.tr('apps_tab', 'downloading_icons')} ({self.completed_icon_tasks}/{self.total_icon_tasks})")
+        if self.progress_dialog:
+            self.progress_dialog.setValue(self.completed_icon_tasks)
+            self.progress_dialog.setLabelText(f"{self.app_config.tr('apps_tab', 'downloading_icons')} ({self.completed_icon_tasks}/{self.total_icon_tasks})")
 
         # Update the model in memory
         for app_data in self.all_apps_data:
@@ -701,8 +714,9 @@ class AppsTab(BaseGridTab):
         print(f"Error downloading icon for {pkg_name}: {error_msg}")
         self._save_metadata_async(pkg_name, {'icon_fetch_failed': True}) # Mark as failed
         self.completed_icon_tasks += 1
-        self.progress_dialog.setValue(self.completed_icon_tasks)
-        self.progress_dialog.setLabelText(f"{self.app_config.tr('apps_tab', 'downloading_icons')} ({self.completed_icon_tasks}/{self.total_icon_tasks})")
+        if self.progress_dialog:
+            self.progress_dialog.setValue(self.completed_icon_tasks)
+            self.progress_dialog.setLabelText(f"{self.app_config.tr('apps_tab', 'downloading_icons')} ({self.completed_icon_tasks}/{self.total_icon_tasks})")
 
         if self.completed_icon_tasks >= self.total_icon_tasks:
             self._on_all_icons_downloaded()
@@ -720,6 +734,7 @@ class AppsTab(BaseGridTab):
 
         self.icon_download_workers.clear() # Clear worker references
         self.pending_icon_downloads.clear() # Clear pending tasks
+        self._icon_download_in_progress = False
 
         # Aggressive memory cleanup
         gc.collect()

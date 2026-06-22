@@ -1,5 +1,6 @@
 from PySide6.QtCore import QObject, Signal, QRunnable, QThread
 from utils import scrcpy_handler, icon_scraper, adb_handler
+from utils.constants import CONF_UPDATE_APPS_ON_STARTUP
 import re
 import os
 import time
@@ -486,11 +487,22 @@ class DeviceConfigLoaderWorker(QRunnable):
             # --- New: Fetch installed apps and Winlator shortcuts ---
             installed_apps_packages = set()
             winlator_shortcuts_on_device = set()
-            try:
-                user_apps, system_apps = scrcpy_handler.list_installed_apps(connection_id)
-                installed_apps_packages = set(user_apps.values()) | set(system_apps.values())
-            except Exception as e:
-                self.signals.error.emit(f"Error listing installed apps during config load: {e}")
+
+            should_update_apps = self.app_config.get(CONF_UPDATE_APPS_ON_STARTUP, True)
+            if should_update_apps:
+                try:
+                    user_apps, system_apps = scrcpy_handler.list_installed_apps(connection_id)
+                    installed_apps_packages = set(user_apps.values()) | set(system_apps.values())
+                    # Save to app list cache so AppsTab loads the fresh data
+                    user_app_list = [{'key': pkg, 'name': name} for name, pkg in user_apps.items()]
+                    system_app_list = [{'key': pkg, 'name': name} for name, pkg in system_apps.items()]
+                    new_cache = {'user_apps': user_app_list, 'system_apps': system_app_list}
+                    self.app_config.save_app_list_cache(new_cache)
+                except Exception as e:
+                    self.signals.error.emit(f"Error listing installed apps during config load: {e}")
+            else:
+                # Use cached packages from load_config_for_device
+                installed_apps_packages = self.app_config.device_app_cache.get('installed_apps', set())
 
             try:
                 winlator_shortcuts_on_device = {s[1] for s in adb_handler.list_winlator_shortcuts_with_names(connection_id)}

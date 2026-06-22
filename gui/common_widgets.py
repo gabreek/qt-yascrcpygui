@@ -219,8 +219,6 @@ class CustomThemedProgressDialog(CustomThemedDialog):
 
     def setValue(self, value):
         self.progress_bar.setValue(value)
-        if value >= self.progress_bar.maximum() and not self._canceled:
-            self.close()
 
     def _handle_cancel(self):
         self._canceled = True

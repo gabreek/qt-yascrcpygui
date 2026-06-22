@@ -118,6 +118,7 @@ PROFILE_ROLE = Qt.UserRole + 1
 class ScrcpyTab(QWidget):
     config_updated_on_worker = Signal()
     theme_changed = Signal(str)
+    update_apps_setting_changed = Signal()
 
     def __init__(self, app_config, main_window=None):
         super().__init__()
@@ -269,29 +270,48 @@ class ScrcpyTab(QWidget):
         duo_grid.setColumnStretch(1, 1)
         layout.addLayout(duo_grid)
 
-        # Checkboxes compact grid (2 columns)
-        check_grid = QHBoxLayout()
-        check_grid.setSpacing(8)
+        # Checkboxes
+        checkbox_font = self.font()
+        checkbox_font.setPointSize(checkbox_font.pointSize() - 1)
+
+        check_row1 = QHBoxLayout()
+        check_row1.setSpacing(8)
 
         self.show_system_apps_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'labels', key='show_system_apps'))
+        self.show_system_apps_checkbox.setFont(checkbox_font)
         self.show_system_apps_checkbox.setChecked(self.app_config.get(CONF_SHOW_SYSTEM_APPS, False))
         self.show_system_apps_checkbox.stateChanged.connect(self._on_show_system_apps_changed)
-        check_grid.addWidget(self.show_system_apps_checkbox)
+        check_row1.addWidget(self.show_system_apps_checkbox)
 
         self.hq_rendering_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'rendering', key='hq_icon_rendering'))
+        self.hq_rendering_checkbox.setFont(checkbox_font)
         self.hq_rendering_checkbox.setChecked(self.app_config.get(CONF_HQ_ICON_RENDERING, True))
         self.hq_rendering_checkbox.stateChanged.connect(lambda state: self._on_rendering_option_changed(CONF_HQ_ICON_RENDERING, bool(state)))
-        check_grid.addWidget(self.hq_rendering_checkbox)
+        check_row1.addWidget(self.hq_rendering_checkbox)
         self.option_checkboxes[CONF_HQ_ICON_RENDERING] = self.hq_rendering_checkbox
 
         self.hover_effect_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'rendering', key='web_hover_effect'))
+        self.hover_effect_checkbox.setFont(checkbox_font)
         self.hover_effect_checkbox.setChecked(self.app_config.get(CONF_WEB_HOVER_EFFECT, True))
         self.hover_effect_checkbox.stateChanged.connect(lambda state: self._on_rendering_option_changed(CONF_WEB_HOVER_EFFECT, bool(state)))
-        check_grid.addWidget(self.hover_effect_checkbox)
+        check_row1.addWidget(self.hover_effect_checkbox)
         self.option_checkboxes[CONF_WEB_HOVER_EFFECT] = self.hover_effect_checkbox
 
-        check_grid.addStretch()
-        layout.addLayout(check_grid)
+        check_row1.addStretch()
+        layout.addLayout(check_row1)
+
+        check_row2 = QHBoxLayout()
+        check_row2.setSpacing(8)
+
+        self.update_apps_on_startup_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'labels', key='update_apps_on_startup'))
+        self.update_apps_on_startup_checkbox.setFont(checkbox_font)
+        self.update_apps_on_startup_checkbox.setChecked(self.app_config.get(CONF_UPDATE_APPS_ON_STARTUP, True))
+        self.update_apps_on_startup_checkbox.stateChanged.connect(self._on_update_apps_on_startup_changed)
+        check_row2.addWidget(self.update_apps_on_startup_checkbox)
+        self.option_checkboxes[CONF_UPDATE_APPS_ON_STARTUP] = self.update_apps_on_startup_checkbox
+
+        check_row2.addStretch()
+        layout.addLayout(check_row2)
 
         # Buttons row
         btn_row = QHBoxLayout()
@@ -323,6 +343,7 @@ class ScrcpyTab(QWidget):
             self._update_card_header(section)
 
         self.show_system_apps_checkbox.setText(self.app_config.tr('scrcpy_tab', 'labels', key='show_system_apps'))
+        self.update_apps_on_startup_checkbox.setText(self.app_config.tr('scrcpy_tab', 'labels', key='update_apps_on_startup'))
         self.hq_rendering_checkbox.setText(self.app_config.tr('scrcpy_tab', 'rendering', key='hq_icon_rendering'))
         self.hover_effect_checkbox.setText(self.app_config.tr('scrcpy_tab', 'rendering', key='web_hover_effect'))
         self.web_server_config_button.setText(self.app_config.tr('scrcpy_tab', 'labels', key='web_server'))
@@ -387,6 +408,10 @@ class ScrcpyTab(QWidget):
     def _on_show_system_apps_changed(self, state):
         self.app_config.set(CONF_SHOW_SYSTEM_APPS, bool(state))
         self.config_updated_on_worker.emit()
+
+    def _on_update_apps_on_startup_changed(self, state):
+        self.app_config.set(CONF_UPDATE_APPS_ON_STARTUP, bool(state))
+        self.update_apps_setting_changed.emit()
 
     def _update_theme_dropdown(self):
         self.theme_combo.blockSignals(True)

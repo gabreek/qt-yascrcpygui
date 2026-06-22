@@ -46,6 +46,7 @@ ALTERNATE_LAUNCH_METHOD = 'alternate_launch_method'
 CONF_WINDOWING_MODE = 'windowing_mode'
 CONF_SHOW_SYSTEM_APPS = 'show_system_apps'
 CONF_START_WEB_SERVER_ON_LAUNCH = 'start_web_server_on_launch'
+CONF_UPDATE_APPS_ON_STARTUP = 'update_apps_on_startup'
 CONF_WEB_PORT = 'web_port'
 CONF_WEB_USERNAME = 'web_username'
 CONF_WEB_PASSWORD = 'web_password'
@@ -110,7 +111,8 @@ TRANSLATIONS = {
             'labels': {
                 'theme': 'Theme',
                 'language': 'Language',
-                'show_system_apps': 'Show System Apps',
+                'show_system_apps': 'System apps',
+                'update_apps_on_startup': 'Update apps on startup',
                 'web_server': 'Web Server',
                 'configuration_profile': 'Configuration Profile',
                 'global_config': 'Global Config',
@@ -140,8 +142,8 @@ TRANSLATIONS = {
                 'please_connect': 'Please connect a device.',
             },
             'rendering': {
-                'hq_icon_rendering': 'HQ Icon Rendering',
-                'web_hover_effect': 'Enable Hover Effect',
+                'hq_icon_rendering': 'HQ Icon',
+                'web_hover_effect': 'Hover Effect',
             },
             'options': {
                 'fullscreen': 'Fullscreen',
@@ -328,7 +330,8 @@ TRANSLATIONS = {
                 'labels': {
                 'theme': 'Tema',
                 'language': 'Idioma',
-                'show_system_apps': 'Mostrar Apps de Sistema',
+                'show_system_apps': 'Apps de Sistema',
+                'update_apps_on_startup': 'Atualizar apps na inicialização',
                 'web_server': 'Servidor Web',
                 'configuration_profile': 'Perfil de Configuração',
                 'global_config': 'Configuração Global',
@@ -358,8 +361,8 @@ TRANSLATIONS = {
                 'please_connect': 'Por favor, conecte um dispositivo.',
                 },
                 'rendering': {
-                    'hq_icon_rendering': 'Renderização de Ícones HQ',
-                    'web_hover_effect': 'Habilitar Efeito de Hover',
+                    'hq_icon_rendering': 'Ícones HQ',
+                    'web_hover_effect': 'Efeito Hover',
                 },
             'options': {
                 'fullscreen': 'Tela Cheia',
