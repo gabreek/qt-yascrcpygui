@@ -260,17 +260,24 @@ class AppsTab(BaseGridTab):
         self.app_config.save_custom_session(session_id, collapsed)
 
     def on_device_changed(self):
-        self._clear_grid()
         self.all_apps_data = []
         self._last_model_fingerprint = None
         device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
+            self._qa_items_cache = []
+            self.pending_icon_downloads.clear()
+            self._icon_download_in_progress = False
             self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
+            self._clear_grid()
+            self._unload_qml()
             self.refresh_button.setEnabled(False)
             self.folders_button.setEnabled(False)
         else:
             self.refresh_button.setEnabled(True)
             self.folders_button.setEnabled(True)
+            self._clear_grid()
+            self._reload_qml()
+            self._connect_qml_signals()
 
             # Load collapsed sections from config
             self.collapsed_sections = set()
@@ -372,6 +379,13 @@ class AppsTab(BaseGridTab):
 
         launcher_name = 'Launcher'
 
+        # Build a set of cached icon filenames (single listdir instead of N exists() calls)
+        try:
+            cached_icon_files = set(os.listdir(self.icon_cache_dir))
+        except OSError:
+            cached_icon_files = set()
+        placeholder_exists = os.path.exists(self.placeholder_icon_path)
+
         # Add launcher info first if it exists
         if launcher_pkg:
             folder = self.app_config.get_app_metadata(launcher_pkg).get('pinned', "")
@@ -401,21 +415,16 @@ class AppsTab(BaseGridTab):
             pinned_val = metadata.get('pinned', "")
             if not isinstance(pinned_val, str): pinned_val = ""
 
-            icon_path_file_exists = False
             icon_path_url = ""
-            cached_icon_full_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
-
-            if os.path.exists(cached_icon_full_path):
-                icon_path_url = QUrl.fromLocalFile(cached_icon_full_path).toString()
-                icon_path_file_exists = True
-
-            if not icon_path_file_exists:
-                if os.path.exists(self.placeholder_icon_path):
+            icon_filename = f"{pkg_name}.png"
+            if icon_filename in cached_icon_files:
+                full_path = os.path.join(self.icon_cache_dir, icon_filename)
+                icon_path_url = QUrl.fromLocalFile(full_path).toString()
+            else:
+                if placeholder_exists:
                     icon_path_url = QUrl.fromLocalFile(self.placeholder_icon_path).toString()
-
-                # Load icon if not failed before and no custom icon
                 if not metadata.get('has_custom_icon') and not metadata.get('icon_fetch_failed'):
-                    self.pending_icon_downloads[pkg_name] = app_name # Add to pending list
+                    self.pending_icon_downloads[pkg_name] = app_name
 
             self.all_apps_data.append({
                 'key': pkg_name,
@@ -423,7 +432,7 @@ class AppsTab(BaseGridTab):
                 'item_type': "app",
                 'is_launcher_shortcut': False,
                 'icon_path': icon_path_url,
-                'is_pinned': False, # This is the legacy role, keeping it false
+                'is_pinned': False,
                 'pinned': pinned_val
             })
         if self.pending_icon_downloads:
@@ -650,6 +659,7 @@ class AppsTab(BaseGridTab):
         self._last_model_fingerprint = model_fingerprint
 
         self._update_grid_model(qml_model_data)
+        gc.collect()
 
     def _start_batch_icon_download(self):
         if self._icon_download_in_progress:

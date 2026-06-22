@@ -136,16 +136,22 @@ class WinlatorTab(BaseGridTab):
         super().update_theme(status)
 
     def on_device_changed(self):
-        self._clear_grid()
         self.all_games_data = []
         device_id = self.app_config.get_connection_id()
         if not device_id or device_id == "no_device":
+            self.game_items.clear()
+            self._qa_items_cache = []
             self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
+            self._clear_grid()
+            self._unload_qml()
             self.refresh_button.setEnabled(False)
             self.fetch_icons_button.setEnabled(False)
         else:
             self.refresh_button.setEnabled(True)
             self.fetch_icons_button.setEnabled(True)
+            self._clear_grid()
+            self._reload_qml()
+            self._connect_qml_signals()
             
             # Reset collapsed sections for new device
             self.collapsed_sections = set()
@@ -275,6 +281,7 @@ class WinlatorTab(BaseGridTab):
             self.main_window._refresh_qa_model()
 
         self._update_grid_model(qml_model_data)
+        gc.collect()
 
     @Slot(str, str)
     def on_settings_requested(self, itemKey, itemType):

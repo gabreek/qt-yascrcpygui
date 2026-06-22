@@ -1,6 +1,7 @@
 # FILE: app_config.py
 # PURPOSE: Centraliza o gerenciamento de configurações, caminhos e variáveis.
 
+import gc
 import os
 import json
 import platform
@@ -406,6 +407,8 @@ class AppConfig:
             self.CONFIG_FILE = None
             self.config_data = {}
             self.connection_id = None
+            self.device_app_cache['installed_apps'] = set()
+            self.device_app_cache['winlator_shortcuts'] = set()
             default_values = self._DEFAULT_VALUES.copy()
             # Load global keys from file, fall back to defaults
             for key in self.GLOBAL_KEYS:
@@ -441,5 +444,6 @@ class AppConfig:
         cached_winlator = self.config_data.get(CONF_WINLATOR_GAME_CONFIGS, {})
         self.device_app_cache['winlator_shortcuts'] = set(cached_winlator.keys())
 
+        gc.collect()
         # Load the global profile for the device by default
         self.load_profile('global')

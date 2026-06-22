@@ -1,3 +1,4 @@
+import gc
 import os
 import asyncio
 import uvicorn
@@ -188,6 +189,9 @@ class MainWindow(QMainWindow):
         self.device_monitor = DeviceMonitor(interval_ms=2000)
         self.device_monitor.device_changed.connect(self._handle_device_list_update)
         self.device_monitor.start()
+
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self._dump_memory)
 
         # Web server is now lazily initialized only when requested
         self.web_server_thread = None
@@ -387,6 +391,7 @@ class MainWindow(QMainWindow):
         self.thread_pool.clear()
         self.thread_pool.waitForDone(3000) # Wait up to 3s for remaining workers
 
+        gc.collect()
         print("Application closed successfully.")
         event.accept()
 
@@ -437,6 +442,8 @@ class MainWindow(QMainWindow):
         )
         self._qa_model = combined
         for tab in [self.apps_tab, self.winlator_tab]:
+            if not tab.quick_widget:
+                continue
             root = tab.quick_widget.rootObject()
             if root:
                 root.setProperty("quickAccessModel", combined)
@@ -504,6 +511,7 @@ class MainWindow(QMainWindow):
     def _on_worker_finished(self, worker):
         if worker in self.active_workers:
             self.active_workers.remove(worker)
+            gc.collect()
 
     def _update_all_tabs_status(self, message=None):
         if message:
@@ -528,9 +536,18 @@ class MainWindow(QMainWindow):
             self._load_device_config(current_id)
         elif not current_id and old_selected is not None:
             self.last_known_device_id = None
+            self.active_workers.clear()
+            self._pending_config_loader = None
             self.app_config.load_config_for_device(None)
+            self._qa_model = []
+            for tab in [self.apps_tab, self.winlator_tab]:
+                root = tab.quick_widget.rootObject()
+                if root:
+                    root.setProperty("quickAccessModel", [])
             self._update_device_btn_text(None)
             self._update_all_tabs_status()
+            gc.collect()
+            self._dump_memory()
         elif current_id:
             self._update_device_btn_text(current_id)
         else:
@@ -581,6 +598,7 @@ class MainWindow(QMainWindow):
         config_loader_worker.signals.result.connect(self._on_device_config_loaded)
         config_loader_worker.signals.error.connect(self._on_device_load_error)
         config_loader_worker.signals.finished.connect(self.resume_device_check)
+        config_loader_worker.signals.finished.connect(lambda: self._on_worker_finished(config_loader_worker))
         self._pending_config_loader = config_loader_worker
         self.active_workers.append(config_loader_worker)
         self.thread_pool.start(config_loader_worker)
@@ -589,6 +607,7 @@ class MainWindow(QMainWindow):
         self._pending_config_loader = None
         self.app_config.device_app_cache['installed_apps'] = installed_apps_packages
         self.app_config.device_app_cache['winlator_shortcuts'] = winlator_shortcuts_on_device
+        gc.collect()
         device_id = result_data.get("device_id")
         if device_id:
             self._update_device_btn_text(device_id)
@@ -601,3 +620,32 @@ class MainWindow(QMainWindow):
     def _on_scrcpy_tab_config_ready(self):
         self.scrcpy_tab._update_all_widgets_from_config()
         self.apps_tab._update_display()
+
+    def _dump_memory(self):
+        import sys, collections
+        gc.collect()
+        active = self.thread_pool.activeThreadCount()
+        print(f"\n--- Memory Dump (gc objects: {len(gc.get_objects())}) ---")
+        print(f"  QThreadPool active threads: {active}")
+        ac = self.app_config
+        print(f"  config_data keys:   {len(ac.config_data)}")
+        print(f"  values keys:        {len(ac.values)}")
+        print(f"  device_app_cache:   installed={len(ac.device_app_cache.get('installed_apps',[]))}  winlator={len(ac.device_app_cache.get('winlator_shortcuts',[]))}")
+        print(f"  active_workers:     {len(self.active_workers)}")
+        a = self.apps_tab
+        print(f"  apps_tab:")
+        print(f"    all_apps_data:        {len(a.all_apps_data)}")
+        print(f"    items:                {len(a.items)}")
+        print(f"    _qa_items_cache:      {len(a._qa_items_cache)}")
+        print(f"    pending_icon_downloads:{len(a.pending_icon_downloads)}")
+        print(f"    quick_widget:         {a.quick_widget}")
+        w = self.winlator_tab
+        print(f"  winlator_tab:")
+        print(f"    game_items:           {len(w.game_items)}")
+        print(f"    _qa_items_cache:      {len(w._qa_items_cache)}")
+        print(f"    quick_widget:         {w.quick_widget}")
+        cnt = collections.Counter(type(o).__name__ for o in gc.get_objects())
+        print(f"  Top object types:")
+        for name, c in cnt.most_common(20):
+            print(f"    {name}: {c}")
+        print("---")

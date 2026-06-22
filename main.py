@@ -73,10 +73,20 @@ def main():
         dump_theme_colors(app)
         sys.exit(0)
 
+    # Set process name to "yaScrcpy" instead of "main.py"
+    try:
+        import ctypes
+        libc = ctypes.CDLL(ctypes.util.find_library('c'))
+        PR_SET_NAME = 15
+        libc.prctl(PR_SET_NAME, b"yaScrcpy", 0, 0, 0)
+    except Exception:
+        pass
+    QApplication.setApplicationName("yaScrcpy")
+    QApplication.setApplicationDisplayName("yaScrcpy")
+    app = QApplication(remaining)
+
     if not check_dependencies():
         return
-
-    app = QApplication(remaining)
 
 
 

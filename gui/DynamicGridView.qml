@@ -84,7 +84,7 @@ Rectangle {
     onQuickAccessModelChanged: syncModel(quickAccessModel, internalQuickAccessModel, "qa_")
 
     function syncModel(sourceData, targetModel, prefix) {
-        if (!sourceData) {
+        if (!sourceData || sourceData.length === 0) {
             targetModel.clear();
             return;
         }

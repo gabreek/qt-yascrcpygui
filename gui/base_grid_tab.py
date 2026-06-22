@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PySide6.QtCore import Qt, QUrl, QTimer, Slot
 from PySide6.QtGui import QPalette
 from PySide6.QtQuickWidgets import QQuickWidget
+import gc
 import os
 from . import themes
 
@@ -43,12 +44,14 @@ class BaseGridTab(QWidget):
 
     def update_theme(self, status=None):
         """Passes the current palette colors to the QML component and triggers garbage collection."""
+        if self.quick_widget is None:
+            return
         # The status argument is passed when connected to statusChanged signal
         if status is not None and status != QQuickWidget.Status.Ready:
             return
 
         # Force garbage collection to help clean up unused textures
-        if self.quick_widget and self.quick_widget.engine():
+        if self.quick_widget.engine():
             self.quick_widget.engine().collectGarbage()
 
         root = self.quick_widget.rootObject()
@@ -101,6 +104,8 @@ class BaseGridTab(QWidget):
 
     def update_strings(self):
         """Passes localized strings to the QML component."""
+        if self.quick_widget is None:
+            return
         root = self.quick_widget.rootObject()
         if not root:
             return
@@ -140,23 +145,83 @@ class BaseGridTab(QWidget):
 
     def _clear_grid(self):
         self.items = {}
-        if hasattr(self, '_last_model_data'):
-            self._last_model_data = None
+        self._last_model_data = None
+        if self.quick_widget is None:
+            return
         root = self.quick_widget.rootObject()
         if root:
             root.setProperty("itemsModel", [])
+            root.setProperty("quickAccessModel", [])
+
+    def _trim_heap(self):
+        """Release free heap pages back to the OS (Linux glibc)."""
+        try:
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6")
+            libc.malloc_trim(0)
+        except Exception:
+            pass
+
+    def _unload_qml(self):
+        """Destroy the QQuickWidget to free all scene graph, textures and QML engine memory."""
+        self._last_model_data = None
+        self.items = {}
+        old = self.quick_widget
+        if old is None:
+            return
+        self.quick_widget = None
+        self.main_layout.removeWidget(old)
+        from PySide6.QtCore import QCoreApplication
+        # step 1: unload QML component tree (frees delegates, textures, scene graph)
+        old.setSource(QUrl())
+        if old.engine():
+            old.engine().clearComponentCache()
+            old.engine().collectGarbage()
+        try:
+            old.quickWindow().releaseResources()
+        except Exception:
+            pass
+        QCoreApplication.instance().processEvents()
+        # step 2: destroy the C++ object
+        old.deleteLater()
+        for _ in range(10):
+            QCoreApplication.instance().processEvents()
+            if not old:
+                break
+        # step 3: clear caches and release heap
+        from PySide6.QtGui import QPixmapCache
+        QPixmapCache.clear()
+        gc.collect()
+        self._trim_heap()
+
+    def _reload_qml(self):
+        """Create a new QQuickWidget in place of the destroyed one."""
+        if self.quick_widget is not None:
+            return
+        self.quick_widget = QQuickWidget(self)
+        self.quick_widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.quick_widget.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
+        info_idx = self.main_layout.indexOf(self.info_label)
+        self.main_layout.insertWidget(info_idx, self.quick_widget)
+        qml_path = os.path.join(os.path.dirname(__file__), "DynamicGridView.qml")
+        self.quick_widget.statusChanged.connect(self.update_theme)
+        self.quick_widget.setSource(QUrl.fromLocalFile(qml_path))
 
     def show_message(self, text):
         self.info_label.setText(text)
         self.info_label.show()
-        self.quick_widget.hide()
+        if self.quick_widget:
+            self.quick_widget.hide()
 
     def show_grid(self):
         self.info_label.hide()
-        self.quick_widget.show()
+        if self.quick_widget:
+            self.quick_widget.show()
 
     def _update_grid_model(self, model_data):
         """Updates the model in the QML GridView with optimization."""
+        if self.quick_widget is None:
+            return
         root = self.quick_widget.rootObject()
         if root:
             # Skip if model data is identical to last update
@@ -166,6 +231,7 @@ class BaseGridTab(QWidget):
             
             # Set the item list for the QML model property
             root.setProperty("itemsModel", model_data)
+            gc.collect()
         else:
             # If the root object is not ready, wait a bit and retry.
             QTimer.singleShot(100, lambda: self._update_grid_model(model_data))
