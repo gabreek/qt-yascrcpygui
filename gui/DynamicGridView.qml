@@ -65,11 +65,16 @@ Rectangle {
     signal quickAccessRequested(var itemKey, bool checked)
     signal quickAccessFactorUpdated(real factor)
     signal quickAccessVisibilityChanged(bool visible)
+    signal qaLaunchRequested(var itemKey, var itemName, var itemType)
 
     // --- Internal Models ---
     property alias qmlInternalModel: internalModel
     ListModel { id: internalModel }
     ListModel { id: internalQuickAccessModel }
+
+    // Quick access sizing
+    readonly property int qaIconSize: Math.max(32, itemIconSize - 4)
+    readonly property int qaItemSize: qaIconSize + 16
 
     property var itemsModel: []
     property var quickAccessModel: []
@@ -535,6 +540,62 @@ Rectangle {
         }
     }
 
+    // --- Quick Access Delegate (icon only, no text) ---
+    Component {
+        id: quickAccessDelegate
+        Item {
+            id: qaDelegateRoot
+            property var itemData: ({
+                "key": (typeof model.key !== "undefined") ? model.key : "",
+                "name": (typeof model.name !== "undefined") ? model.name : "",
+                "icon_path": (typeof model.icon_path !== "undefined") ? model.icon_path : "",
+                "item_type": (typeof model.item_type !== "undefined") ? model.item_type : "",
+                "is_launcher_shortcut": (typeof model.is_launcher_shortcut !== "undefined") ? model.is_launcher_shortcut : false
+            })
+            property bool hovered: false
+            width: gridRoot.qaItemSize
+            height: gridRoot.qaItemSize
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: gridRoot.qaItemSize - 8
+                height: gridRoot.qaItemSize - 8
+                radius: 10
+                color: qaDelegateRoot.hovered ? Qt.rgba(gridRoot.highlightColor.r, gridRoot.highlightColor.g, gridRoot.highlightColor.b, 0.15) : "transparent"
+                clip: true
+                Behavior on color { ColorAnimation { duration: 150 } }
+
+                Image {
+                    anchors.centerIn: parent
+                    width: gridRoot.qaIconSize
+                    height: gridRoot.qaIconSize
+                    sourceSize: Qt.size(gridRoot.qaIconSize * 2, gridRoot.qaIconSize * 2)
+                    source: itemData.icon_path
+                            ? itemData.icon_path + "?" + (gridRoot.iconMipmaps ? "hq" : "sd")
+                            : "placeholder.png"
+                    fillMode: Image.PreserveAspectFit
+                    antialiasing: gridRoot.iconAntiAliasing
+                    smooth: gridRoot.iconSmoothing
+                    asynchronous: true
+                    cache: true
+                    opacity: status === Image.Ready ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                }
+            }
+
+            HoverHandler {
+                onHoveredChanged: qaDelegateRoot.hovered = hovered
+                cursorShape: Qt.PointingHandCursor
+            }
+
+            TapHandler {
+                onTapped: {
+                    gridRoot.qaLaunchRequested(itemData.key, itemData.name, itemData.item_type)
+                }
+            }
+        }
+    }
+
     // --- Quick Access Overlay ---
     Rectangle {
         id: overlaySection
@@ -544,78 +605,43 @@ Rectangle {
         anchors.margins: 10
         anchors.topMargin: 5
 
-        readonly property int itemsPerRow: Math.max(1, Math.floor((width - 20) / gridRoot.totalItemWidth))
-        readonly property int rowCount: Math.ceil((internalQuickAccessModel.count + 1) / itemsPerRow)
-        readonly property int stableFullHeight: rowCount * gridRoot.totalItemHeight + 10
-
-        // Use gridRoot.quickAccessVisible directly for layout while keeping internal animations
-        height: (internalVisible && !isClosing) ? (minQuickAccessHeight + (stableFullHeight - minQuickAccessHeight) * quickAccessFactor) : 0
+        height: (internalVisible && !isClosing) ? gridRoot.qaItemSize : 0
         opacity: (internalVisible && !isClosing) ? 1.0 : 0.0
-        
+
         property bool internalVisible: gridRoot.quickAccessVisible
         property bool isClosing: false
 
         color: gridRoot.backgroundColor
-        border.color: quickAccessFactor > 0.1 ? gridRoot.buttonBorderColor : "transparent"
+        border.color: gridRoot.buttonBorderColor
         border.width: 1
         radius: 10
         visible: opacity > 0
         clip: true
 
         Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
-        Behavior on opacity { 
-            NumberAnimation { 
-                duration: 250; 
-                easing.type: Easing.InOutQuad
-            } 
-        }
+        Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
 
-        Flow {
-            id: quickAccessFlow
+        Flickable {
+            id: qaFlickable
             anchors.fill: parent
-            anchors.margins: 0
-            spacing: 0
-            Repeater {
-                model: internalQuickAccessModel
-                delegate: gridItemDelegate
-            }
-        }
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            contentWidth: Math.max(qaRow.implicitWidth, width)
+            contentHeight: height
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.HorizontalFlick
+            interactive: qaRow.implicitWidth > width
 
-        Item {
-            anchors.bottom: parent.bottom
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 80
-            height: 16
-            z: 10
-            visible: overlaySection.opacity > 0.5
+            Row {
+                id: qaRow
+                height: parent.height
+                spacing: 4
+                x: Math.max(0, (qaFlickable.width - qaRow.implicitWidth) / 2)
 
-            Rectangle {
-                anchors.centerIn: parent
-                width: 40
-                height: 4
-                radius: 2
-                // Use a color that contrasts with the background
-                color: (gridRoot.backgroundColor.r + gridRoot.backgroundColor.g + gridRoot.backgroundColor.b) / 3 < 0.5 ? "white" : "black"
-                
-                // Logic: Always visible (low opacity) if factor is 1.0 (default/max).
-                // If factor < 1.0, it hides completely unless hovered.
-                opacity: resizeMouseArea.containsMouse ? 0.8 : (gridRoot.quickAccessFactor > 0.99 ? 0.3 : 0.0)
-                
-                Behavior on opacity { NumberAnimation { duration: 250 } }
-            }
-            MouseArea {
-                id: resizeMouseArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.SizeVerCursor
-                onPositionChanged: function(mouse) {
-                    if (pressed) {
-                        var globalY = mapToItem(gridRoot, mouse.x, mouse.y).y
-                        var localY = globalY - overlaySection.y
-                        var factor = (localY - minQuickAccessHeight) / (overlaySection.stableFullHeight - minQuickAccessHeight)
-                        gridRoot.quickAccessFactor = Math.max(0, Math.min(1, factor))
-                        gridRoot.quickAccessFactorUpdated(gridRoot.quickAccessFactor)
-                    }
+                Repeater {
+                    model: internalQuickAccessModel
+                    delegate: quickAccessDelegate
                 }
             }
         }

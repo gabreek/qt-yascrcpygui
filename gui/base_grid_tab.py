@@ -97,6 +97,7 @@ class BaseGridTab(QWidget):
             # Connect custom update signals
             root.quickAccessFactorUpdated.connect(self.on_quick_access_factor_changed)
             root.quickAccessVisibilityChanged.connect(self.on_quick_access_visibility_changed)
+            root.qaLaunchRequested.connect(self._on_qa_launch_requested)
 
     def update_strings(self):
         """Passes localized strings to the QML component."""
@@ -112,6 +113,20 @@ class BaseGridTab(QWidget):
         root.setProperty("createNewFolderText", self.app_config.tr('apps_tab', 'create_session_title'))
         root.setProperty("launcherText", self.app_config.tr('apps_tab', 'launcher_label'))
         root.setProperty("quickAccessText", self.app_config.tr('apps_tab', 'quick_access_label'))
+
+    @Slot(str, str, str)
+    def _on_qa_launch_requested(self, key, name, item_type):
+        """Route QA launches to the correct tab handler based on item type."""
+        if not self.main_window:
+            return
+        if item_type == "winlator_game":
+            self.main_window._handle_launch_request(key, name, 'winlator')
+        else:
+            self.main_window._handle_launch_request(key, name, 'app')
+
+    def get_qa_items(self):
+        """Subclasses must return their list of Quick Access items."""
+        return []
 
     @Slot(float)
     def on_quick_access_factor_changed(self, factor):

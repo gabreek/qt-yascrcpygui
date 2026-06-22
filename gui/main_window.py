@@ -132,6 +132,10 @@ class MainWindow(QMainWindow):
             lambda key, name: self._handle_launch_request(key, name, 'winlator')
         )
 
+        # Shared Quick Access model
+        self._qa_model = []
+        self._refresh_qa_model()
+
         self.apps_tab.config_changed.connect(self.scrcpy_tab.update_profile_dropdown)
         self.apps_tab.config_deleted.connect(self.scrcpy_tab.update_profile_dropdown)
         self.winlator_tab.config_changed.connect(self.scrcpy_tab.update_profile_dropdown)
@@ -419,6 +423,23 @@ class MainWindow(QMainWindow):
             self.apps_tab.execute_launch(item_key, item_name)
         elif launch_type == 'winlator':
             self.winlator_tab.execute_launch(item_key, item_name)
+
+    def _refresh_qa_model(self):
+        """Merge QA items from both tabs and push to both QML widgets."""
+        app_items = self.apps_tab.get_qa_items() if hasattr(self.apps_tab, 'get_qa_items') else []
+        win_items = self.winlator_tab.get_qa_items() if hasattr(self.winlator_tab, 'get_qa_items') else []
+        combined = sorted(
+            app_items + win_items,
+            key=lambda x: (
+                0 if x.get('is_launcher_shortcut') else 1,
+                x.get('name', '').lower()
+            )
+        )
+        self._qa_model = combined
+        for tab in [self.apps_tab, self.winlator_tab]:
+            root = tab.quick_widget.rootObject()
+            if root:
+                root.setProperty("quickAccessModel", combined)
 
     def update_theme(self):
         from PySide6.QtWidgets import QApplication

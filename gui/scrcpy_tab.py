@@ -276,6 +276,7 @@ class ScrcpyTab(QWidget):
 
         check_row1 = QHBoxLayout()
         check_row1.setSpacing(8)
+        check_row1.addStretch()
 
         self.show_system_apps_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'labels', key='show_system_apps'))
         self.show_system_apps_checkbox.setFont(checkbox_font)
@@ -302,6 +303,7 @@ class ScrcpyTab(QWidget):
 
         check_row2 = QHBoxLayout()
         check_row2.setSpacing(8)
+        check_row2.addStretch()
 
         self.update_apps_on_startup_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'labels', key='update_apps_on_startup'))
         self.update_apps_on_startup_checkbox.setFont(checkbox_font)

@@ -45,6 +45,7 @@ class AppsTab(BaseGridTab):
         self.icon_cache_dir = self.app_config.get_icon_cache_dir()
 
         self._last_model_fingerprint = None # 8. Otimização de reconstrução do modelo
+        self._qa_items_cache = []
 
         top_panel = QHBoxLayout()
         self.search_input = QLineEdit()
@@ -96,6 +97,9 @@ class AppsTab(BaseGridTab):
 
         # 3. Update display which will identify missing icons and trigger the batch download
         self._update_display()
+
+    def get_qa_items(self):
+        return self._qa_items_cache
 
     def stop_all_workers(self):
         """Clears the download queue and stops all icon download workers."""
@@ -634,12 +638,10 @@ class AppsTab(BaseGridTab):
                 app_copy['isHidden'] = is_collapsed
                 qml_model_data.append(app_copy)
 
-        # Update QML models
-        final_quick_access = sorted(quick_access_items, key=lambda x: (0 if x.get('is_launcher_shortcut') else 1, x['name'].lower()))
-
-        root = self.quick_widget.rootObject()
-        if root:
-            root.setProperty("quickAccessModel", final_quick_access)
+        # Cache QA items and refresh shared model
+        self._qa_items_cache = sorted(quick_access_items, key=lambda x: (0 if x.get('is_launcher_shortcut') else 1, x['name'].lower()))
+        if self.main_window:
+            self.main_window._refresh_qa_model()
 
         # 8. Fingerprint optimization
         model_fingerprint = hash(str(qml_model_data))

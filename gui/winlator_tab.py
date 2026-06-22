@@ -30,6 +30,7 @@ class WinlatorTab(BaseGridTab):
         self.completed_tasks_count = 0
         self.NUM_WORKERS = 2
         self.scrcpy_process = None
+        self._qa_items_cache = []
 
         base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
         self.placeholder_icon_path = os.path.join(base_path, "gui/winlator_placeholder.png")
@@ -49,6 +50,9 @@ class WinlatorTab(BaseGridTab):
 
         self._connect_qml_signals()
         self.on_device_changed()
+
+    def get_qa_items(self):
+        return self._qa_items_cache
 
     def stop_all_workers(self):
         """Clears the extraction queue and stops all icon extractor workers."""
@@ -234,7 +238,7 @@ class WinlatorTab(BaseGridTab):
             })
 
             for game_info in games_in_pkg:
-                game_path = game_info.get('path', '')
+                game_path = game_info.get('path') or game_info.get('key', '')
                 game_name = game_info.get('name', 'Unnamed')
                 
                 icon_path = self.placeholder_icon_path
@@ -265,10 +269,10 @@ class WinlatorTab(BaseGridTab):
                 qml_model_data.append(game_data)
                 self.game_items[game_path] = game_data # Update game_items for icon extraction/config
 
-        # Update QML models
-        root = self.quick_widget.rootObject()
-        if root:
-            root.setProperty("quickAccessModel", sorted(quick_access_items, key=lambda x: x['name'].lower()))
+        # Cache QA items and refresh shared model
+        self._qa_items_cache = sorted(quick_access_items, key=lambda x: x['name'].lower())
+        if self.main_window:
+            self.main_window._refresh_qa_model()
 
         self._update_grid_model(qml_model_data)
 
