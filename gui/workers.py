@@ -124,7 +124,43 @@ class ScrcpyLaunchWorker(QRunnable):
                     raise RuntimeError("Could not find display ID in Scrcpy output.")
 
         except Exception as e:
-            self.signals.error.emit(f"Failed to launch Scrcpy: {e}")
+            self.signals.error.emit(str(e))
+        finally:
+            self.signals.finished.emit()
+
+
+# --- Launch Workers ---
+class DeviceUnlockCheckWorkerSignals(BaseRunnableWorkerSignals):
+    result = Signal(str)  # lock_state: LOCKED_SCREEN_OFF, LOCKED_SCREEN_ON, or UNLOCKED
+
+class DeviceUnlockCheckWorker(BaseRunnableWorker):
+    def __init__(self, device_id):
+        super().__init__()
+        self.device_id = device_id
+        self.signals = DeviceUnlockCheckWorkerSignals()
+
+    def run(self):
+        try:
+            state = adb_handler.get_device_lock_state(self.device_id)
+            self.signals.result.emit(state)
+        except Exception as e:
+            self.signals.error.emit(str(e))
+        finally:
+            self.signals.finished.emit()
+
+
+class DeviceUnlockWorker(BaseRunnableWorker):
+    def __init__(self, device_id, pin):
+        super().__init__()
+        self.device_id = device_id
+        self.pin = pin
+        self.signals = BaseRunnableWorkerSignals()
+
+    def run(self):
+        try:
+            adb_handler.unlock_device(self.device_id, self.pin)
+        except Exception as e:
+            self.signals.error.emit(str(e))
         finally:
             self.signals.finished.emit()
 

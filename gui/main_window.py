@@ -14,7 +14,7 @@ from .scrcpy_tab import ScrcpyTab
 from .apps_tab import AppsTab
 from .scrcpy_session_manager_window_pyside import ScrcpySessionManagerWindow
 from .winlator_tab import WinlatorTab
-from .workers import DeviceMonitor, DeviceConfigLoaderWorker
+from .workers import DeviceMonitor, DeviceConfigLoaderWorker, DeviceUnlockCheckWorker, DeviceUnlockWorker
 from .dialogs import show_message_box
 from .adb_wifi_window import AdbWifiWindow
 from . import themes
@@ -406,21 +406,39 @@ class MainWindow(QMainWindow):
             show_message_box(self, self.app_config.tr('main', 'device_error_title'), self.app_config.tr('main', 'no_device_msg'), icon=QMessageBox.Critical)
             return
         if self.app_config.get('try_unlock'):
-            lock_state = adb_handler.get_device_lock_state(device_id)
-            if lock_state in ['LOCKED_SCREEN_ON', 'LOCKED_SCREEN_OFF']:
-                pin, ok = CustomThemedInputDialog.getText(
-                    self,
-                    self.app_config.tr('main', 'device_locked'),
-                    self.app_config.tr('main', 'enter_pin'),
-                    text_input_mode=QLineEdit.Password
-                )
-                if ok and pin:
-                    adb_handler.unlock_device(device_id, pin)
-                elif ok and not pin:
+            worker = DeviceUnlockCheckWorker(device_id)
+            worker.signals.result.connect(
+                lambda state: self._on_lock_state_result(state, item_key, item_name, launch_type, device_id))
+            worker.signals.error.connect(
+                lambda msg: self._do_launch(item_key, item_name, launch_type))
+            self.start_worker(worker)
+        else:
+            self._do_launch(item_key, item_name, launch_type)
+
+    def _on_lock_state_result(self, state, item_key, item_name, launch_type, device_id):
+        if state in ['LOCKED_SCREEN_ON', 'LOCKED_SCREEN_OFF']:
+            pin, ok = CustomThemedInputDialog.getText(
+                self,
+                self.app_config.tr('main', 'device_locked'),
+                self.app_config.tr('main', 'enter_pin'),
+                text_input_mode=QLineEdit.Password
+            )
+            if ok and pin:
+                worker = DeviceUnlockWorker(device_id, pin)
+                worker.signals.finished.connect(
+                    lambda: self._do_launch(item_key, item_name, launch_type))
+                worker.signals.error.connect(
+                    lambda msg: self._do_launch(item_key, item_name, launch_type))
+                self.start_worker(worker)
+            else:
+                if ok and not pin:
                     show_message_box(self, self.app_config.tr('common', 'warning'), self.app_config.tr('main', 'unlock_skipped'), icon=QMessageBox.Warning)
                 else:
                     show_message_box(self, self.app_config.tr('common', 'info'), self.app_config.tr('main', 'launch_cancelled'), icon=QMessageBox.Information)
-                    return
+        else:
+            self._do_launch(item_key, item_name, launch_type)
+
+    def _do_launch(self, item_key, item_name, launch_type):
         if launch_type == 'app':
             self.apps_tab.execute_launch(item_key, item_name)
         elif launch_type == 'winlator':
