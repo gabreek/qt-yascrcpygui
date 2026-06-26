@@ -7,6 +7,7 @@ import time
 import subprocess
 import shlex
 import queue
+import select
 from utils.env_helper import get_clean_env
 from utils.isolated_extractor import extract_icon_in_process
 from multiprocessing import Process, Queue
@@ -105,11 +106,17 @@ class ScrcpyLaunchWorker(QRunnable):
 
             if self.session_type in ['winlator', 'app_alt_launch']:
                 display_id = None
-                for line in iter(process.stdout.readline, ''):
-                    match = re.search(r'\[server\] INFO: New display: .*\(id=(\d+)\)', line)
-                    if match:
-                        display_id = match.group(1)
-                        break
+                timeout = 30
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    if select.select([process.stdout], [], [], 1)[0]:
+                        line = process.stdout.readline()
+                        if not line:
+                            break
+                        match = re.search(r'\[server\] INFO: New display: .*\(id=(\d+)\)', line)
+                        if match:
+                            display_id = match.group(1)
+                            break
 
                 if display_id:
                     if self.session_type == 'winlator':

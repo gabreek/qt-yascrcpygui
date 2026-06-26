@@ -3,26 +3,21 @@ import tempfile
 import queue
 
 from PySide6.QtWidgets import (QHBoxLayout, QPushButton, QMessageBox)
-from PySide6.QtCore import Qt, Signal, Slot, QUrl, QTimer
-import sys
+from PySide6.QtCore import Qt, Slot, QUrl, QTimer
 import time
 import gc
 
 from utils.constants import *
-from .workers import GameListWorker, IconExtractorWorker, WinlatorLaunchWorker, ScrcpyLaunchWorker, IconSaveWorker
+from .workers import GameListWorker, IconExtractorWorker, WinlatorLaunchWorker, ScrcpyLaunchWorker
 from .dialogs import show_message_box
 from .base_grid_tab import BaseGridTab
-from .common_widgets import CustomThemedProgressDialog # Import CustomThemedProgressDialog
+from .common_widgets import CustomThemedProgressDialog
 
 class WinlatorTab(BaseGridTab):
-    launch_requested = Signal(str, str)
-    config_changed = Signal(str)
-    config_deleted = Signal(str)
-
     def __init__(self, app_config, main_window=None):
         super().__init__(app_config, main_window)
-        self.all_games_data = [] # Holds the full data model
-        self.game_items = {} # Kept for icon extraction logic to find items by path
+        self.all_games_data = []
+        self.game_items = {}
         self.temp_dir = tempfile.gettempdir()
         self.extraction_queue = queue.Queue()
         self.icon_extractor_workers = []
@@ -30,10 +25,9 @@ class WinlatorTab(BaseGridTab):
         self.completed_tasks_count = 0
         self.NUM_WORKERS = 2
         self.scrcpy_process = None
-        self._qa_items_cache = []
+        self.icon_cache_dir = self.app_config.get_icon_cache_dir()
 
-        base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-        self.placeholder_icon_path = os.path.join(base_path, "gui/winlator_placeholder.png")
+        self.placeholder_icon_path = os.path.join(self._base_path, "gui/winlator_placeholder.png")
 
         top_panel = QHBoxLayout()
         top_panel.addStretch(1)
@@ -51,27 +45,15 @@ class WinlatorTab(BaseGridTab):
         self._connect_qml_signals()
         self.on_device_changed()
 
-    def get_qa_items(self):
-        return self._qa_items_cache
-
     def stop_all_workers(self):
-        """Clears the extraction queue and stops all icon extractor workers."""
         if not hasattr(self, 'extraction_queue'):
             return
-            
         print("Stopping WinlatorTab workers...")
-        # Clear existing queue
-        while not self.extraction_queue.empty():
-            try:
-                self.extraction_queue.get_nowait()
-                self.extraction_queue.task_done()
-            except queue.Empty:
-                break
-        
-        # Add sentinel values for each possible worker to ensure they stop
-        for _ in range(self.NUM_WORKERS):
-            self.extraction_queue.put(None)
-        
+        self._drain_queue(self.extraction_queue, self.NUM_WORKERS)
+        self.scrcpy_launch_worker = None
+        self.winlator_launch_worker = None
+        self.scrcpy_process = None
+        self.game_list_worker = None
         print("WinlatorTab workers signaled to stop.")
 
     def retranslate_ui(self):
@@ -83,67 +65,18 @@ class WinlatorTab(BaseGridTab):
         # Re-populate to update separators and other texts
         self.populate_games_grid_model(list(self.game_items.values()))
 
-    def _connect_qml_signals(self):
-        if self.quick_widget is None:
-            QTimer.singleShot(100, self._connect_qml_signals)
-            return
-        root = self.quick_widget.rootObject()
-        if not root:
-            QTimer.singleShot(100, self._connect_qml_signals)
-            return
-
-        # Skip if already connected to this root object
-        if getattr(self, '_connected_root', None) is root:
-            return
-
+    def _connect_tab_signals(self, root):
         root.launchRequested.connect(self._on_qml_launch_requested)
         root.settingsRequested.connect(self.on_settings_requested)
         root.deleteConfigRequested.connect(self.on_delete_config_requested)
         root.iconDropped.connect(self.on_icon_dropped)
         root.sectionToggled.connect(self.on_section_toggled)
         root.quickAccessRequested.connect(self.on_quick_access_requested)
-        self._connected_root = root
 
-        self._update_qml_properties(root)
 
-    def _update_qml_properties(self, root=None):
-        if not root:
-            if self.quick_widget is None: return
-            root = self.quick_widget.rootObject()
-        if root:
-            root.setProperty("settingsText", self.app_config.tr('common', 'settings'))
-            root.setProperty("deleteConfigText", self.app_config.tr('apps_tab', 'delete_config_title'))
-            root.setProperty("moveToText", self.app_config.tr('apps_tab', 'move_to'))
-            root.setProperty("launcherText", self.app_config.tr('apps_tab', 'launcher_label'))
-            root.setProperty("quickAccessText", self.app_config.tr('apps_tab', 'quick_access_label'))
-            root.setProperty("allAppsText", self.app_config.tr('apps_tab', 'all_section'))
 
-    @Slot(str, bool)
-    def on_quick_access_requested(self, game_path, checked):
-        metadata = self.app_config.get_app_metadata(game_path)
-        pinned_val = metadata.get('pinned', "")
-        if not isinstance(pinned_val, str): pinned_val = ""
-        parts = [p.strip() for p in pinned_val.split(',') if p.strip()]
-        
-        if checked:
-            if CONF_QUICK_ACCESS not in parts: parts.append(CONF_QUICK_ACCESS)
-        else:
-            if CONF_QUICK_ACCESS in parts: parts.remove(CONF_QUICK_ACCESS)
-            
-        new_pinned = ",".join(parts)
-        self.app_config.save_app_metadata(game_path, {'pinned': new_pinned})
-        
-        # Refresh the model to update pinning status in QML
+    def _on_quick_access_updated(self, key, new_pinned):
         self.populate_games_grid_model(list(self.game_items.values()))
-
-    @Slot(str, str)
-    def _on_qml_launch_requested(self, itemKey, itemName):
-        """Slot to receive launch request from QML and emit the Python signal."""
-        self.launch_requested.emit(itemKey, itemName)
-
-    def update_theme(self, status=None):
-        """Passes the theme update call to the base class."""
-        super().update_theme(status)
 
     def on_device_changed(self):
         self.all_games_data = []
@@ -188,6 +121,7 @@ class WinlatorTab(BaseGridTab):
         self.game_list_worker.signals.result.connect(self._on_game_list_loaded)
         self.game_list_worker.signals.error.connect(self._on_game_list_error)
         self.game_list_worker.signals.finished.connect(lambda: self.refresh_button.setEnabled(True))
+        self.game_list_worker.signals.finished.connect(self._on_game_list_worker_finished)
         if self.main_window:
             self.main_window.start_worker(self.game_list_worker)
 
@@ -213,6 +147,9 @@ class WinlatorTab(BaseGridTab):
         self.show_message(f"{self.app_config.tr('common', 'error')}: {error_msg}")
         self.refresh_button.setEnabled(True)
         gc.collect()
+
+    def _on_game_list_worker_finished(self):
+        self.game_list_worker = None
 
     def populate_games_grid_model(self, games):
         self.all_games_data = []
@@ -257,12 +194,13 @@ class WinlatorTab(BaseGridTab):
                 game_path = game_info.get('path') or game_info.get('key', '')
                 game_name = game_info.get('name', 'Unnamed')
                 
-                icon_path = self.placeholder_icon_path
+                icon_url = QUrl.fromLocalFile(self.placeholder_icon_path).toString()
                 if game_path:
                     icon_key = os.path.basename(game_path)
                     cached_icon_path = os.path.join(self.app_config.get_icon_cache_dir(), f"{icon_key}.png")
                     if os.path.exists(cached_icon_path):
-                        icon_path = cached_icon_path
+                        mtime = int(os.path.getmtime(cached_icon_path))
+                        icon_url = QUrl.fromLocalFile(cached_icon_path).toString() + f"?t={mtime}"
 
                 metadata = self.app_config.get_app_metadata(game_path)
                 pinned_val = metadata.get('pinned', "")
@@ -272,7 +210,7 @@ class WinlatorTab(BaseGridTab):
                     'key': game_path,
                     'name': game_name,
                     'item_type': "winlator_game",
-                    'icon_path': QUrl.fromLocalFile(icon_path).toString(),
+                    'icon_path': icon_url,
                     'pkg': pkg,
                     'pinned': pinned_val,
                     'isHidden': is_collapsed
@@ -286,8 +224,7 @@ class WinlatorTab(BaseGridTab):
 
         # Cache QA items and refresh shared model
         self._qa_items_cache = sorted(quick_access_items, key=lambda x: x['name'].lower())
-        if self.main_window:
-            self.main_window._refresh_qa_model()
+        self._refresh_qa_model()
 
         self._update_grid_model(qml_model_data)
         gc.collect()
@@ -310,49 +247,19 @@ class WinlatorTab(BaseGridTab):
             self.main_window.tabs.setCurrentIndex(2) # Tab index for ScrcpyTab
             self.main_window.scrcpy_tab.select_profile(itemKey)
 
-    @Slot(str, str)
-    def on_icon_dropped(self, game_path, file_url):
-        """Handles a dropped image file to set a custom icon asynchronously."""
-        if not file_url:
-            return
+    def _on_icon_model_updated(self, key, new_icon_url):
+        if key in self.game_items:
+            self.game_items[key]['icon_path'] = new_icon_url
 
-        local_path = QUrl(file_url).toLocalFile()
-
-        if not os.path.exists(local_path) or not local_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
-            show_message_box(self, "Error", "Invalid file. Please drop a valid image file (PNG, JPG, BMP, GIF).", icon=QMessageBox.Warning)
-            return
-
-        icon_key = os.path.basename(game_path)
-        destination_path = os.path.join(self.app_config.get_icon_cache_dir(), f"{icon_key}.png")
-
-        # Create and start the background worker
-        worker = IconSaveWorker(game_path, local_path, destination_path)
-        worker.signals.finished.connect(self._on_custom_icon_saved)
-        worker.signals.error.connect(self._on_custom_icon_error)
-        if self.main_window:
-            self.main_window.start_worker(worker)
-
-    @Slot(str, str)
-    def _on_custom_icon_saved(self, game_path, destination_path):
-        """Handles the successful save of a custom icon for a Winlator game."""
-        self.app_config.save_app_metadata(game_path, {'custom_icon': True})
-        new_icon_url = QUrl.fromLocalFile(destination_path).toString()
-
-        # Update the model in memory
-        if game_path in self.game_items:
-            self.game_items[game_path]['icon_path'] = new_icon_url
-        
-        # Refresh the entire grid to ensure visual update
+    def _refresh_after_icon_update(self):
         self.populate_games_grid_model(list(self.game_items.values()))
-        show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('apps_tab', 'custom_icon_success_msg'), icon=QMessageBox.Information)
-        gc.collect() # Force cleanup of image processing resources
 
-    @Slot(str, str)
-    def _on_custom_icon_error(self, game_path, error_message):
-        """Handles an error during icon saving."""
-        game_name = self.game_items.get(game_path, {}).get('name', game_path)
-        show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('apps_tab', 'custom_icon_error_msg', pkg=game_name, error=error_message), icon=QMessageBox.Critical)
-        self.populate_games_grid_model(list(self.game_items.values()))
+    def _on_custom_icon_error(self, key, error_message):
+        game_name = self.game_items.get(key, {}).get('name', key)
+        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_error_title'),
+                        self.app_config.tr('apps_tab', 'custom_icon_error_msg', pkg=game_name, error=error_message),
+                        icon=QMessageBox.Critical)
+        self._refresh_after_icon_update()
 
 
     @Slot(str, str)
@@ -386,7 +293,7 @@ class WinlatorTab(BaseGridTab):
             cached_icon_path = os.path.join(self.app_config.get_icon_cache_dir(), f"{icon_key}.png")
             if not os.path.exists(cached_icon_path):
                 metadata = self.app_config.get_app_metadata(path)
-                if not metadata.get('exe_icon_fetch_failed') and not metadata.get('custom_icon'):
+                if not metadata.get('exe_icon_fetch_failed') and not metadata.get('has_custom_icon'):
                     missing_icons.append((path, cached_icon_path))
 
         if not missing_icons:
@@ -482,11 +389,16 @@ class WinlatorTab(BaseGridTab):
         self.scrcpy_launch_worker.signals.error.connect(lambda msg: self._on_scrcpy_launch_error(msg, icon_path))
         self.scrcpy_launch_worker.signals.scrcpy_process_started.connect(self._on_scrcpy_process_started)
         self.scrcpy_launch_worker.signals.display_id_found.connect(self._on_display_id_found)
+        self.scrcpy_launch_worker.signals.finished.connect(self._on_scrcpy_launch_worker_finished)
         if self.main_window:
             self.main_window.start_worker(self.scrcpy_launch_worker)
 
     def _on_scrcpy_launch_error(self, error_msg, icon_path=None):
         show_message_box(self, self.app_config.tr('apps_tab', 'scrcpy_error_title'), f"{self.app_config.tr('common', 'error')}: {error_msg}", icon=QMessageBox.Critical, app_icon_path=icon_path)
+
+    def _on_scrcpy_launch_worker_finished(self):
+        self.scrcpy_launch_worker = None
+        self.scrcpy_process = None
 
     def _on_scrcpy_process_started(self, process):
         self.scrcpy_process = process
@@ -509,5 +421,10 @@ class WinlatorTab(BaseGridTab):
             connection_id=self.app_config.get_connection_id(), windowing_mode=windowing_mode_int
         )
         self.winlator_launch_worker.signals.error.connect(lambda msg: show_message_box(self, self.app_config.tr('apps_tab', 'winlator_launch_error_title'), msg, icon=QMessageBox.Critical, app_icon_path=icon_path))
+        self.winlator_launch_worker.signals.finished.connect(self._on_winlator_launch_worker_finished)
         if self.main_window:
             self.main_window.start_worker(self.winlator_launch_worker)
+
+    def _on_winlator_launch_worker_finished(self):
+        self.winlator_launch_worker = None
+

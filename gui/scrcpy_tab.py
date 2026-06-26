@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt, QThreadPool, Signal, QRect, QPoint
+import weakref
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
                                QLineEdit, QCheckBox, QSlider, QMessageBox,
                                QScrollArea, QSizePolicy, QPushButton, QGridLayout,
@@ -957,11 +958,13 @@ class ScrcpyTab(QWidget):
 
     def _start_worker(self, worker):
         self.active_workers.append(worker)
-        worker.signals.finished.connect(lambda: self._on_worker_finished(worker))
+        wr = weakref.ref(worker)
+        worker.signals.finished.connect(lambda *args, wr=wr: self._on_worker_finished(wr))
         self.thread_pool.start(worker)
 
-    def _on_worker_finished(self, worker):
-        if worker in self.active_workers:
+    def _on_worker_finished(self, worker_ref):
+        worker = worker_ref()
+        if worker and worker in self.active_workers:
             self.active_workers.remove(worker)
 
     def stop_all_workers(self):

@@ -1,22 +1,34 @@
 # FILE: gui/base_grid_tab.py
 # PURPOSE: Base class for tabs that display items in a grid.
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
-from PySide6.QtCore import Qt, QUrl, QTimer, Slot
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QMessageBox
+from .dialogs import show_message_box
+from PySide6.QtCore import Qt, QUrl, QTimer, Slot, Signal
 from PySide6.QtGui import QPalette
 from PySide6.QtQuickWidgets import QQuickWidget
 import gc
 import os
+import sys
+import time
+import queue
+from utils.constants import CONF_QUICK_ACCESS, CONF_QUICK_ACCESS_FACTOR, CONF_QUICK_ACCESS_VISIBLE, CONF_HQ_ICON_RENDERING, CONF_WEB_HOVER_EFFECT
 from . import themes
 
 
 class BaseGridTab(QWidget):
+    launch_requested = Signal(str, str)
+    config_changed = Signal(str)
+    config_deleted = Signal(str)
+
     def __init__(self, app_config, main_window=None):
         super().__init__()
         self.app_config = app_config
         self.main_window = main_window
-        self.items = {}  # This will hold the model data
+        self.items = {}
         self.collapsed_sections = set()
+        self._qa_items_cache = []
+        self._base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+        self.placeholder_icon_path = None
 
         self.main_layout = QVBoxLayout(self)
 
@@ -79,18 +91,15 @@ class BaseGridTab(QWidget):
             root.setProperty("altBaseColor", alt_base_color)
 
             # Pass rendering settings
-            from utils.constants import CONF_HQ_ICON_RENDERING
             hq_render = self.app_config.get(CONF_HQ_ICON_RENDERING, True)
             root.setProperty("iconAntiAliasing", hq_render)
             root.setProperty("iconSmoothing", hq_render)
             root.setProperty("iconMipmaps", hq_render)
             
             # Pass hover effect setting
-            from utils.constants import CONF_WEB_HOVER_EFFECT
             root.setProperty("hoverEffectEnabled", self.app_config.get(CONF_WEB_HOVER_EFFECT, True))
 
             # Pass Quick Access factor
-            from utils.constants import CONF_QUICK_ACCESS_FACTOR, CONF_QUICK_ACCESS_VISIBLE
             root.setProperty("quickAccessFactor", self.app_config.get(CONF_QUICK_ACCESS_FACTOR, 1.0))
             root.setProperty("quickAccessVisible", self.app_config.get(CONF_QUICK_ACCESS_VISIBLE, False))
             
@@ -104,15 +113,12 @@ class BaseGridTab(QWidget):
                 root.qaLaunchRequested.connect(self._on_qa_launch_requested)
                 self._qa_connected_root = root
 
-    def update_strings(self):
-        """Passes localized strings to the QML component."""
+    def _get_qml_root(self):
         if self.quick_widget is None:
-            return
-        root = self.quick_widget.rootObject()
-        if not root:
-            return
+            return None
+        return self.quick_widget.rootObject()
 
-        # Map strings from app_config.tr to QML properties
+    def _set_qml_strings(self, root):
         root.setProperty("allAppsText", self.app_config.tr('apps_tab', 'all_section'))
         root.setProperty("settingsText", self.app_config.tr('common', 'settings'))
         root.setProperty("deleteConfigText", self.app_config.tr('apps_tab', 'delete_config_title'))
@@ -120,6 +126,63 @@ class BaseGridTab(QWidget):
         root.setProperty("createNewFolderText", self.app_config.tr('apps_tab', 'create_session_title'))
         root.setProperty("launcherText", self.app_config.tr('apps_tab', 'launcher_label'))
         root.setProperty("quickAccessText", self.app_config.tr('apps_tab', 'quick_access_label'))
+
+    def update_strings(self):
+        root = self._get_qml_root()
+        if root:
+            self._set_qml_strings(root)
+
+    def _get_icon_cache_dir(self):
+        return self.app_config.get_icon_cache_dir()
+
+    @Slot(str, str)
+    def on_icon_dropped(self, key, file_url):
+        if not file_url:
+            return
+        local_path = QUrl(file_url).toLocalFile()
+        if not os.path.exists(local_path) or not local_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+            show_message_box(self, self.app_config.tr('common', 'error'),
+                            self.app_config.tr('apps_tab', 'invalid_image_error'),
+                            icon=QMessageBox.Warning)
+            return
+        from .workers import IconSaveWorker
+        icon_key = os.path.basename(key)
+        destination_path = os.path.join(self._get_icon_cache_dir(), f"{icon_key}.png")
+        worker = IconSaveWorker(key, local_path, destination_path)
+        worker.signals.finished.connect(self._on_custom_icon_saved)
+        worker.signals.error.connect(self._on_custom_icon_error)
+        if self.main_window:
+            self.main_window.start_worker(worker)
+
+    @Slot(str, str)
+    def _on_custom_icon_saved(self, key, destination_path):
+        self.app_config.save_app_metadata(key, {'has_custom_icon': True})
+        cache_buster = int(time.time())
+        new_icon_url = QUrl.fromLocalFile(destination_path).toString() + f"?t={cache_buster}"
+        self._on_icon_model_updated(key, new_icon_url)
+        self._last_model_data = None
+        self._refresh_after_icon_update()
+        gc.collect()
+        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_success_title'),
+                        self.app_config.tr('apps_tab', 'custom_icon_success_msg'),
+                        icon=QMessageBox.Information)
+
+    def _on_icon_model_updated(self, key, new_icon_url):
+        """Subclass updates its in-memory model with the new icon URL."""
+
+    def _refresh_after_icon_update(self):
+        """Subclass refreshes the grid display after icon update."""
+
+    @Slot(str, str)
+    def _on_custom_icon_error(self, key, error_message):
+        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_error_title'),
+                        self.app_config.tr('apps_tab', 'custom_icon_error_msg', pkg=key, error=error_message),
+                        icon=QMessageBox.Critical)
+        self._refresh_after_icon_update()
+
+    @Slot(str, str)
+    def _on_qml_launch_requested(self, itemKey, itemName):
+        self.launch_requested.emit(itemKey, itemName)
 
     @Slot(str, str, str)
     def _on_qa_launch_requested(self, key, name, item_type):
@@ -132,17 +195,55 @@ class BaseGridTab(QWidget):
             self.main_window._handle_launch_request(key, name, 'app')
 
     def get_qa_items(self):
-        """Subclasses must return their list of Quick Access items."""
-        return []
+        return self._qa_items_cache
+
+    def _refresh_qa_model(self):
+        if self.main_window:
+            self.main_window._refresh_qa_model()
+
+    def _connect_qml_signals(self):
+        if self.quick_widget is None:
+            QTimer.singleShot(100, self._connect_qml_signals)
+            return
+        root = self.quick_widget.rootObject()
+        if not root:
+            QTimer.singleShot(100, self._connect_qml_signals)
+            return
+        if getattr(self, '_connected_root', None) is root:
+            return
+        self._connect_tab_signals(root)
+        self._connected_root = root
+        self.update_strings()
+
+    def _connect_tab_signals(self, root):
+        """Subclasses override to connect QML signals specific to the tab."""
+
+    @Slot(str, bool)
+    def on_quick_access_requested(self, key, checked):
+        metadata = self.app_config.get_app_metadata(key)
+        pinned_val = metadata.get('pinned', "")
+        if not isinstance(pinned_val, str):
+            pinned_val = ""
+        parts = [p.strip() for p in pinned_val.split(',') if p.strip()]
+        if checked:
+            if CONF_QUICK_ACCESS not in parts:
+                parts.append(CONF_QUICK_ACCESS)
+        else:
+            if CONF_QUICK_ACCESS in parts:
+                parts.remove(CONF_QUICK_ACCESS)
+        new_pinned = ",".join(parts)
+        self.app_config.save_app_metadata(key, {'pinned': new_pinned})
+        self._on_quick_access_updated(key, new_pinned)
+
+    def _on_quick_access_updated(self, key, new_pinned):
+        """Subclasses override to refresh grid after quick access toggle."""
 
     @Slot(float)
     def on_quick_access_factor_changed(self, factor):
-        from utils.constants import CONF_QUICK_ACCESS_FACTOR
         self.app_config.set(CONF_QUICK_ACCESS_FACTOR, factor)
 
     @Slot(bool)
     def on_quick_access_visibility_changed(self, visible):
-        from utils.constants import CONF_QUICK_ACCESS_VISIBLE
         self.app_config.set(CONF_QUICK_ACCESS_VISIBLE, visible)
 
     def _clear_grid(self):
@@ -237,6 +338,17 @@ class BaseGridTab(QWidget):
         else:
             # If the root object is not ready, wait a bit and retry.
             QTimer.singleShot(100, lambda: self._update_grid_model(model_data))
+
+    @staticmethod
+    def _drain_queue(q, num_workers):
+        while not q.empty():
+            try:
+                q.get_nowait()
+                q.task_done()
+            except queue.Empty:
+                break
+        for _ in range(num_workers):
+            q.put(None)
 
     def set_device_status_message(self, message):
         if message:

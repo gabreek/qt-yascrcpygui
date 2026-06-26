@@ -1,5 +1,6 @@
 import gc
 import os
+import weakref
 import asyncio
 import uvicorn
 import logging
@@ -383,10 +384,12 @@ class MainWindow(QMainWindow):
         self.apps_tab.stop_all_workers()
         self.winlator_tab.stop_all_workers()
 
-        # 5. Clear and wait for the global thread pool
-        # This will wait for any non-infinite-loop QRunnables to finish.
+        # 5. Clear active workers list
+        self.active_workers.clear()
+
+        # 6. Clear and wait for the global thread pool
         self.thread_pool.clear()
-        self.thread_pool.waitForDone(3000) # Wait up to 3s for remaining workers
+        self.thread_pool.waitForDone(3000)
 
         gc.collect()
         print("Application closed successfully.")
@@ -520,13 +523,15 @@ class MainWindow(QMainWindow):
 
     def start_worker(self, worker):
         self.active_workers.append(worker)
-        worker.signals.finished.connect(lambda: self._on_worker_finished(worker))
+        wr = weakref.ref(worker)
+        worker.signals.finished.connect(lambda *args, wr=wr: self._on_worker_finished(wr))
         self.thread_pool.start(worker)
 
-    def _on_worker_finished(self, worker):
-        if worker in self.active_workers:
+    def _on_worker_finished(self, worker_ref):
+        worker = worker_ref()
+        if worker and worker in self.active_workers:
             self.active_workers.remove(worker)
-            gc.collect()
+        gc.collect()
 
     def _update_all_tabs_status(self, message=None):
         if message:
@@ -605,17 +610,18 @@ class MainWindow(QMainWindow):
         self.pause_device_check()
         # Cancel any pending config loader
         if self._pending_config_loader:
-            self._pending_config_loader.signals.finished.disconnect()
+            try:
+                self._pending_config_loader.signals.finished.disconnect()
+            except (TypeError, RuntimeError):
+                pass
             if self._pending_config_loader in self.active_workers:
                 self.active_workers.remove(self._pending_config_loader)
         config_loader_worker = DeviceConfigLoaderWorker(device_id, self.app_config)
         config_loader_worker.signals.result.connect(self._on_device_config_loaded)
         config_loader_worker.signals.error.connect(self._on_device_load_error)
         config_loader_worker.signals.finished.connect(self.resume_device_check)
-        config_loader_worker.signals.finished.connect(lambda: self._on_worker_finished(config_loader_worker))
         self._pending_config_loader = config_loader_worker
-        self.active_workers.append(config_loader_worker)
-        self.thread_pool.start(config_loader_worker)
+        self.start_worker(config_loader_worker)
 
     def _on_device_config_loaded(self, result_data, installed_apps_packages, winlator_shortcuts_on_device):
         self._pending_config_loader = None

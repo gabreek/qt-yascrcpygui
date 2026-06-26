@@ -1,14 +1,13 @@
 import os
 from PySide6.QtWidgets import (QHBoxLayout, QLineEdit,
                                QPushButton, QMessageBox)
-from PySide6.QtCore import Qt, Signal, Slot, QTimer, QUrl
-import sys
-import queue # Added for managing download queue
+from PySide6.QtCore import Qt, Slot, QTimer, QUrl
+import queue
 import gc
 
 from .base_grid_tab import BaseGridTab
 from .workers import (AppListWorker, ScrcpyLaunchWorker, AppLaunchWorker,
-                      IconSaveWorker, BatchIconDownloadWorker, BatchSaveWorker)
+                      BatchIconDownloadWorker, BatchSaveWorker)
 from .dialogs import show_message_box
 from .session_dialogs import CreateSessionDialog, FoldersManagerDialog
 from .common_widgets import CustomThemedProgressDialog
@@ -18,10 +17,6 @@ from utils.constants import *
 
 # --- ABA DE APPS ---
 class AppsTab(BaseGridTab):
-    launch_requested = Signal(str, str)
-    config_changed = Signal(str)
-    config_deleted = Signal(str)
-
     def __init__(self, app_config, main_window=None):
         super().__init__(app_config, main_window)
 
@@ -29,23 +24,19 @@ class AppsTab(BaseGridTab):
         self.all_apps_data = []
 
         # Batch icon download related attributes
-        self.pending_icon_downloads = {} # Stores pkg_name: app_name for icons to download
+        self.pending_icon_downloads = {}
         self.download_queue = queue.Queue()
         self.icon_download_workers = []
         self.total_icon_tasks = 0
         self.completed_icon_tasks = 0
-        self.NUM_ICON_WORKERS = 5 # Number of concurrent icon download workers
+        self.NUM_ICON_WORKERS = 5
         self._icon_download_in_progress = False
 
-        # Determine the base path for resources
-        base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-        self.placeholder_icon_path = os.path.join(base_path, "gui/placeholder.png")
-        self.launcher_icon_path = os.path.join(base_path, "gui/launcher.png")
+        self.placeholder_icon_path = os.path.join(self._base_path, "gui/placeholder.png")
+        self.launcher_icon_path = os.path.join(self._base_path, "gui/launcher.png")
         self.icon_cache_dir = self.app_config.get_icon_cache_dir()
 
-        self._last_model_fingerprint = None # 8. Otimização de reconstrução do modelo
-        self._qa_items_cache = []
+        self._last_model_fingerprint = None
 
         top_panel = QHBoxLayout()
         self.search_input = QLineEdit()
@@ -98,29 +89,14 @@ class AppsTab(BaseGridTab):
         # 3. Update display which will identify missing icons and trigger the batch download
         self._update_display()
 
-    def get_qa_items(self):
-        return self._qa_items_cache
-
     def stop_all_workers(self):
-        """Clears the download queue and stops all icon download workers."""
         if not hasattr(self, 'download_queue'):
             return
-
         print("Stopping AppsTab workers...")
-        # Clear existing queue
-        while not self.download_queue.empty():
-            try:
-                self.download_queue.get_nowait()
-                self.download_queue.task_done()
-            except queue.Empty:
-                break
-
-        # Add sentinel values for each possible worker to ensure they stop
-        for _ in range(self.NUM_ICON_WORKERS):
-            self.download_queue.put(None)
-
+        self._drain_queue(self.download_queue, self.NUM_ICON_WORKERS)
+        self.icon_download_workers.clear()
+        self.pending_icon_downloads.clear()
         self._icon_download_in_progress = False
-
         print("AppsTab workers signaled to stop.")
 
     def open_folders_manager(self):
@@ -135,19 +111,7 @@ class AppsTab(BaseGridTab):
         self.update_strings()
         self.filter_apps()
 
-    def _connect_qml_signals(self):
-        if self.quick_widget is None:
-            QTimer.singleShot(100, self._connect_qml_signals)
-            return
-        root = self.quick_widget.rootObject()
-        if not root:
-            QTimer.singleShot(100, self._connect_qml_signals)
-            return
-
-        # Skip if already connected to this root object
-        if getattr(self, '_connected_root', None) is root:
-            return
-
+    def _connect_tab_signals(self, root):
         root.launchRequested.connect(self._on_qml_launch_requested)
         root.settingsRequested.connect(self._on_qml_settings_requested)
         root.deleteConfigRequested.connect(self._on_qml_delete_config_requested)
@@ -157,26 +121,14 @@ class AppsTab(BaseGridTab):
         root.folderRequested.connect(self.open_create_session_dialog)
         root.moveRequested.connect(self.on_move_to_folder)
         root.quickAccessRequested.connect(self.on_quick_access_requested)
-        self._connected_root = root
-
-        # Initialize folder list in QML
         self._update_folder_list_in_qml(root)
 
     def _update_folder_list_in_qml(self, root=None):
-        if not root:
-            if self.quick_widget is None: return
-            root = self.quick_widget.rootObject()
+        root = root or self._get_qml_root()
         if root:
-            # Refresh from app_config and filter out 'all'
             folders = [f for f in self.app_config.get_custom_sessions().keys() if f != 'all']
             root.setProperty("folderList", folders)
-            root.setProperty("allAppsText", self.app_config.tr('apps_tab', 'all_section'))
-            root.setProperty("settingsText", self.app_config.tr('common', 'settings'))
-            root.setProperty("deleteConfigText", self.app_config.tr('apps_tab', 'delete_config_title'))
-            root.setProperty("moveToText", self.app_config.tr('apps_tab', 'move_to'))
-            root.setProperty("createNewFolderText", self.app_config.tr('apps_tab', 'create_session_title'))
-            root.setProperty("launcherText", self.app_config.tr('apps_tab', 'launcher_label'))
-            root.setProperty("quickAccessText", self.app_config.tr('apps_tab', 'quick_access_label'))
+            self._set_qml_strings(root)
 
     @Slot(str, str)
     def on_move_to_folder(self, pkg_name, folder_name):
@@ -204,29 +156,12 @@ class AppsTab(BaseGridTab):
         
         self.filter_apps()
 
-    @Slot(str, bool)
-    def on_quick_access_requested(self, pkg_name, checked):
-        metadata = self.app_config.get_app_metadata(pkg_name)
-        pinned_val = metadata.get('pinned', "")
-        if not isinstance(pinned_val, str): pinned_val = ""
-        parts = [p.strip() for p in pinned_val.split(',') if p.strip()]
-        
-        if checked:
-            if CONF_QUICK_ACCESS not in parts: parts.append(CONF_QUICK_ACCESS)
-        else:
-            if CONF_QUICK_ACCESS in parts: parts.remove(CONF_QUICK_ACCESS)
-            
-        new_pinned = ",".join(parts)
-        self.app_config.save_app_metadata(pkg_name, {'pinned': new_pinned})
-        
-        # Surgical update: find item in all_apps_data and update it
+    def _on_quick_access_updated(self, key, new_pinned):
         for app in self.all_apps_data:
-            if app['key'] == pkg_name:
+            if app['key'] == key:
                 app['pinned'] = new_pinned
                 break
-        
         self.filter_apps()
-
 
     @Slot(str)
     def open_create_session_dialog(self, pkg_name=None):
@@ -260,11 +195,6 @@ class AppsTab(BaseGridTab):
     def _on_qml_delete_config_requested(self, itemKey, itemType):
         # The QML sends both key and type, but for apps we only need the key (pkg_name).
         self.on_delete_config_requested(itemKey)
-
-    @Slot(str, str)
-    def _on_qml_launch_requested(self, itemKey, itemName):
-        """Slot to receive launch request from QML and emit the Python signal."""
-        self.launch_requested.emit(itemKey, itemName)
 
     def save_session_state(self, session_id, collapsed):
         self.app_config.save_custom_session(session_id, collapsed)
@@ -473,49 +403,13 @@ class AppsTab(BaseGridTab):
             else:
                 show_message_box(self, self.app_config.tr('apps_tab', 'delete_config_title'), self.app_config.tr('apps_tab', 'delete_not_found', name=app_name), icon=QMessageBox.Warning, app_icon_path=icon_path)
 
-    @Slot(str, str)
-    def on_icon_dropped(self, pkg_name, file_url):
-        """Handles a dropped image file to set a custom icon asynchronously."""
-        if not file_url:
-            return
-
-        local_path = QUrl(file_url).toLocalFile()
-
-        if not os.path.exists(local_path) or not local_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
-            show_message_box(self, self.app_config.tr('common', 'error'), self.app_config.tr('apps_tab', 'invalid_image_error'), icon=QMessageBox.Warning)
-            return
-
-        destination_path = os.path.join(self.icon_cache_dir, f"{pkg_name}.png")
-
-        # Create and start the background worker
-        worker = IconSaveWorker(pkg_name, local_path, destination_path)
-        worker.signals.finished.connect(self._on_custom_icon_saved)
-        worker.signals.error.connect(self._on_custom_icon_error)
-        if self.main_window:
-            self.main_window.start_worker(worker)
-
-    @Slot(str, str)
-    def _on_custom_icon_saved(self, pkg_name, destination_path):
-        """Handles the successful save of a custom icon."""
-        self.app_config.save_app_metadata(pkg_name, {'has_custom_icon': True})
-        new_icon_url = QUrl.fromLocalFile(destination_path).toString()
-
-        # Update the model in memory
+    def _on_icon_model_updated(self, key, new_icon_url):
         for app_data in self.all_apps_data:
-            if app_data['key'] == pkg_name:
+            if app_data['key'] == key:
                 app_data['icon_path'] = new_icon_url
                 break
 
-        self.filter_apps()
-        gc.collect() # Force cleanup of image processing resources
-        
-        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_success_title'), self.app_config.tr('apps_tab', 'custom_icon_success_msg'), icon=QMessageBox.Information)
-
-    @Slot(str, str)
-    def _on_custom_icon_error(self, pkg_name, error_message):
-        """Handles an error during icon saving."""
-        show_message_box(self, self.app_config.tr('apps_tab', 'custom_icon_error_title'), self.app_config.tr('apps_tab', 'custom_icon_error_msg', pkg=pkg_name, error=error_message), icon=QMessageBox.Critical)
-        # Optionally, revert to the old icon if you stored it before starting the worker
+    def _refresh_after_icon_update(self):
         self.filter_apps()
 
     @Slot(str)
@@ -651,8 +545,7 @@ class AppsTab(BaseGridTab):
 
         # Cache QA items and refresh shared model
         self._qa_items_cache = sorted(quick_access_items, key=lambda x: (0 if x.get('is_launcher_shortcut') else 1, x['name'].lower()))
-        if self.main_window:
-            self.main_window._refresh_qa_model()
+        self._refresh_qa_model()
 
         # Fingerprint optimization
         model_fingerprint = hash(str(qml_model_data))
@@ -696,10 +589,12 @@ class AppsTab(BaseGridTab):
             self.download_queue.put((pkg_name, app_name))
 
         # Start workers
+        self.icon_download_workers = []
         for _ in range(self.NUM_ICON_WORKERS):
             worker = BatchIconDownloadWorker(self.download_queue, self.icon_cache_dir, self.app_config)
             worker.signals.finished.connect(self._on_icon_batch_finished)
             worker.signals.error.connect(self._on_icon_batch_error)
+            self.icon_download_workers.append(worker)
             if self.main_window: self.main_window.start_worker(worker)
 
         # Add sentinel values for workers to stop after processing all tasks
