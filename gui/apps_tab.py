@@ -1,6 +1,6 @@
 import os
 from PySide6.QtWidgets import (QHBoxLayout, QLineEdit,
-                               QPushButton, QMessageBox)
+                               QMessageBox)
 from PySide6.QtCore import Qt, Slot, QTimer, QUrl
 import queue
 import gc
@@ -8,8 +8,7 @@ import gc
 from .base_grid_tab import BaseGridTab
 from .workers import (AppListWorker, ScrcpyLaunchWorker, AppLaunchWorker,
                       BatchIconDownloadWorker, BatchSaveWorker)
-from .dialogs import show_message_box
-from .session_dialogs import CreateSessionDialog, FoldersManagerDialog
+from .dialogs import show_message_box, CreateSessionDialog, FoldersManagerDialog
 from .common_widgets import CustomThemedProgressDialog
 from utils.constants import *
 
@@ -42,20 +41,17 @@ class AppsTab(BaseGridTab):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(self.app_config.tr('apps_tab', 'search_placeholder'))
 
-        self.refresh_button = QPushButton(self.app_config.tr('apps_tab', 'refresh_btn'))
-        
-        # 7. Botão "Folders" como ícone
-        self.folders_button = QPushButton("📁")
-        self.folders_button.setToolTip(self.app_config.tr('apps_tab', 'folders_btn'))
-        self.folders_button.setFixedWidth(35)
+        self.menu_button = self._make_menu_button()
+        self.refresh_action = self.menu.addAction(self.app_config.tr('apps_tab', 'refresh_btn'))
+        self.menu.addSeparator()
+        self.folders_action = self.menu.addAction(self.app_config.tr('apps_tab', 'folders_btn'))
+
+        self.refresh_action.triggered.connect(self.refresh_apps_list)
+        self.folders_action.triggered.connect(self.open_folders_manager)
 
         top_panel.addWidget(self.search_input)
-        top_panel.addWidget(self.refresh_button)
-        top_panel.addWidget(self.folders_button)
+        top_panel.addWidget(self.menu_button)
         self.main_layout.insertLayout(0, top_panel)
-
-        self.refresh_button.clicked.connect(self.refresh_apps_list)
-        self.folders_button.clicked.connect(self.open_folders_manager)
         
         # 6. Campo de busca com debounce
         self._search_timer = QTimer()
@@ -106,7 +102,8 @@ class AppsTab(BaseGridTab):
     def retranslate_ui(self):
         """Updates all labels and UI texts in the tab."""
         self.search_input.setPlaceholderText(self.app_config.tr('apps_tab', 'search_placeholder'))
-        self.refresh_button.setText(self.app_config.tr('apps_tab', 'refresh_btn'))
+        self.refresh_action.setText(self.app_config.tr('apps_tab', 'refresh_btn'))
+        self.folders_action.setText(self.app_config.tr('apps_tab', 'folders_btn'))
         # Refresh the grid display and strings
         self.update_strings()
         self.filter_apps()
@@ -210,11 +207,9 @@ class AppsTab(BaseGridTab):
             self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
             self._clear_grid()
             self._unload_qml()
-            self.refresh_button.setEnabled(False)
-            self.folders_button.setEnabled(False)
+            self.menu_button.setEnabled(False)
         else:
-            self.refresh_button.setEnabled(True)
-            self.folders_button.setEnabled(True)
+            self.menu_button.setEnabled(True)
             self._clear_grid()
             self._reload_qml()
             self._connect_qml_signals()

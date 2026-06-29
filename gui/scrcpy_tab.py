@@ -11,8 +11,7 @@ from .flow_layout import FlowLayout
 from .workers import DeviceInfoWorker, EncoderListWorker, DeviceConfigLoaderWorker
 from . import themes
 from utils.constants import *
-from .web_server_config_window import WebServerConfigWindow
-from .winlator_frontend_config_window import WinlatorFrontendConfigWindow
+from .dialogs import WebServerConfigWindow, WinlatorFrontendConfigWindow
 from .common_widgets import CustomThemedConfirmationDialog
 from .dialogs import show_message_box
 

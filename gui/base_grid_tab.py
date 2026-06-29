@@ -1,7 +1,7 @@
 # FILE: gui/base_grid_tab.py
 # PURPOSE: Base class for tabs that display items in a grid.
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QMessageBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QMessageBox, QPushButton, QMenu
 from .dialogs import show_message_box
 from PySide6.QtCore import Qt, QUrl, QTimer, Slot, Signal
 from PySide6.QtGui import QPalette
@@ -53,6 +53,13 @@ class BaseGridTab(QWidget):
         self.main_layout.addWidget(self.info_label)
 
         self.info_label.hide()
+
+    def _make_menu_button(self):
+        self.menu = QMenu(self)
+        self.menu_button = QPushButton("⚙")
+        self.menu_button.setFixedWidth(35)
+        self.menu_button.setMenu(self.menu)
+        return self.menu_button
 
     def update_theme(self, status=None):
         """Passes the current palette colors to the QML component and triggers garbage collection."""

@@ -165,6 +165,7 @@ TRANSLATIONS = {
         'apps_tab': {
             'search_placeholder': 'Search apps...',
             'refresh_btn': 'Refresh Apps',
+            'extract_icons_btn': 'Extract Icons',
             'redownload_icons_btn': 'Redownload Icons',
             'loading_from_device': 'Loading apps from device...',
             'no_apps': 'No applications to display.',
@@ -210,6 +211,7 @@ TRANSLATIONS = {
         },
         'winlator_tab': {
             'refresh_btn': 'Refresh Apps',
+            'extract_icons_btn': 'Extract Icons',
             'refresh_icons_btn': 'Refresh Icons',
             'searching_games': 'Searching for games...',
             'no_shortcuts': 'No Winlator shortcut found on device.\nPlease export to frontend in Winlator app.',
@@ -392,6 +394,7 @@ TRANSLATIONS = {
         'apps_tab': {
             'search_placeholder': 'Buscar apps...',
             'refresh_btn': 'Atualizar Lista',
+            'extract_icons_btn': 'Extrair Ícones',
             'redownload_icons_btn': 'Baixar Ícones Novamente',
             'loading_from_device': 'Carregando apps do dispositivo...',
             'no_apps': 'Nenhum aplicativo para exibir.',
@@ -437,6 +440,7 @@ TRANSLATIONS = {
         },
         'winlator_tab': {
             'refresh_btn': 'Atualizar Apps',
+            'extract_icons_btn': 'Extrair Ícones',
             'refresh_icons_btn': 'Atualizar Ícones',
             'searching_games': 'Buscando jogos...',
             'no_shortcuts': 'Nenhum atalho do Winlator encontrado no dispositivo.\nPor favor, exporte para o frontend no app Winlator.',

@@ -16,8 +16,7 @@ from .apps_tab import AppsTab
 from .scrcpy_session_manager_window_pyside import ScrcpySessionManagerWindow
 from .winlator_tab import WinlatorTab
 from .workers import DeviceMonitor, DeviceConfigLoaderWorker, DeviceUnlockCheckWorker, DeviceUnlockWorker
-from .dialogs import show_message_box
-from .adb_wifi_window import AdbWifiWindow
+from .dialogs import show_message_box, AdbWifiWindow
 from . import themes
 from .common_widgets import CustomTitleBar, CustomThemedInputDialog
 from utils.constants import *

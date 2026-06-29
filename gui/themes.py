@@ -211,6 +211,26 @@ def _build_stylesheet(colors):
         #combo-dropdown-view QScrollBar::add-page:vertical, #combo-dropdown-view QScrollBar::sub-page:vertical {{
             background: none;
         }}
+        QMenu {{
+            background-color: {base_bg_color};
+            border: 1px solid {border_color};
+            border-radius: 10px;
+            padding: 4px;
+            color: {title_text_color};
+        }}
+        QMenu::item {{
+            padding: 6px 24px 6px 12px;
+            border-radius: 6px;
+        }}
+        QMenu::item:selected {{
+            background-color: {highlight_color};
+            color: {highlighted_text_color};
+        }}
+        QMenu::separator {{
+            height: 1px;
+            background: {border_color};
+            margin: 4px 8px;
+        }}
         QListWidget, QTreeWidget {{
             background-color: {base_bg_color};
             color: {title_text_color};

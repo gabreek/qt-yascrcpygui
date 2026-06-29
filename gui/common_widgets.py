@@ -92,7 +92,6 @@ class CustomThemedDialog(QDialog):
         self.content_layout.setSpacing(10)
 
         container_vbox_layout.addLayout(self.content_layout)
-        container_vbox_layout.addStretch()
 
         self.update_theme()
 

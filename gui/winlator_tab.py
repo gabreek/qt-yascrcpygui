@@ -2,7 +2,7 @@ import os
 import tempfile
 import queue
 
-from PySide6.QtWidgets import (QHBoxLayout, QPushButton, QMessageBox)
+from PySide6.QtWidgets import (QHBoxLayout, QMessageBox)
 from PySide6.QtCore import Qt, Slot, QUrl, QTimer
 import time
 import gc
@@ -32,15 +32,18 @@ class WinlatorTab(BaseGridTab):
         top_panel = QHBoxLayout()
         top_panel.addStretch(1)
 
-        self.refresh_button = QPushButton(self.app_config.tr('winlator_tab', 'refresh_btn'))
-        top_panel.addWidget(self.refresh_button)
+        self.menu_button = self._make_menu_button()
+        self.refresh_action = self.menu.addAction(self.app_config.tr('winlator_tab', 'refresh_btn'))
+        self.extract_icons_action = self.menu.addAction(self.app_config.tr('winlator_tab', 'extract_icons_btn'))
+        self.menu.addSeparator()
+        self.folders_action = self.menu.addAction(self.app_config.tr('apps_tab', 'folders_btn'))
 
-        self.fetch_icons_button = QPushButton(self.app_config.tr('winlator_tab', 'refresh_icons_btn'))
-        top_panel.addWidget(self.fetch_icons_button)
+        self.refresh_action.triggered.connect(self.refresh_games_list)
+        self.extract_icons_action.triggered.connect(self.prompt_for_icon_update)
+        self.folders_action.triggered.connect(lambda: None)
+
+        top_panel.addWidget(self.menu_button)
         self.main_layout.insertLayout(0, top_panel)
-
-        self.refresh_button.clicked.connect(self.refresh_games_list)
-        self.fetch_icons_button.clicked.connect(lambda: self.prompt_for_icon_update())
 
         self._connect_qml_signals()
         self.on_device_changed()
@@ -58,8 +61,9 @@ class WinlatorTab(BaseGridTab):
 
     def retranslate_ui(self):
         """Updates all labels and UI texts in the tab."""
-        self.refresh_button.setText(self.app_config.tr('winlator_tab', 'refresh_btn'))
-        self.fetch_icons_button.setText(self.app_config.tr('winlator_tab', 'refresh_icons_btn'))
+        self.refresh_action.setText(self.app_config.tr('winlator_tab', 'refresh_btn'))
+        self.extract_icons_action.setText(self.app_config.tr('winlator_tab', 'extract_icons_btn'))
+        self.folders_action.setText(self.app_config.tr('apps_tab', 'folders_btn'))
         # Update strings in QML
         self.update_strings()
         # Re-populate to update separators and other texts
@@ -87,11 +91,9 @@ class WinlatorTab(BaseGridTab):
             self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
             self._clear_grid()
             self._unload_qml()
-            self.refresh_button.setEnabled(False)
-            self.fetch_icons_button.setEnabled(False)
+            self.menu_button.setEnabled(False)
         else:
-            self.refresh_button.setEnabled(True)
-            self.fetch_icons_button.setEnabled(True)
+            self.menu_button.setEnabled(True)
             self._clear_grid()
             self._reload_qml()
             self._connect_qml_signals()
@@ -113,14 +115,14 @@ class WinlatorTab(BaseGridTab):
             self.show_message(self.app_config.tr('scrcpy_tab', 'labels', key='please_connect'))
             return
 
-        self.refresh_button.setEnabled(False)
+        self.menu_button.setEnabled(False)
         self._clear_grid()
         self.show_message(self.app_config.tr('winlator_tab', 'searching_games'))
 
         self.game_list_worker = GameListWorker(device_id)
         self.game_list_worker.signals.result.connect(self._on_game_list_loaded)
         self.game_list_worker.signals.error.connect(self._on_game_list_error)
-        self.game_list_worker.signals.finished.connect(lambda: self.refresh_button.setEnabled(True))
+        self.game_list_worker.signals.finished.connect(lambda: self.menu_button.setEnabled(True))
         self.game_list_worker.signals.finished.connect(self._on_game_list_worker_finished)
         if self.main_window:
             self.main_window.start_worker(self.game_list_worker)
@@ -140,12 +142,12 @@ class WinlatorTab(BaseGridTab):
         # Synchronize memory cache for ScrcpyTab profile filtering
         self.app_config.device_app_cache['winlator_shortcuts'] = {g['path'] for g in games_with_pkg}
 
-        self.refresh_button.setEnabled(True)
+        self.menu_button.setEnabled(True)
         gc.collect()
 
     def _on_game_list_error(self, error_msg):
         self.show_message(f"{self.app_config.tr('common', 'error')}: {error_msg}")
-        self.refresh_button.setEnabled(True)
+        self.menu_button.setEnabled(True)
         gc.collect()
 
     def _on_game_list_worker_finished(self):
