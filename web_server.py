@@ -407,7 +407,8 @@ async def launch_app(request: LaunchRequest):
             config_to_use.update(app_specific_config)
 
         config_to_use['start_app'] = request.pkg_name
-        perform_alt_launch = config_to_use.get(ALTERNATE_LAUNCH_METHOD, False)
+        is_virtual = config_to_use.get(CONF_NEW_DISPLAY, "Disabled") != "Disabled"
+        perform_alt_launch = config_to_use.get(ALTERNATE_LAUNCH_METHOD, False) and is_virtual
 
         if request.never_turn_screen_off:
             config_to_use['turn_screen_off'] = False

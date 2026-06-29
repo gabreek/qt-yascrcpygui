@@ -65,6 +65,7 @@ CONF_CUSTOM_SESSIONS = 'custom_sessions'
 CONF_QUICK_ACCESS = 'qqs'
 CONF_QUICK_ACCESS_FACTOR = 'quick_access_factor'
 CONF_QUICK_ACCESS_VISIBLE = 'quick_access_visible'
+CONF_SHOW_WINLATOR_TAB = 'show_winlator_tab'
 
 # --- Translations ---
 TRANSLATIONS = {
@@ -120,6 +121,10 @@ TRANSLATIONS = {
                 'mouse_mode': 'Mouse Mode',
                 'gamepad_mode': 'Gamepad Mode',
                 'keyboard_mode': 'Keyboard Mode',
+                'source': 'Source',
+                'main_display': 'Main Display',
+                'virtual_display': 'Virtual Display',
+                'resolution': 'Resolution',
                 'mouse_bind': 'Mouse Bind',
                 'max_fps': 'Max FPS',
                 'virtual_display': 'Virtual Display',
@@ -263,9 +268,13 @@ TRANSLATIONS = {
             'address_label': 'Server Address:',
             'not_running': 'Not Running',
         },
-        'api': {
-            'config_saved': 'Configuration saved.',
-            'text_input_sent': 'Text input command sent.',
+        'winlator_frontend_config': {
+             'title': 'Winlator Frontend Config',
+             'show_tab': 'Show Winlator tab',
+         },
+         'api': {
+             'config_saved': 'Configuration saved.',
+             'text_input_sent': 'Text input command sent.',
             'key_event_sent': "Key command '{key}' sent.",
             'app_pinned': "App '{pkg}' pinned.",
             'app_unpinned': "App '{pkg}' unpinned.",
@@ -339,6 +348,10 @@ TRANSLATIONS = {
                 'mouse_mode': 'Modo do Mouse',
                 'gamepad_mode': 'Modo do Gamepad',
                 'keyboard_mode': 'Modo do Teclado',
+                'source': 'Fonte',
+                'main_display': 'Display Principal',
+                'virtual_display': 'Display Virtual',
+                'resolution': 'Resolução',
                 'mouse_bind': 'Vínculo do Mouse',
                 'max_fps': 'FPS Máximo',
                 'virtual_display': 'Display Virtual',
@@ -482,9 +495,13 @@ TRANSLATIONS = {
             'address_label': 'Endereço do Servidor:',
             'not_running': 'Não está em execução',
         },
-        'api': {
-            'config_saved': 'Configuração salva.',
-            'text_input_sent': 'Comando de entrada de texto enviado.',
+         'winlator_frontend_config': {
+             'title': 'Config. Frontend Winlator',
+             'show_tab': 'Mostrar aba Winlator',
+         },
+         'api': {
+             'config_saved': 'Configuração salva.',
+             'text_input_sent': 'Comando de entrada de texto enviado.',
             'key_event_sent': "Comando de tecla '{key}' enviado.",
             'app_pinned': "App '{pkg}' fixado.",
             'app_unpinned': "App '{pkg}' desfixado.",

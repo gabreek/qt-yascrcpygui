@@ -10,6 +10,7 @@
     "highlight": "#bd93f9",
     "highlighted_text": "#f8f8f2",
     "alt_base": "#20212b",
-    "mid": "#262834"
+    "mid": "#262834",
+    "button_hover": "#3e3f4a"
   }
 }

@@ -3,7 +3,7 @@ import weakref
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
                                QLineEdit, QCheckBox, QSlider, QMessageBox,
                                QScrollArea, QSizePolicy, QPushButton, QGridLayout,
-                               QListView, QScrollBar, QStyle, QGroupBox)
+                                QListView, QScrollBar, QStyle, QGroupBox, QButtonGroup)
 from PySide6.QtGui import QPainter, QPalette, QPolygonF, QPen, QBrush, QColor
 
 from .flow_layout import FlowLayout
@@ -12,6 +12,7 @@ from .workers import DeviceInfoWorker, EncoderListWorker, DeviceConfigLoaderWork
 from . import themes
 from utils.constants import *
 from .web_server_config_window import WebServerConfigWindow
+from .winlator_frontend_config_window import WinlatorFrontendConfigWindow
 from .common_widgets import CustomThemedConfirmationDialog
 from .dialogs import show_message_box
 
@@ -322,6 +323,9 @@ class ScrcpyTab(QWidget):
         self.web_server_config_button = QPushButton(self.app_config.tr('scrcpy_tab', 'labels', key='web_server'))
         self.web_server_config_button.clicked.connect(self._open_web_server_config)
         btn_row.addWidget(self.web_server_config_button)
+        self.winlator_frontend_config_button = QPushButton("Winlator")
+        self.winlator_frontend_config_button.clicked.connect(self._open_winlator_frontend_config)
+        btn_row.addWidget(self.winlator_frontend_config_button)
         self.redownload_icons_button = QPushButton(self.app_config.tr('apps_tab', 'redownload_icons_btn'))
         self.redownload_icons_button.clicked.connect(self._redownload_all_icons)
         btn_row.addWidget(self.redownload_icons_button)
@@ -356,7 +360,7 @@ class ScrcpyTab(QWidget):
             CONF_WINDOWING_MODE: 'window_mode', CONF_MOUSE_MODE: 'mouse_mode',
             CONF_GAMEPAD_MODE: 'gamepad_mode', CONF_KEYBOARD_MODE: 'keyboard_mode',
             CONF_MOUSE_BIND: 'mouse_bind', CONF_MAX_FPS: 'max_fps',
-            CONF_NEW_DISPLAY: 'virtual_display', CONF_MAX_SIZE: 'max_size',
+            CONF_NEW_DISPLAY: 'resolution', CONF_MAX_SIZE: 'max_size',
             CONF_EXTRAARGS: 'extra_args', CONF_IFRAME_INTERVAL: 'iframe_interval',
             CONF_VIDEO_BUFFER: 'video_buffer', CONF_VIDEO_BITRATE_SLIDER: 'video_bitrate',
             CONF_AUDIO_BUFFER: 'audio_buffer', CONF_AUDIO_BITRATE_SLIDER: 'audio_bitrate',
@@ -369,6 +373,9 @@ class ScrcpyTab(QWidget):
         self.v_encoder_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='encoder'))
         self.a_codec_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='codec'))
         self.a_encoder_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='encoder'))
+
+        if hasattr(self, 'source_label'):
+            self.source_label.setText(self.app_config.tr('scrcpy_tab', 'labels', key='source'))
 
         opt_trans = {
             CONF_FULLSCREEN: 'fullscreen', CONF_TURN_SCREEN_OFF: 'turn_screen_off',
@@ -407,6 +414,24 @@ class ScrcpyTab(QWidget):
         self.main_window.web_config_window.raise_()
         self.main_window.web_config_window.activateWindow()
         self.main_window.web_config_window.update_status(self.main_window.is_web_server_running())
+
+    def _open_winlator_frontend_config(self):
+        if not self.main_window:
+            QMessageBox.warning(self, "Error", "Main window reference not available.")
+            return
+
+        if self.main_window.winlator_frontend_config_window is None:
+            self.main_window.winlator_frontend_config_window = WinlatorFrontendConfigWindow(self.app_config, self.main_window)
+            self.main_window.winlator_frontend_config_window.destroyed.connect(
+                lambda: setattr(self.main_window, 'winlator_frontend_config_window', None)
+            )
+            self.main_window.winlator_frontend_config_window.winlator_visibility_changed.connect(
+                self.main_window.set_winlator_tab_visible
+            )
+
+        self.main_window.winlator_frontend_config_window.show()
+        self.main_window.winlator_frontend_config_window.raise_()
+        self.main_window.winlator_frontend_config_window.activateWindow()
 
     def _on_show_system_apps_changed(self, state):
         self.app_config.set(CONF_SHOW_SYSTEM_APPS, bool(state))
@@ -501,16 +526,11 @@ class ScrcpyTab(QWidget):
         grid.setSpacing(6)
 
         combo_fields = [
-            (self.app_config.tr('scrcpy_tab', 'labels', key='window_mode'), CONF_WINDOWING_MODE, ["Fullscreen", "Freeform"]),
             (self.app_config.tr('scrcpy_tab', 'labels', key='mouse_mode'), CONF_MOUSE_MODE, ["sdk","uhid","aoa"]),
             (self.app_config.tr('scrcpy_tab', 'labels', key='gamepad_mode'), CONF_GAMEPAD_MODE, ["disabled","uhid","aoa"]),
             (self.app_config.tr('scrcpy_tab', 'labels', key='keyboard_mode'), CONF_KEYBOARD_MODE, ["disabled","sdk","uhid","aoa"]),
             (self.app_config.tr('scrcpy_tab', 'labels', key='mouse_bind'), CONF_MOUSE_BIND, ["bhsn:++++","++++:bhsn"]),
-            (self.app_config.tr('scrcpy_tab', 'labels', key='max_fps'), CONF_MAX_FPS, ["20","25","30", "45", "60"]),
-            (self.app_config.tr('scrcpy_tab', 'labels', key='virtual_display'), CONF_NEW_DISPLAY, ["Disabled", "640x360/120", "854x480/120", "960x550/120", "1280x720/140", "1366x768/140", "1920x1080/140"]),
-            (self.app_config.tr('scrcpy_tab', 'labels', key='max_size'), CONF_MAX_SIZE, ["0", "640", "854", "960","1280","1366","1080"]),
         ]
-        self.resolution_combo = None
         for i, (label_text, var_key, opts) in enumerate(combo_fields):
             col = i % 2
             row_idx = (i // 2) * 2
@@ -522,18 +542,11 @@ class ScrcpyTab(QWidget):
 
             editor = NoScrollQComboBox()
             editor.addItems(opts)
-            if var_key in ['mouse_bind', 'max_fps', 'new_display', 'max_size']:
+            if var_key in ['mouse_bind']:
                 editor.setEditable(True)
             saved_value = self.app_config.get(var_key, opts[0] if opts else "")
             editor.setCurrentText(str(saved_value))
             editor.currentTextChanged.connect(lambda text, vk=var_key: self.app_config.set(vk, text))
-            if var_key == 'new_display':
-                editor.currentTextChanged.connect(self._update_resolution_state)
-                editor.currentTextChanged.connect(self._update_launch_control_widgets_state)
-            elif var_key == 'max_size':
-                self.resolution_combo = editor
-            elif var_key == 'windowing_mode':
-                self.windowing_mode_combo = editor
             editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             grid.addWidget(editor, row_idx + 1, col)
             self.general_editors[var_key] = editor
@@ -552,17 +565,13 @@ class ScrcpyTab(QWidget):
         layout.addWidget(self.extra_args_edit)
         self.general_editors[CONF_EXTRAARGS] = self.extra_args_edit
 
-        self._update_resolution_state()
-        self._update_launch_control_widgets_state()
-
     def _update_launch_control_widgets_state(self):
-        if not hasattr(self, 'option_checkboxes') or not hasattr(self, 'windowing_mode_combo') or not hasattr(self, 'general_editors'):
+        if not hasattr(self, 'option_checkboxes') or not hasattr(self, 'windowing_mode_combo'):
             return
         alt_launch_checkbox = self.option_checkboxes.get(ALTERNATE_LAUNCH_METHOD)
-        virtual_display_combo = self.general_editors.get('new_display')
-        if not alt_launch_checkbox or not virtual_display_combo:
+        if not alt_launch_checkbox:
             return
-        is_virtual_display_active = virtual_display_combo.currentText() != 'Disabled'
+        is_virtual_display_active = self.app_config.get(CONF_NEW_DISPLAY, "Disabled") != "Disabled"
         active_profile_key = self.app_config.active_profile
         is_winlator_profile = active_profile_key in self.app_config.get_winlator_config_keys(include_name=False)
         alt_launch_checkbox.setDisabled(is_winlator_profile or not is_virtual_display_active)
@@ -571,26 +580,169 @@ class ScrcpyTab(QWidget):
         alt_launch_enabled = alt_launch_checkbox.isChecked()
         self.windowing_mode_combo.setEnabled((is_winlator_profile or alt_launch_enabled) and is_virtual_display_active)
 
+    def _on_source_changed(self, button):
+        is_monitor = self.source_group.id(button) == 1
+        if is_monitor:
+            current = self.video_resolution_combo.currentText()
+            if not current or current == 'Disabled':
+                current = "1920x1080/140"
+            self.app_config.set(CONF_NEW_DISPLAY, current)
+        else:
+            self.app_config.set(CONF_NEW_DISPLAY, "Disabled")
+        self._update_source_state()
+
+    def _update_source_state(self):
+        is_virtual = self.app_config.get(CONF_NEW_DISPLAY, "Disabled") != "Disabled"
+        if hasattr(self, 'source_group'):
+            self.source_group.blockSignals(True)
+            self.phone_btn.setChecked(not is_virtual)
+            self.monitor_btn.setChecked(is_virtual)
+            self.source_group.blockSignals(False)
+        if hasattr(self, '_phone_widgets'):
+            for w in self._phone_widgets:
+                w.setVisible(not is_virtual)
+        if hasattr(self, '_monitor_widgets'):
+            for w in self._monitor_widgets:
+                w.setVisible(is_virtual)
+        self._update_launch_control_widgets_state()
+
     def _create_video_settings_card(self):
         card, layout = self._create_section_card('video')
+
+        # ── Source selector ──
+        source_title = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='source'))
+        source_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        st_font = source_title.font()
+        st_font.setBold(True)
+        source_title.setFont(st_font)
+        source_title.setObjectName("settings_field_label")
+        layout.addWidget(source_title)
+
+        btn_font = self.font()
+        btn_font.setPointSize(24)
+
+        self.source_group = QButtonGroup()
+        self.source_label = source_title
+        self.phone_btn = QPushButton("📱  " + self.app_config.tr('scrcpy_tab', 'labels', key='main_display'))
+        self.phone_btn.setFont(btn_font)
+        self.phone_btn.setCheckable(True)
+        self.phone_btn.setMinimumSize(130, 60)
+        self.phone_btn.setObjectName("source_btn")
+        self.phone_btn.setToolTip("Main display")
+        self.monitor_btn = QPushButton("🖥  " + self.app_config.tr('scrcpy_tab', 'labels', key='virtual_display'))
+        self.monitor_btn.setFont(btn_font)
+        self.monitor_btn.setCheckable(True)
+        self.monitor_btn.setMinimumSize(150, 60)
+        self.monitor_btn.setObjectName("source_btn")
+        self.monitor_btn.setToolTip("Virtual display")
+        self.source_group.addButton(self.phone_btn, 0)
+        self.source_group.addButton(self.monitor_btn, 1)
+        self.source_group.buttonClicked.connect(self._on_source_changed)
+
+        source_btn_layout = QHBoxLayout()
+        source_btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        source_btn_layout.setSpacing(12)
+        source_btn_layout.addWidget(self.phone_btn)
+        source_btn_layout.addWidget(self.monitor_btn)
+        layout.addLayout(source_btn_layout)
+
+        layout.addSpacing(6)
+
+        # ── Unified grid — SAME position, SAME spacing 6 for EVERY field ──
+        main_grid = QGridLayout()
+        main_grid.setSpacing(6)
+
+        # Row 0 labels: [Max FPS label (col 0)] [Max Size label (col 1, phone only)]
+        fps_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='max_fps'))
+        fps_label.setObjectName("settings_field_label")
+        self.general_labels[CONF_MAX_FPS] = fps_label
+        main_grid.addWidget(fps_label, 0, 0)
+
+        size_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='max_size'))
+        size_label.setObjectName("settings_field_label")
+        self.general_labels[CONF_MAX_SIZE] = size_label
+        main_grid.addWidget(size_label, 0, 1)
+
+        # Row 1 controls: [FPS combo (col 0)] [Size combo / Alt Launch (col 1)]
+        self.max_fps_combo = NoScrollQComboBox()
+        self.max_fps_combo.addItems(["20", "25", "30", "45", "60"])
+        self.max_fps_combo.setEditable(True)
+        self.max_fps_combo.setCurrentText(str(self.app_config.get(CONF_MAX_FPS, "60")))
+        self.max_fps_combo.currentTextChanged.connect(lambda text: self.app_config.set(CONF_MAX_FPS, text))
+        self.general_editors[CONF_MAX_FPS] = self.max_fps_combo
+        main_grid.addWidget(self.max_fps_combo, 1, 0)
+
+        self.max_size_combo = NoScrollQComboBox()
+        self.max_size_combo.addItems(["0", "640", "854", "960", "1280", "1366", "1080"])
+        self.max_size_combo.setEditable(True)
+        self.max_size_combo.setCurrentText(str(self.app_config.get(CONF_MAX_SIZE, "0")))
+        self.max_size_combo.currentTextChanged.connect(lambda text: self.app_config.set(CONF_MAX_SIZE, text))
+        self.general_editors[CONF_MAX_SIZE] = self.max_size_combo
+        main_grid.addWidget(self.max_size_combo, 1, 1)
+
+        self.alt_launch_checkbox = QCheckBox(self.app_config.tr('scrcpy_tab', 'options', key='alternate_launch'))
+        self.alt_launch_checkbox.setChecked(self.app_config.get(ALTERNATE_LAUNCH_METHOD, False))
+        self.alt_launch_checkbox.stateChanged.connect(lambda state: self.app_config.set(ALTERNATE_LAUNCH_METHOD, bool(state)))
+        self.alt_launch_checkbox.stateChanged.connect(lambda: self._update_launch_control_widgets_state())
+        self.option_checkboxes[ALTERNATE_LAUNCH_METHOD] = self.alt_launch_checkbox
+        main_grid.addWidget(self.alt_launch_checkbox, 1, 1)
+
+        # Row 2-3 — Monitor: Resolution (col 0) + Window Mode (col 1)
+        res_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='resolution'))
+        res_label.setObjectName("settings_field_label")
+        self.general_labels[CONF_NEW_DISPLAY] = res_label
+        main_grid.addWidget(res_label, 2, 0)
+
+        self.video_resolution_combo = NoScrollQComboBox()
+        res_opts = ["640x360/120", "854x480/120", "960x550/120", "1280x720/140", "1366x768/140", "1920x1080/140"]
+        self.video_resolution_combo.addItems(res_opts)
+        self.video_resolution_combo.setEditable(True)
+        saved_res = self.app_config.get(CONF_NEW_DISPLAY, "1920x1080/140")
+        if saved_res in res_opts or saved_res == "Disabled":
+            if saved_res == "Disabled":
+                saved_res = "1920x1080/140"
+            self.video_resolution_combo.setCurrentText(saved_res)
+        self.video_resolution_combo.currentTextChanged.connect(lambda text: self.app_config.set(CONF_NEW_DISPLAY, text))
+        self.general_editors[CONF_NEW_DISPLAY] = self.video_resolution_combo
+        main_grid.addWidget(self.video_resolution_combo, 3, 0)
+
+        wm_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='window_mode'))
+        wm_label.setObjectName("settings_field_label")
+        self.general_labels[CONF_WINDOWING_MODE] = wm_label
+        main_grid.addWidget(wm_label, 2, 1)
+
+        self.windowing_mode_combo = NoScrollQComboBox()
+        self.windowing_mode_combo.addItems(["Fullscreen", "Freeform"])
+        saved_wm = self.app_config.get(CONF_WINDOWING_MODE, "Fullscreen")
+        self.windowing_mode_combo.setCurrentText(saved_wm)
+        self.windowing_mode_combo.currentTextChanged.connect(lambda text: self.app_config.set(CONF_WINDOWING_MODE, text))
+        self.general_editors[CONF_WINDOWING_MODE] = self.windowing_mode_combo
+        self.general_labels[CONF_WINDOWING_MODE] = wm_label
+        main_grid.addWidget(self.windowing_mode_combo, 3, 1)
+
+        main_grid.setColumnStretch(0, 1)
+        layout.addLayout(main_grid)
+
+        # Visibility groups
+        self._phone_widgets = [size_label, self.max_size_combo]
+        self._monitor_widgets = [self.alt_launch_checkbox, res_label, self.video_resolution_combo, wm_label, self.windowing_mode_combo]
+
+        # Set initial visibility from config
+        is_virtual = self.app_config.get(CONF_NEW_DISPLAY, "Disabled") != "Disabled"
+        for w in self._phone_widgets:
+            w.setVisible(not is_virtual)
+        for w in self._monitor_widgets:
+            w.setVisible(is_virtual)
+
+        # ── Separator ──
+        sep = QWidget()
+        sep.setFixedHeight(2)
+        sep.setObjectName("separator")
+        layout.addWidget(sep)
+
+        # ── Combo grid (codec/encoder na última linha) ──
         grid = QGridLayout()
         grid.setSpacing(6)
-
-        self.v_codec_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='codec'))
-        self.v_codec_label.setObjectName("settings_field_label")
-        grid.addWidget(self.v_codec_label, 0, 0)
-        self.v_codec_combo = NoScrollQComboBox()
-        self.v_codec_combo.currentTextChanged.connect(self._on_video_codec_changed)
-        self.v_codec_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        grid.addWidget(self.v_codec_combo, 1, 0)
-
-        self.v_encoder_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='encoder'))
-        self.v_encoder_label.setObjectName("settings_field_label")
-        grid.addWidget(self.v_encoder_label, 0, 1)
-        self.v_encoder_combo = NoScrollQComboBox()
-        self.v_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set(CONF_VIDEO_ENCODER, text))
-        self.v_encoder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        grid.addWidget(self.v_encoder_combo, 1, 1)
 
         combo_fields = [
             ('render_driver', CONF_RENDER_DRIVER, ["opengles2", "opengles", "opengl", "direct3d", "metal", "software"]),
@@ -602,7 +754,7 @@ class ScrcpyTab(QWidget):
         ]
         for i, (label_key, var_key, opts) in enumerate(combo_fields):
             col = i % 2
-            row_idx = (i // 2) * 2 + 2
+            row_idx = (i // 2) * 2
             lbl = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key=label_key))
             lbl.setObjectName("settings_field_label")
             grid.addWidget(lbl, row_idx, col)
@@ -615,13 +767,40 @@ class ScrcpyTab(QWidget):
             grid.addWidget(combo, row_idx + 1, col)
             self.general_editors[var_key] = combo
 
+        # Codec + encoder na última linha do grid
+        codec_row = len(combo_fields)  # 6 rows used = row 6
+        self.v_codec_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='codec'))
+        self.v_codec_label.setObjectName("settings_field_label")
+        grid.addWidget(self.v_codec_label, codec_row, 0)
+        self.v_codec_combo = NoScrollQComboBox()
+        self.v_codec_combo.currentTextChanged.connect(self._on_video_codec_changed)
+        self.v_codec_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        grid.addWidget(self.v_codec_combo, codec_row + 1, 0)
+
+        self.v_encoder_label = QLabel(self.app_config.tr('scrcpy_tab', 'labels', key='encoder'))
+        self.v_encoder_label.setObjectName("settings_field_label")
+        grid.addWidget(self.v_encoder_label, codec_row, 1)
+        self.v_encoder_combo = NoScrollQComboBox()
+        self.v_encoder_combo.currentTextChanged.connect(lambda text: self.app_config.set(CONF_VIDEO_ENCODER, text))
+        self.v_encoder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        grid.addWidget(self.v_encoder_combo, codec_row + 1, 1)
+
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
 
+        # ── Separator ──
+        sep2 = QWidget()
+        sep2.setFixedHeight(2)
+        sep2.setObjectName("separator")
+        layout.addWidget(sep2)
+
+        # ── Sliders ──
         self._create_iframe_interval_slider(layout, self.app_config.tr('scrcpy_tab', 'labels', key='iframe_interval'), CONF_IFRAME_INTERVAL, 0, 30, 1, 0)
         self._create_slider(layout, self.app_config.tr('scrcpy_tab', 'labels', key='video_buffer'), CONF_VIDEO_BUFFER, 0, 500, 1, "ms")
         self._create_slider_with_buttons(layout, self.app_config.tr('scrcpy_tab', 'labels', key='video_bitrate'), CONF_VIDEO_BITRATE_SLIDER, 10, 25000, 10, "K", [1000, 2000, 4000, 6000, 8000])
+
+        self._update_source_state()
 
     def _create_audio_settings_card(self):
         card, layout = self._create_section_card('audio')
@@ -665,14 +844,11 @@ class ScrcpyTab(QWidget):
             (self.app_config.tr('scrcpy_tab', 'options', key='no_video'), CONF_NO_VIDEO),
             (self.app_config.tr('scrcpy_tab', 'options', key='unlock_device'), CONF_TRY_UNLOCK),
             (self.app_config.tr('scrcpy_tab', 'options', key='force_adb_forward'), CONF_FORCE_ADB_FORWARD),
-            (self.app_config.tr('scrcpy_tab', 'options', key='alternate_launch'), ALTERNATE_LAUNCH_METHOD),
         ]
         for i, (text, var_key) in enumerate(config_checkboxes):
             checkbox = QCheckBox(text)
             checkbox.setChecked(self.app_config.get(var_key, False))
             checkbox.stateChanged.connect(lambda state, vk=var_key: self.app_config.set(vk, bool(state)))
-            if var_key == ALTERNATE_LAUNCH_METHOD:
-                checkbox.stateChanged.connect(self._update_launch_control_widgets_state)
             grid.addWidget(checkbox, i // 3, i % 3)
             self.option_checkboxes[var_key] = checkbox
         for col in range(3):
@@ -686,51 +862,56 @@ class ScrcpyTab(QWidget):
         value_label.setText(f"{self.app_config.get(var_key, min_val)}{unit}")
 
     def _create_slider(self, parent_layout, label_text, var_key, min_val, max_val, step, unit):
-        row = QHBoxLayout()
-        row.setSpacing(8)
+        grid = QGridLayout()
+        grid.setSpacing(6)
         label = QLabel(label_text)
-        label.setMinimumWidth(90)
+        label.setObjectName("settings_field_label")
         self.general_labels[var_key] = label
-        row.addWidget(label)
+        grid.addWidget(label, 0, 0, 1, 2)
 
         slider = NoScrollQSlider(Qt.Horizontal)
         slider.setRange(min_val, max_val)
         slider.setSingleStep(step)
         slider.setPageStep(step * 10)
         slider.setProperty('unit', unit)
-        slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         value_label = QLabel()
         value_label.setMinimumWidth(50)
         value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
         row.addWidget(slider, 1)
         row.addWidget(value_label)
-        parent_layout.addLayout(row)
+        grid.addLayout(row, 1, 0, 1, 2)
+        parent_layout.addLayout(grid)
         self.sliders[var_key] = (slider, value_label)
         self._setup_slider_common(slider, value_label, var_key, unit, min_val)
 
     def _create_slider_with_buttons(self, parent_layout, label_text, var_key, min_val, max_val, step, unit, button_values):
-        row = QHBoxLayout()
-        row.setSpacing(8)
+        grid = QGridLayout()
+        grid.setSpacing(6)
         label = QLabel(label_text)
-        label.setMinimumWidth(90)
+        label.setObjectName("settings_field_label")
         self.general_labels[var_key] = label
-        row.addWidget(label)
+        grid.addWidget(label, 0, 0, 1, 2)
 
         slider = NoScrollQSlider(Qt.Horizontal)
         slider.setRange(min_val, max_val)
         slider.setSingleStep(step)
         slider.setPageStep(step * 10)
         slider.setProperty('unit', unit)
-        slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         value_label = QLabel()
         value_label.setMinimumWidth(50)
         value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._setup_slider_common(slider, value_label, var_key, unit, min_val)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
         row.addWidget(slider, 1)
         row.addWidget(value_label)
-        parent_layout.addLayout(row)
+        grid.addLayout(row, 1, 0, 1, 2)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(4)
@@ -738,26 +919,26 @@ class ScrcpyTab(QWidget):
         for btn_val in button_values:
             button = QPushButton(f"{btn_val}{unit}")
             button.clicked.connect(lambda checked, val=btn_val: slider.setValue(val))
-            button.setFixedWidth(50)
+            button.setFixedWidth(60)
             button.setObjectName("scrcpy_bitrate_button")
             btn_row.addWidget(button)
         btn_row.addStretch()
-        parent_layout.addLayout(btn_row)
+        grid.addLayout(btn_row, 2, 0, 1, 2)
+        parent_layout.addLayout(grid)
         self.sliders[var_key] = (slider, value_label)
 
     def _create_iframe_interval_slider(self, parent_layout, label_text, var_key, min_val, max_val, step, default_val):
-        row = QHBoxLayout()
-        row.setSpacing(8)
+        grid = QGridLayout()
+        grid.setSpacing(6)
         label = QLabel(label_text)
-        label.setMinimumWidth(90)
+        label.setObjectName("settings_field_label")
         self.general_labels[var_key] = label
-        row.addWidget(label)
+        grid.addWidget(label, 0, 0, 1, 2)
 
         slider = NoScrollQSlider(Qt.Horizontal)
         slider.setRange(min_val, max_val)
         slider.setSingleStep(step)
         slider.setPageStep(step * 10)
-        slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         value_label = QLabel()
         value_label.setMinimumWidth(50)
@@ -776,9 +957,12 @@ class ScrcpyTab(QWidget):
         slider.setValue(int(current_value))
         update_label(int(current_value))
 
+        row = QHBoxLayout()
+        row.setSpacing(8)
         row.addWidget(slider, 1)
         row.addWidget(value_label)
-        parent_layout.addLayout(row)
+        grid.addLayout(row, 1, 0, 1, 2)
+        parent_layout.addLayout(grid)
         self.sliders[var_key] = (slider, value_label)
 
     def refresh_device_info(self, force_encoder_fetch=False):
@@ -919,8 +1103,7 @@ class ScrcpyTab(QWidget):
         self._update_theme_dropdown()
         self.update_profile_dropdown()
         self._populate_encoder_widgets()
-        self._update_resolution_state()
-        self._update_launch_control_widgets_state()
+        self._update_source_state()
 
         for editor in self.general_editors.values(): editor.blockSignals(False)
         for checkbox in self.option_checkboxes.values(): checkbox.blockSignals(False)
@@ -931,11 +1114,6 @@ class ScrcpyTab(QWidget):
         self.v_encoder_combo.blockSignals(False)
         self.a_codec_combo.blockSignals(False)
         self.a_encoder_combo.blockSignals(False)
-
-    def _update_resolution_state(self):
-        if hasattr(self, 'resolution_combo') and self.resolution_combo:
-            is_disabled = self.general_editors['new_display'].currentText() != 'Disabled'
-            self.resolution_combo.setDisabled(is_disabled)
 
     def _update_combo_box(self, combo, items, current_value):
         combo.blockSignals(True)

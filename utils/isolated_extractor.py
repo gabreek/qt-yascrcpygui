@@ -15,6 +15,7 @@ def extract_icon_from_exe(exe_path, save_path, device_id=None, size=(128, 128)):
         # Se o caminho começa com /storage, ele está no Android
         if exe_path.startswith('/storage/') or exe_path.startswith('/sdcard/'):
             if not device_id:
+                print(f"[IsolatedExtractor] No device_id for remote path {exe_path}")
                 return False
 
             # 1. Checa o tamanho do arquivo no Android primeiro
@@ -24,7 +25,12 @@ def extract_icon_from_exe(exe_path, save_path, device_id=None, size=(128, 128)):
             try:
                 res = subprocess.check_output(size_cmd, text=True, env=env).strip()
                 remote_size = int(res) if res.isdigit() else 0
-            except:
+                print(f"[IsolatedExtractor] Remote size for {exe_path}: {remote_size}")
+            except subprocess.CalledProcessError as e:
+                print(f"[IsolatedExtractor] stat failed (stderr: {e.stderr}), using dd fallback")
+                remote_size = 0
+            except Exception as e:
+                print(f"[IsolatedExtractor] stat exception: {e}")
                 remote_size = 0
 
             # Criamos um arquivo temporário para o extrator ler
@@ -37,18 +43,24 @@ def extract_icon_from_exe(exe_path, save_path, device_id=None, size=(128, 128)):
             if remote_size > 0 and remote_size < pull_limit_mb * 1024 * 1024:
                 # Arquivo pequeno: Puxamos tudo (mais rápido e seguro para o pefile)
                 cmd = ['adb', '-s', device_id, 'exec-out', f'cat {quoted_exe_path}']
+                print(f"[IsolatedExtractor] Pulling small file via cat")
             else:
                 # Arquivo grande: Puxamos apenas o início
                 cmd = ['adb', '-s', device_id, 'exec-out', f'dd if={quoted_exe_path} bs=1M count={pull_limit_mb} 2>/dev/null']
-            
+                print(f"[IsolatedExtractor] Pulling large file via dd (limit {pull_limit_mb}MB)")
+
             try:
                 env = get_clean_env()
                 with open(temp_exe, 'wb') as f:
                     subprocess.run(cmd, stdout=f, check=True, env=env)
+                pulled_size = os.path.getsize(temp_exe)
+                print(f"[IsolatedExtractor] Pulled {pulled_size} bytes to {temp_exe}")
             except subprocess.CalledProcessError:
+                print(f"[IsolatedExtractor] Pull command failed")
                 return False
 
             if not os.path.exists(temp_exe) or os.path.getsize(temp_exe) == 0:
+                print(f"[IsolatedExtractor] Pulled file is empty or missing")
                 return False
 
             target_to_read = temp_exe
@@ -56,24 +68,32 @@ def extract_icon_from_exe(exe_path, save_path, device_id=None, size=(128, 128)):
             target_to_read = exe_path
 
         if not os.path.exists(target_to_read) or os.path.getsize(target_to_read) == 0:
+            print(f"[IsolatedExtractor] Target file {target_to_read} does not exist or is empty")
             return False
 
         # Lógica de extração original
+        print(f"[IsolatedExtractor] Extracting icon from {target_to_read}...")
         extractor = extract_icon.ExtractIcon(target_to_read)
         group_icons = extractor.get_group_icons()
 
         if not group_icons:
+            print(f"[IsolatedExtractor] No group icons found in {target_to_read}")
             return False
 
+        print(f"[IsolatedExtractor] Found {len(group_icons)} group icon(s), exporting...")
         icon_image = extractor.export(group_icons[0])
         if not icon_image:
+            print(f"[IsolatedExtractor] export returned None")
             return False
 
         icon_image.resize(size, Image.Resampling.LANCZOS).save(save_path, 'PNG')
+        print(f"[IsolatedExtractor] Icon saved to {save_path}")
         return True
 
     except Exception as e:
         print(f"[IsolatedExtractor] Erro ao extrair de {exe_path}: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
     finally:

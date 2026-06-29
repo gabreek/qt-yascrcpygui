@@ -22,6 +22,10 @@ def _build_stylesheet(colors):
     highlighted_text_color = colors['highlighted_text']
     alt_base_color = colors['alt_base']
     mid_color = colors['mid']
+    button_hover_color = colors.get('button_hover', alt_base_color)
+    # button_pressed = highlight com ~35% opacidade
+    _hc = QColor(highlight_color)
+    button_pressed_color = f"rgba({_hc.red()},{_hc.green()},{_hc.blue()},160)"
 
     return f"""
         QWidget {{
@@ -104,14 +108,15 @@ def _build_stylesheet(colors):
             background-color: {button_bg_color};
             color: {button_text_color};
             border: 1px solid {border_color};
-            border-radius: 4px;
+            border-radius: 8px;
             padding: 4px 12px;
         }}
         QPushButton:hover {{
-            background-color: {alt_base_color};
+            background-color: {button_hover_color};
         }}
-        QPushButton:pressed {{
-            background-color: {mid_color};
+        QPushButton:pressed, QPushButton:checked {{
+            background-color: {button_pressed_color};
+            border: 1px solid {highlight_color};
         }}
         QPushButton:disabled {{
             background-color: {main_bg_color};
@@ -160,6 +165,10 @@ def _build_stylesheet(colors):
             min-width: 6em;
             max-width: 180px;
             min-height: 18px;
+        }}
+        QComboBox:disabled {{
+            background-color: {base_bg_color};
+            color: {border_color};
         }}
         #profile_combo {{
             min-width: 220px;
@@ -231,6 +240,7 @@ def _build_stylesheet(colors):
         }}
         #scrcpy_bitrate_button {{
             font-size: 10px;
+            padding: 4px 6px;
         }}
         #session_tree_widget::item {{
             height: 32px;
@@ -340,6 +350,15 @@ def _build_stylesheet(colors):
             background: {highlight_color};
             border-radius: 2px;
         }}
+        QSlider:disabled QSlider::groove:horizontal {{
+            background: {base_bg_color};
+        }}
+        QSlider:disabled QSlider::handle:horizontal {{
+            background: {base_bg_color};
+        }}
+        QSlider:disabled QSlider::sub-page:horizontal {{
+            background: {base_bg_color};
+        }}
     """
 
 def get_theme_stylesheet(palette):
@@ -355,6 +374,11 @@ def get_theme_stylesheet(palette):
     colors['highlighted_text'] = palette.color(QPalette.ColorRole.HighlightedText).name()
     colors['alt_base'] = palette.color(QPalette.ColorRole.AlternateBase).name()
     colors['mid'] = palette.color(QPalette.ColorRole.Mid).name()
+    btn = palette.color(QPalette.ColorRole.Button)
+    if is_dark_theme(palette):
+        colors['button_hover'] = btn.lighter(140).name()
+    else:
+        colors['button_hover'] = btn.darker(115).name()
     return _build_stylesheet(colors)
 
 def _load_json_theme_colors(name):

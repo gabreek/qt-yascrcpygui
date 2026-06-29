@@ -91,6 +91,7 @@ class MainWindow(QMainWindow):
         self.active_workers = []
         self.web_server_thread = None
         self.web_config_window = None
+        self.winlator_frontend_config_window = None
 
         # Resizing related properties
         self._resizing = False
@@ -126,6 +127,9 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.apps_tab, self.app_config.tr('main', 'tabs', key='apps'))
         self.tabs.addTab(self.winlator_tab, self.app_config.tr('main', 'tabs', key='winlator'))
         self.tabs.addTab(self.scrcpy_tab, self.app_config.tr('main', 'tabs', key='config'))
+
+        if not self.app_config.get(CONF_SHOW_WINLATOR_TAB, True):
+            self.tabs.setTabVisible(1, False)
 
         self.apps_tab.launch_requested.connect(
             lambda pkg, name: self._handle_launch_request(pkg, name, 'app')
@@ -218,6 +222,8 @@ class MainWindow(QMainWindow):
             self.scrcpy_session_manager_window.retranslate_ui()
         if self.web_config_window:
             self.web_config_window.retranslate_ui()
+        if self.winlator_frontend_config_window:
+            self.winlator_frontend_config_window.retranslate_ui()
 
     def get_resize_edges(self, pos):
         """Determines which edges are being interacted with for resizing."""
@@ -475,6 +481,8 @@ class MainWindow(QMainWindow):
             self.adb_wifi_window.update_theme()
         if self.scrcpy_session_manager_window and self.scrcpy_session_manager_window.isVisible():
             self.scrcpy_session_manager_window.update_theme()
+        if self.winlator_frontend_config_window and self.winlator_frontend_config_window.isVisible():
+            self.winlator_frontend_config_window.update_theme()
 
         self.apps_tab.update_theme()
         self.winlator_tab.update_theme()
@@ -520,6 +528,9 @@ class MainWindow(QMainWindow):
 
             self.adb_wifi_window.move(x, y) # Move to calculated position
             self.adb_wifi_window.show()
+
+    def set_winlator_tab_visible(self, visible):
+        self.tabs.setTabVisible(1, visible)
 
     def start_worker(self, worker):
         self.active_workers.append(worker)

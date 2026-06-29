@@ -134,36 +134,42 @@ def get_game_executable_info(shortcut_path, device_id=None):
         if not exe_name.lower().endswith('.exe'):
             exe_name += ".exe"
 
+    def _map_drive(drive_letter):
+        """Mapeia letra de unidade Wine para caminho Android real."""
+        dl = drive_letter.lower()
+        mapping = {
+            'd': '/storage/emulated/0/Download',
+            'e': '/storage/emulated/0',
+            'f': '/storage/emulated/0',
+            'g': '/storage/emulated/0',
+            'h': '/storage/emulated/0',
+        }
+        return mapping.get(dl, '/storage/emulated/0/Download')
+
     # 2. Determina o diretório base
     base_dir = None
     if path_val:
-        if path_val.startswith('/'):
+        # Se contém /dosdevices/ em QUALQUER posição, é caminho Wine — extrai drive e mapeia
+        # (cobre tanto "Path=/home/.../dosdevices/f:/..." quanto "Path=dosdevices/f:...")
+        dosdev_match = re.search(r'dosdevices[/\\]([a-z]):[/\\]?(.*)', path_val, re.IGNORECASE)
+        if dosdev_match:
+            drive = dosdev_match.group(1).lower()
+            rel_path = dosdev_match.group(2).strip().replace('\\', '/')
+            drive_root = _map_drive(drive)
+            base_dir = f"{drive_root}/{rel_path}" if rel_path else drive_root
+        elif path_val.startswith('/'):
             # Caminho Android absoluto direto no .desktop (prioridade)
             base_dir = path_val
-        else:
-            # Tenta mapear caminho Wine (dosdevices)
-            match = re.search(r'dosdevices[/\\]([a-z]):(.*)', path_val, re.IGNORECASE)
-            if match:
-                drive = match.group(1).lower()
-                rel_path = match.group(2).strip().replace('\\', '/')
-
-                # Mapeamento de drives padrão do Winlator
-                drive_root = "/storage/emulated/0/Download"
-                if drive == 'e': drive_root = "/storage/emulated/0"
-                # C: é ignorado pois fica em área protegida do app e raramente tem jogos
-
-                base_dir = f"{drive_root}/{rel_path}"
 
     # 3. Fallback: Se o Path= falhou, tenta o caminho completo do Exec=
     if (not base_dir or not exe_name) and exec_val:
-        match = re.search(r'([a-z]):[/\\]+(.*\.exe)', exec_val, re.IGNORECASE)
+        match = re.search(r'dosdevices[/\\]([a-z]):[/\\]?(.*\.exe)', exec_val, re.IGNORECASE)
+        if not match:
+            match = re.search(r'(?<![a-zA-Z])([a-z]):[/\\]+(.*\.exe)', exec_val, re.IGNORECASE)
         if match:
             drive = match.group(1).lower()
             full_wine_path = match.group(2).strip().replace('\\', '/')
-
-            drive_root = "/storage/emulated/0/Download"
-            if drive == 'e': drive_root = "/storage/emulated/0"
-
+            drive_root = _map_drive(drive)
             final_path = re.sub(r'/+', '/', f"{drive_root}/{full_wine_path}")
             return final_path
 

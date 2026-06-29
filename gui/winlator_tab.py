@@ -311,6 +311,7 @@ class WinlatorTab(BaseGridTab):
     def start_icon_extraction_flow(self, tasks):
         self.total_tasks = len(tasks)
         self.completed_tasks_count = 0
+        self._extraction_finished = False
         self.progress_dialog = CustomThemedProgressDialog(self.app_config.tr('winlator_tab', 'extracting_icons'), None, 0, self.total_tasks, self)
         # Ensure it has the method; if it's the class in common_widgets, it definitely has it.
         # Maybe the reference is not what we think it is.
@@ -333,24 +334,33 @@ class WinlatorTab(BaseGridTab):
 
     def _on_icon_extracted(self, path, success, new_icon_path=None):
         self.completed_tasks_count += 1
-        self.progress_dialog.setValue(self.completed_tasks_count)
-        self.progress_dialog.setLabelText(self.app_config.tr('winlator_tab', 'processing_icons', current=self.completed_tasks_count, total=self.total_tasks))
+        try:
+            self.progress_dialog.setValue(self.completed_tasks_count)
+            self.progress_dialog.setLabelText(self.app_config.tr('winlator_tab', 'processing_icons', current=self.completed_tasks_count, total=self.total_tasks))
+        except RuntimeError:
+            pass
 
         if path in self.game_items and success and new_icon_path:
             self.game_items[path]['icon_path'] = QUrl.fromLocalFile(new_icon_path).toString()
         
         if self.completed_tasks_count >= self.total_tasks:
-            self._on_all_icons_extracted()
+            self._finish_extraction()
 
     def _on_icon_extraction_error(self, path, error_msg):
         print(f"Error extracting icon for {path}: {error_msg}")
-        self.completed_tasks_count += 1
-        self.progress_dialog.setValue(self.completed_tasks_count)
-        if self.completed_tasks_count >= self.total_tasks:
-            self._on_all_icons_extracted()
+        # _on_icon_extracted will also be called via the worker's finally block,
+        # so we do NOT increment completed_tasks_count here to avoid double-counting.
 
-    def _on_all_icons_extracted(self):
-        if self.progress_dialog.isVisible(): self.progress_dialog.close()
+    def _finish_extraction(self):
+        if getattr(self, '_extraction_finished', False):
+            return
+        self._extraction_finished = True
+        if hasattr(self, 'progress_dialog') and self.progress_dialog is not None:
+            try:
+                if self.progress_dialog.isVisible():
+                    self.progress_dialog.close()
+            except RuntimeError:
+                pass
         show_message_box(self, self.app_config.tr('common', 'success'), self.app_config.tr('winlator_tab', 'extraction_finished'))
         self.icon_extractor_workers.clear()
         self.populate_games_grid_model(list(self.game_items.values()))

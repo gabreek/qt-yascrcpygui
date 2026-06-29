@@ -679,7 +679,8 @@ class AppsTab(BaseGridTab):
         if 'config' in app_metadata and app_metadata['config']:
             config_to_use.update(app_metadata['config'])
 
-        use_alt_launch = config_to_use.get(ALTERNATE_LAUNCH_METHOD, False)
+        is_virtual = config_to_use.get(CONF_NEW_DISPLAY, "Disabled") != "Disabled"
+        use_alt_launch = config_to_use.get(ALTERNATE_LAUNCH_METHOD, False) and is_virtual
         is_launcher = (package_name == self.app_config.get('default_launcher'))
 
         session_type = 'app'

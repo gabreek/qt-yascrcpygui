@@ -283,10 +283,11 @@ class IconExtractorWorker(BaseRunnableWorker):
 
                 try:
                     remote_exe_path = adb_handler.get_game_executable_info(path, self.connection_id)
-                    if remote_exe_path:
+                    if not remote_exe_path:
+                        print(f"[IconExtractor] get_game_executable_info returned None for {path}")
+                    else:
+                        print(f"[IconExtractor] Got exe path: {remote_exe_path}, pulling via ADB...")
                         result_queue = Queue()
-                        # Passamos o caminho remoto DIRETAMENTE para o processo isolado.
-                        # O isolated_extractor agora sabe fazer o pull parcial (10MB) via exec-out.
                         process = Process(target=extract_icon_in_process, args=(remote_exe_path, save_path, result_queue, self.connection_id))
                         process.start()
                         process.join()
@@ -295,7 +296,15 @@ class IconExtractorWorker(BaseRunnableWorker):
                             result_success, result_data = result_queue.get()
                             if result_success:
                                 success = True
+                                print(f"[IconExtractor] SUCCESS: {save_path}")
+                            else:
+                                print(f"[IconExtractor] FAIL (process result): {result_data}")
+                        else:
+                            print(f"[IconExtractor] FAIL: result_queue was empty (process probably crashed)")
                 except Exception as e:
+                    print(f"[IconExtractor] EXCEPTION: {e}")
+                    import traceback
+                    traceback.print_exc()
                     self.signals.error.emit(path, str(e))
                 finally:
                     self.app_config.save_app_metadata(path, {'exe_icon_fetch_failed': not success})
